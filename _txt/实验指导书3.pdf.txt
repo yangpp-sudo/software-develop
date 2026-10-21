@@ -1,0 +1,578 @@
+=== PAGE 1 ===
+实验2 Teambition、Git、软件协作开发⼯作流
+ 
+2.2 Teambition团队协作
+ 
+2.1.1 实验⽬的
+ 
+了解如何使⽤Teambition进⾏团队协作、项⽬管理，在Teambition创建项⽬⼩组。
+2.1.2 实验要求与内容
+ 
+要求
+ 
+在Teambition上组建项⽬团队。
+掌握如何使⽤Teambition进⾏团队协作。
+内容
+ 
+⼀、Teambition账号注册
+ 
+1. 前往 Teambition 官⽹：https://www.teambition.com/官⽹进⾏账号注册。
+遇到问题，可查看 Teambition 官⽅帮助⼿册 (https://support.teambition.com/help)了解Teambition的相
+关操作。
+推荐查看“快速了解 Teambition”(https://alidocs.dingtalk.com/i/p/nb9XJl7k8dxRPGyA/docs/OBldywvrKxo8
+9xLzzLd3JQk2ngpNbLz4)的短视频迅速上⼿Teambition。
+2. 输⼊团队名称，⾏业可以设置为⽆⾏业，选择1～10⼈团队规模，完成团队创建。
+
+=== PAGE 2 ===
+⼆、团队管理
+ 
+1. 在初始界⾯点击左下⻆⽤户头像,可在账号设置—>创建的团队（如图中：测试团队）邀请成员进⼊团队。
+
+=== PAGE 3 ===
+2. 在"管理后台"中，可以对团队(或企业)按需修改团队名称，图⽚，以及变更团队的成员。
+三、项⽬管理
+ 
+1. 在初始界⾯点击新建空⽩项⽬，完善项⽬信息，也可选⽤相关项⽬模板创建。
+2. 邀请团队成员加⼊项⽬，可在成员界⾯管理成员身份。
+
+=== PAGE 4 ===
+3. 设置项⽬对应阶段，阶段可以⾃⾏添加/删除，阶段顺序可以拖动改变。如本例中，在项⽬阶段中依次添加“前
+期准备阶段”、“软件设计阶段”、“软件编码阶段”。实际可跟需要⾃⾏设置。
+
+=== PAGE 5 ===
+4. 在对应阶段根据需要添加相应任务。
+
+=== PAGE 6 ===
+下⾯是⼀个简单的例⼦：
+
+=== PAGE 7 ===
+5. 可在左下⻆点击"+"号添加，任务所需的⽂档和项⽬⽂件资源。
+6. 创建好任务后点击任务进⼀步进⾏⼦任务拆分、添加任务资源、还可以将任务相关参与者邀请进此任务，进⾏
+信息同步。
+
+=== PAGE 8 ===
+7. 可以在表格视图⽅便的批量查看、清点、编辑任务
+
+=== PAGE 9 ===
+8. 在统计栏查看项⽬的完成进度，在实际开发中可以实时查看，根据燃尽图等即使发现任务问题和机会点。
+
+=== PAGE 10 ===
+9. 在⼯具栏添加其他实⽤的应⽤，如⽂档、⽂件帮助管理任务中产⽣的⽂档图⽚，也可添加⽢特图（免费试⽤
+14天）来帮助协调任务关系，更好的布置任务。
+添加⽂档、⽂件，管理项⽬中的⽂档、资料
+
+=== PAGE 11 ===
+添加⽢特图，查看任务与时间的顺序，通过拖拉操作对任务关系进⾏协调
+
+=== PAGE 12 ===
+四、成员任务完成与反馈
+ 
+1. 任务执⾏者直接点击项⽬栏中的任务，在任务评论区反馈执⾏任务时的情况。
+2. 在任务完成，将对应任务设置为完成状态。
+⾄此，你已经了解了如何使⽤Teambition进⾏基本的团队项⽬管理。
+2.2 Git代码管理
+ 
+2.2.1 实验⽬的
+ 
+了解并掌握git的基本操作，学会如何使⽤git对代码进⾏版本控制和分⽀管理。
+2.2.2 实验要求与内容
+ 
+要求
+ 
+在Ubuntu上配置git。
+掌握如何使⽤git进⾏版本控制。
+学会如何使⽤git进⾏分⽀管理。
+内容
+ 
+⼀、在Ubuntu上安装git
+ 
+1. 使⽤git --version 查看Ubuntu上是否已经安装git，若正确输出git版本信息，则跳过此部分。
+2. 安装Git。
+
+=== PAGE 13 ===
+3. 配置git的⽤户名和邮箱。
+⼆、使⽤git进⾏版本控制
+ 
+1. 创建⼀个git仓库。
+2. 创建⽂件并提交第⼀个代码版本。
+3. 修改⽂件并提交第⼆个版本。
+4. 查看上⼀版内容。
+在恢复⽂件内容上，注意git checkout 与随后会讲到的git reset 的区别：
+git checkout HEAD^ ⽤于返回到当前版本的上⼀版本，但并不会改变我们的提交历史。即我们使
+⽤git checkout HEAD^ 回到第⼀版，但是我们的第⼆版提交记录依然保存着，我们可以使⽤git 
+checkout master 返回到第⼆版状态。
+sudo apt update      # 更新软件包列表，检查可⽤的软件包更新
+sudo apt install git # 安装git软件包
+git --version        # 验证是否安装成功
+git config --global user.name "zhangsan"             # 设置⽤户名，根据⾃⼰实际替换姓名
+git config --global user.email "zhangsan@163.com"    #设置邮箱，根据⾃⼰实际替换邮箱
+git config -l                                        #设置完成后,检查信息
+mkdir ~/git_learn    # 在~下创建⼀个git_learn⽂件夹
+cd ~/git_learn       # 进⼊code⽂件夹
+git init             # 初始化git仓库
+echo "code" > code.cpp              # 创建code.cpp 并写⼊
+git add .                           # 将当前⽬录下所有更改存⼊暂存区
+git commit -m "first version"       # 将暂存区的修改提交⾄本地仓库，提交信息为first 
+version
+echo "modified code" > code.cpp              # 修改code.cpp内容
+git add .; git commit -m "modified version"    # 提交第⼆版代码
+git log                                      # 可以使⽤此命令查看历史提交信息，按“q”键退出
+cat code.cpp         # 查看⽂件内容, 为modified code
+git checkout HEAD^   # 返回到当前版本的上⼀版本。HEAD 是⼀个特殊的指针，指向当前所在的分⽀或具
+体的提交。
+cat code.cpp         # 发现⽂件内容恢复到上⼀版本, 为code
+git checkout master  # 回到最后提交的状态
+cat code.cpp         # 发现⽂件返回最后提交的状态, 为modified code
+
+=== PAGE 14 ===
+git reset  也可以返回到之前的节点，但是我们的提交历史不会保留。如果我们将此处的checkout替
+换未reset，我们就不能使⽤git checkout master  返回到第⼆次提交的状态，因为master也被重置
+到第⼀版。这意味着我们将第⼆版的提交信息完全丢弃了。但是第⼆版与第⼀版之间的差异（reset之前
+第⼆版提交的内容）是否被重置，和reset的参数选项有关，下⾯会详细介绍。
+5. 丢弃暂存区代码
+注: 此处如果我们使⽤的是git reset HEAD^ --hard ，则会将code.cpp内容恢复到第⼀版（即
+“code”），此⼩节的更改（即“some mistake”）和第⼆版的提交记录（即“modified code”）都将被丢
+弃，且⽆法恢复。
+6. 处理错误的commit
+查看完状态，我们需要进⾏修改。由于"modified version"有错误，我们需要回退到错误之前，即第⼀次提交
+完成的时候。
+但是，⽬前我们已经准备要做第四版提交了，使⽤git reset --hard 代价过⾼。怎么办呢？使⽤“--soft”选
+项！
+echo "some mistake" > code.cpp     # 我们写了⼀些不正确的代码
+git add .       # 将错误的代码提交到了暂存区
+git reset --hard    # 丢弃暂存的内容，将⼯作区内⽂件恢复到最近⼀次commit的状态
+cat code.cpp    # 发现⽂件返回到第⼆版的状态，为modified code。第⼆版以后未提交的修改（包括
+add的修改）均被重置。
+# 我们继续进⾏第三次提交,这次我们要写另⼀个⽂件
+echo "third code" > code_2.cpp
+git add .; git commit -m "third version"
+# 准备继续写第四版
+echo "four code" > code_2.cpp
+# 此时我们发现提交的"modified version"有错误，需要修改
+# 做之前我们可以先查看当前的状态
+git status      # 查看⼀下当前⼯作区状态
+# 信息
+On branch master                # 在master分⽀
+Changes not staged for commit:  # 存在没有暂存的更改
+    (use "git add <file>..." to update what will be committed)
+    (use "git restore <file>..." to discard changes in working directory)
+            modified:   code_2.cpp # 被修改的⽂件
+no changes added to commit (use "git add" and/or "git commit -a")
+# 上⾯为git status的信息
+git log         # 查看⼀下我们的提交历史，应该有三次提交
+git reset HEAD~2 --soft # 将提交历史恢复到第⼀版的时候
+
+=== PAGE 15 ===
+补充：git reset 默认为--mixed 模式，此模式与--soft 的区别:
+git reset --soft 保留⼯作区代码不变，会将之前的更改⾃动加⼊暂存区，我们使⽤git commit  就
+可以将代码状态恢复到reset之前。
+git reset --mixed 同样保留⼯作区代码不变，会将之前的更改重置为未暂存的状态，此时直接使
+⽤git commit 并不能将之前的更改提交。我们需要⼿动使⽤git add 将需要的⽂件添加到暂存区，随
+后再进⾏提交。
+7. 使⽤.gitignore管理不需要进⾏版本控制的⽂件。
+三、使⽤git进⾏分⽀管理
+ 
+说明：如果对⼀个软件进⾏多版本开发（如：stable分⽀、dev分⽀），此时需要⽤到分⽀管理功能，此部分
+的操作建⽴在 第⼆节（使⽤git进⾏版本控制） 的基础上
+1. 创建并切换⾄test分⽀，在test分⽀完成⼀次提交。
+git status              # 查看⼯作区状态
+# 可以看到我们第⼆次第三次做的更改还存在，只是处于暂存状态，第四次的更改没有使⽤add添加到暂存区，也
+依然存在
+# 如果我们再使⽤ls以及cat命令查看⽂件，会发现⽂件内容没有变化
+git log                 # 查看提交信息，发现只有第⼀版的提交信息了
+# 修改第⼆版的错误，将code.cpp 内容"modified code"改为"second code"
+echo "second code" > code.cpp
+# 提交修改，我们可能只想把之前的更改都提交，⽽保留第四次的更改不提交，因为第四版可能还处于未完成状态
+git add code.cpp; git commit -m "second version" 
+git status  # 此时"four code"依然未提交，其余更改都提交了
+git log     # 可以看到只有"first version"和"second version"两次提交记录
+git reset --hard # 丢弃 four code 的修改
+git status       # 查看⼯作区状态
+git log          # 可以看到只有"first version"和"second version"两次提交记录
+mkdir trash              # 创建⽂件夹，假定⾥⾯放⼊的是⽆关的⽂件
+touch cache              # 创建⽂件，也是⽆关的⽂件
+# .gitignore ⾥记录的⽂件名不会被git提交和保存
+echo trash > .gitignore                 # 将trash写⼊.gitignore
+echo cache >> .gitignore                # 将cache写⼊.gitignore
+git add .;git commit -m "update .gitignore" # 完成⼀次提交
+
+=== PAGE 16 ===
+在创建并提交这个分⽀后，我们需要详细了解⼀下git的HEAD指针这个概念：
+git的提交历史节点组成了⼀个树形的结构，不同的分⽀则是树的不同分⽀。
+HEAD指针则指向了我们当前所处在的节点，我们通过git switch test ，将HEAD指针从master切换
+到了test，并提交了⼀个节点。
+具体说明看下图：
+2. 切换回master分⽀，并完成⼀次提交。
+需要明确的是，master和test两个分⽀提交的内容互不⼲扰。
+此时，分⽀情况如下图所示：
+3. 保存临时代码。
+git branch test                     # 在当前节点创建branch分⽀
+git switch test                     # 切换⾄test分⽀
+echo "test code" > code.cpp         # 在test分⽀向code.cpp写⼊内容
+git add .;git commit -m "test code" # 提交
+git switch master    # 将head指针切换⾄master分⽀
+echo "master code" > code.cpp
+git add .;git commit -m "master code" # 提交
+
+=== PAGE 17 ===
+此操作主要⽤于：当你在⼀个分⽀（master），写了⼀些未完善（未提交的代码），但需要切换到另⼀个分
+⽀（test）进⾏另外的编写时，暂存你的⼯作。如下例⼦所示：
+注：此部分，我们使⽤git checkout  完成了分⽀切换，此前使⽤的是git switch ，两者的区别有以下⼏
+点：
+git checkout  可以⽤于分⽀间切换，也可以⽤于切换head指针到git提交历史中的任意⼀个节点，如
+git checkout <节点哈希值(可有git log查看)> ；⽽git switch 只允许分⽀间的切换。
+git switch <分⽀>  与 git checkout <分⽀>  没有区别，均为切换分⽀；git swich -c <分⽀> 与
+git checkout -b <分⽀>  没有区别，均为创建并切换⾄新分⽀。
+git checkout  功能⽐git swich  更多，是因为git switch  本身就是为了解决git checkout  功能
+繁杂的问题；可以将git switch  看作git checkout 切换分⽀时的特化版本，在切换分⽀时，应尽量
+使⽤git switch 。
+4. 分⽀合并。
+假定我们在test和master分⽀完成了两个功能，现在需要将两个分⽀汇总为⼀个分⽀，合并我们代码⾥的功
+能。
+echo "new code (uncompleted)" > code.cpp      # 这代表你未完成的⼯作
+# 此时来了紧急任务，需要我们在test提交代码
+git checkout test   # 尝试直接切换到test分⽀
+# 下⾯是git的错误报告，告诉我们修改的⽂件和test分⽀冲突，我们需要将修改完成⼀次提交或存⼊stash区
+error: Your local changes to the following files would be overwritten by checkout:
+    code.cpp
+Please commit your changes or stash them before you switch branches.
+Aborting
+# 上⾯是错误报告
+# 由于新代码未完成，不宜进⾏提交，所以我们将其存⼊stash
+git add .           # 将未完成的修改加⼊暂存区
+git stash -m "new code (uncompleted)"          # 将暂存区的代码存⼊stash, 可以额外添加 -
+m 选项⽤于写⼀些此暂存内容的描述
+git stash list      # 此命令⽤于查看暂存区的内容
+git checkout test   # 切换⾄test分⽀
+echo "complete urgent Tasks" > code.cpp     
+git add . ; git commit -m "complete urgent Tasks"  # 完成分派的紧急任务
+# 完成任务后，我们需要继续切换回master分⽀，继续完成我们的代码
+git checkout master 
+git stash pop   # 将stash⾥最近⼀次保存复原到⼯作区
+git stash list  # 复原后可再次查看stash区，发现已经空了
+cat code.cpp    # 将显示之前暂存的内容，为“new code (uncompleted)”
+echo "new code (completed)" > code.cpp
+git add .; git commit -m "new code"     # 模拟完成了功能 
+
+=== PAGE 18 ===
+此时，git的节点树形图如下图所示:
+5. 分⽀变基。
+合并两个分⽀，也可以使⽤git rebase <要合并的分⽀> ，下⾯假定你没有做上⼀步4. 分⽀合并：
+git switch master
+git merge test   # 将test合并到我们当前所在分⽀(master)
+# 此时由于我们两个分⽀的内容有冲突的部分，git会提示我们处理冲突
+cat code.cpp     # 查看冲突⽂件，git帮我们把冲突部分列出来了
+<<<<<<< HEAD
+new code (completed)
+=======
+complete urgent Tasks
+>>>>>>> test
+# 打开code.cpp，修改⽂件到我们期望的样⼦，如"new code and complete urgent Tasks"或其他形
+式，应根据实际需要处理冲突代码
+echo "new code and complete urgent Tasks" > code.cpp   # 此语句相当于打开⽂件处理了冲突代
+码
+git add . ; git commit -m "new code and complete urgent Tasks"  # 提交解决冲突后的⽂
+件，⾃动完成分⽀合并
+git switch master
+git rebase test         # 使⽤rebase合并分⽀
+# git rebase会将master分⽀上的每个提交都在test分⽀上提交⼀次，再将test分⽀变为master分⽀，即
+“变基”。
+# 此时由于我们两个分⽀上的各个提交有冲突的部分，git会提示我们处理冲突。
+Auto-merging code.cpp
+CONFLICT (content): Merge conflict in code.cpp
+error: could not apply 761e3a7... master code
+hint: Resolve all conflicts manually, mark them as resolved with
+hint: "git add/rm <conflicted_files>", then run "git rebase --continue".
+hint: You can instead skip this commit: run "git rebase --skip".
+hint: To abort and get back to the state before "git rebase", run "git rebase --
+abort".
+
+=== PAGE 19 ===
+变基将红框的部分搬运到test分⽀之后，依次进⾏提交，我们需要依次处理冲突，最终得到变基后的结果。具
+体原理⻅下图：
+Could not apply 761e3a7... master code
+# git会依次逐个提示我们变基过程中的每个冲突（本例中，理论上最多的冲突次数为master分⽀上的提交次
+数）。
+cat code.cpp            # 查看冲突
+<<<<<<< HEAD
+complete urgent Tasks
+=======
+master code
+>>>>>>> ae4db29 (master code)
+echo "master code and complete urgent Tasks" > code.cpp                # 解决第⼀次冲
+突
+git add .
+git rebase --continue   # 继续rebase
+# 第⼆次冲突。（master分⽀上的每个提交都会在test分⽀上提交⼀次。）
+[detached HEAD c86da6d] master code and complete urgent Tasks
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging code.cpp
+CONFLICT (content): Merge conflict in code.cpp
+error: could not apply 99ac134... new code
+hint: Resolve all conflicts manually, mark them as resolved with
+hint: "git add/rm <conflicted_files>", then run "git rebase --continue".
+hint: You can instead skip this commit: run "git rebase --skip".
+hint: To abort and get back to the state before "git rebase", run "git rebase --
+abort".
+Could not apply 99ac134... new code
+cat code.cpp
+<<<<<<< HEAD
+master code and complete urgent Tasks
+=======
+new code (completed)
+>>>>>>> 99ac134 (new code)
+echo "new code and complete urgent Tasks" > code.cpp                # 解决第⼆次冲突
+git add .
+git rebase --continue   # 继续rebase
+# rebase成功。
+[detached HEAD 136ecb6] new code and complete urgent Tasks
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Successfully rebased and updated refs/heads/master.
+git log                 # 查看提交历史
+
+=== PAGE 20 ===
+⾄此，你已经了解了如何使⽤Git进⾏代码管理。附:
+Git 官⽹：https://git-scm.com/
+Git - Book Git官⽅⽂档：https://git-scm.com/book/zh/v2
+Oh My Git! ⼀个可视化Git学习游戏：https://ohmygit.org/
+2.3 Github⼯作流
+ 
+2.3.1 实验⽬的
+ 
+学会如何使⽤Github进⾏团队协作开发。
+2.3.2 实验要求与内容
+ 
+要求
+ 
+了解git和github的⼯作原理。
+在Ubuntu下配置好ssh。
+使⽤github仓库存储项⽬代码。
+学会使⽤github进⾏协作开发。
+内容
+ 
+⼀、git与github的⼯作原理
+ 
+此部分为了解性知识，⽆需⼿动操作，但是此部分的说明对理解git以及github的⼯作原理有很⼤帮助。
+1. git的原理图如下：
+
+=== PAGE 21 ===
+2. ⼯作区即我们可以在项⽬⽂件夹看到的内容，暂存区和本地仓库保存⾄⼯作区的.git⽂件夹内，github等代码
+托管平台则是远程仓库。
+3. 我们可以使⽤git push 、git pull 、git fetch  等命令将本地仓库的内容推送到github或gitlab这样的远
+程仓库，或将内容从远程仓库拉取到本地，以便进⾏团队开发。
+⼆、在Ubuntu下配置ssh
+ 
+1. 安装ssh，Ubuntu默认安装好了openssh，输⼊ssh 检查是否安装好，若未安装，请使⽤sudo apt 
+install openssh-server  安装ssh服务。
+2. 使⽤ssh-kengen -C "zhangsan@163.com" ⽣成ssh key，将其中的邮箱替换为⾃⼰的邮箱，执⾏命令直接
+全部回⻋确认即可。执⾏此命令将在~/.ssh ⽬录下⽣成id_rsa 、id_rsa.pub ，请保护好⾃⼰的id_rsa
+私钥。
+3. 使⽤chmod 400 id_rsa id_rsa.pub 设置ssh key⽂件的权限为仅⾃⼰可读。
+三、创建github仓库
+ 
+1. 在github 官⽹创建账号：https://github.com
+2. 在已登录的github界⾯，点击⽤户头像->"settings"->"SSH and GPG keys"
+3. 点击"New SSH key"按钮，设置Title，然后将~/.ssh/id_rsa.pub 的内容复制到key⽂本框中,保存设置
+
+=== PAGE 22 ===
+四、创建第⼀个仓库
+ 
+1. 在已登录的github界⾯，点击⽤户头像->"Your repositories"，随后点击New，新建⼀个仓库
+
+=== PAGE 23 ===
+2. 将本地仓库与线上仓库关联，选择第⼆种⽅式将第⼆部分中Git创建的项⽬"git_learn"推送到远程仓库。
+
+=== PAGE 24 ===
+ ⾄此，git_learn成功上传⾄github，可以利⽤github进⾏多⼈项⽬协作。
+五、trunk⼯作流
+ 
+trunk⼯作流是github下最简单的多⼈协作模式，此模式只存在⼀个主⼲分⽀，其他⼈都基于主⼲分⽀进⾏代
+码提交、修改。此部分需要我们使⽤两个⽂件夹，来模拟两个⼈的提交，亦可与朋友进⾏互动实验。
+1. 创建⼀个空仓库，参考 第四节（创建⼀个仓库） 。
+2. 在本地合适的路径下创建两个⽂件夹模拟两个团队成员
+3. 模拟A进⾏⼀些代码的提交
+mkdir ~/github_test 
+cd ~/github_test        # 切换到合适的⽂件路径下
+mkdir A_demo B_demo     # 创建A，B两个成员你的⼯作区
+cd ~/github_test/A_demo    # 进⼊A的⼯作区
+git clone <远程仓库链接> .   # clone 远程仓库
+cd ~/github_test/B_demo    # 进⼊B的⼯作区
+git clone <远程仓库链接> .   # clone 远程仓库
+cd ~/github_test/A_demo   # 进⼊A的⼯作区
+# A编写⾃⼰的任务代码
+echo A_fun_1 > code_1.cpp
+echo A_fun_2 > code_2.cpp
+git add .; git commit -m "A f_1 f_2" # 提交到本地仓库
+
+=== PAGE 25 ===
+4. 模拟B进⾏⼀些代码的提交
+5. git fetch 与git pull
+在4.模拟B进⾏⼀些代码的提交部分，我们已经了解了在trunk⼯作流如何进⾏简单的多⼈协作开发，以
+及遇到冲突该如何处理。此部分为了解性知识，介绍fetch与pull的区别。
+参照⼆、git与github的⼯作原理中的原理图，可以了解到git fetch 只是将远程仓库的代码同步到本
+地仓库，它并不会影响⼯作区的代码。
+只看图或许难以理解git pull ，git pull 做了两件事：⾸先，它将远程仓库与本地仓库进⾏同步，
+这点与git fetch 相同；其次，它在同步完成后⽴即将远程仓库的最新节点和本地⼯作区的节点进⾏了
+合并提交。合并的⽅式与设置相关，本例中选择的时rebase。
+# 提交到本地仓库后，A需要把⾃⼰的代码推送到远程仓库，以便其他⼈看到A的代码、在A提交的代码基础上继续
+改进
+# 在push之前使⽤pull及时与远程仓库同步是⼀个好习惯
+git pull origin main      # 由于A最先完成他的⼯作，此时远程仓库没有别⼈的提交，因此不存在远程
+仓库和本地仓库的冲突
+git push    # 将本地的代码推送到远程仓库
+cd ~/github_test/B_demo # 进⼊B的⼯作区
+# B编写⾃⼰的任务代码
+echo B_fun_2 > code_2.cpp
+echo B_fun_3 > code_3.cpp
+git add .; git commit -m "B f_2 f_3" # 提交到本地仓库
+# B也需要将⾃⼰的代码提交到远程。为确保⾃⼰是的修改是基于最新版本的，B在push之前最好先做pull操作，
+将⾃⼰的代码版本更新到最新。
+git config pull.rebase true   # ⾸先设置pull时处理的⽅式，trunk⼯作流建议使⽤rebase模式
+git pull origin main        # B提交的时候，远程仓库已经被A更改了，因此pull时会提示冲突
+cat code_2.cpp             # 查看冲突的⽂件
+<<<<<<< HEAD
+A_fun_2
+=======
+B_fun_2
+>>>>>>> 01f9d76 (B f_2 f_3)
+echo A_B_fun_2 > code_2.cpp         # 处理冲突
+git add . ; git rebase --continue   # 完成rebase
+git log     # 可以看到A和B分别进⾏了两次提交
+git push    # 将本地的代码推送到远程仓库
+
+=== PAGE 26 ===
+git fetch ⼀种可能的应⽤场景是，我们在开发期间能要进⾏分⽀的切换：需要先git fetch 将远程
+的最新数据同步到本地；再使⽤git stash 保存本地已经完成的代码；随后使⽤git switch 切换到另
+⼀个分⽀查看或修改
+git pull 则主要⽤于某些镜像仓库保持与远程⼀致，或在提交功能前pull远程代码进⾏冲突合并
+6. 标签的使⽤
+在项⽬开发过程中，我们可能有某些重要版本的代码，或者其余有标志意义的commit需要标记，以便
+我们能随时切换到这个版本查看相关信息。
+六、功能分⽀⼯作流
+ 
+1. 创建⼀个空仓库，参考 第四节（创建⼀个仓库） 。
+2. 在本地空仓库进⾏⼀些提交，本例使⽤如下命令：
+3. 创建⼀个功能分⽀"feature_1"，在本地使⽤以下命令：
+# 假设B完成他的提交后，整个项⽬就完成到了1.0版本，可以打上tag标记
+cd ~/github_test/B_demo # 进⼊B的⼯作区
+git tag v1.0    # 在B最近⼀次的提交上标记
+git show v1.0   # 查看指定tag信息
+git tag -l      # 列出所有tag
+git checkout <tag name> # 查看指定tag所在commit的内容，如果不标记tag，我们只能使⽤commit的
+hash值来指代要切换的节点，很不⽅便
+# git tag -d <tag name>   # 删除指定的tag
+# git tag -f v1.0 <指定节点hash或分⽀名称>  # 将v1.0这个tag移动到指定的节点 
+git push --tags # 推送所有tag到远程
+echo "1" >> demo.txt
+git add demo.txt
+git commit -m "1"
+git push
+git pull # 在本地添加分⽀前，使⽤git pull保持你的本地master分⽀与远端同步
+git checkout -b feature_1 main # 在main分⽀创建⼀个名为feature_1的分⽀
+echo "feature_1 function">> demo.txt # 做⼀些更改，这就好⽐你在开发feature_1的功能
+git add .;git commit -m "feature_1 function" # 进⾏修改的提交
+git push # 你将这个分⽀也推送到远端仓库存储，以便和其他成员共同开发feature_1分⽀的功能
+# 下⾯是使⽤git push后的报错，git提醒我们远端仓库不包含我们现在的分⽀
+# 如果我们需要将此分⽀存放到远端仓库需要使⽤git push --set-upstream origin feature_1 命令
+fatal: The current branch feature_1 has no upstream branch.
+To push the current branch and set the remote as upstream, use
+    git push --set-upstream origin feature_1
+To have this happen automatically for branches without a tracking
+upstream, see 'push.autoSetupRemote' in 'git help config'.
+
+=== PAGE 27 ===
+4. 模拟其他成员在我们完善feature_1时向主分⽀提交了新功能:
+5. 现在，需要将feature_1分⽀合并到main分⽀中。发起pull request：
+选择将feature_1分⽀合并到main分⽀中，此时，github提示我们要合并的代码版本有冲突，但并不影响pull 
+request的创建。
+创建pull request时，需要⽤户输⼊⼀些comment。
+创建pull request后，github提示我们需要⼿动解决冲突，才能进⾏合并。
+# 上⾯是报错信息
+# 将本地内容推送到远端，如果远端没有此分⽀则⾃动创建
+git push --set-upstream origin feature_1
+# 此代码模拟有⼈向main添加了修改的功能
+git checkout main
+echo "3" >> demo.txt
+git add .; git commit -m "feature_3"
+git push
+
+=== PAGE 28 ===
+注意：对于带有冲突的pr，如需接受，git不可能⾃⼰解决这个冲突。此时，解决该冲突的⼈选有两个：
+pr的提出者（如负责feature_1的项⽬成员）或者代码审查者（如项⽬组⻓）。这两个⻆⾊都可以解决
+此类冲突。以下分别演示：
+6. pr的提出者（如负责feature_1的项⽬成员）主动解决该冲突（这是常⻅⽅式，可以⽅便代码审查者直接合并
+该pr，减轻代码审查者负担）。对于简单的冲突，可以直接使⽤github提供的在线编辑器解决冲突；⽽对于复
+杂的冲突，则最好在本地命令⾏中进⾏解决，再推送到github中。参考如下命令：
+git pull origin main    # 更新本地仓库与线上仓库的main分⽀⼀致
+git checkout feature_1  # 切换到我们负责的分⽀
+git merge main          # 在本地与main分⽀进⾏合并
+# 提示冲突
+Auto-merging demo.txt
+CONFLICT (content): Merge conflict in demo.txt
+Automatic merge failed; fix conflicts and then commit the result.
+# 上⾯为冲突信息
+# 查看冲突
+cat demo.txt
+1
+<<<<<<< HEAD
+feature_1 function
+=======
+3
+>>>>>>> main
+
+=== PAGE 29 ===
+此时，我们再查看github的pr状态，提示已经可以⾃动合并：
+之后，代码审查者（如项⽬组⻓）点击"Merge pull request"即可完成合并。
+7. 代码审查者（如项⽬组⻓）主动解决该冲突（该⽅式不常⻅，会增加代码审查者负担）。如果代码审查者（⽐
+如你的组⻓）同意了你的pr，且他想亲⾃解决该冲突并进⾏代码合并，则他可以采取以下处理⽅式：
+echo "3 and feature_1 function" > demo.txt  # 处理冲突
+git add .; git commit                       # 本地提交
+git push -u origin feature_1                # 推送到远端
+git checkout main
+git pull
+git pull origin feature_1
+# 这⾥git提示我们要选择遇⻅冲突时的解决⽅式
+From github.com:xxxx/Demo
+* branch            feature_1  -> FETCH_HEAD
+hint: You have divergent branches and need to specify how to reconcile them.
+hint: You can do so by running one of the following commands sometime before
+hint: your next pull:
+hint:
+hint:   git config pull.rebase false  # merge
+hint:   git config pull.rebase true   # rebase
+hint:   git config pull.ff only       # fast-forward only
+hint:
+hint: You can replace "git config" with "git config --global" to set a default
+hint: preference for all repositories. You can also pass --rebase, --no-rebase,
+hint: or --ff-only on the command line to override the configured default per
+hint: invocation.
+fatal: Need to specify how to reconcile divergent branches.
+nothing to commit, working tree clean
+# 上⾯是提示信息
+# 根据⾃⼰需求选择使⽤rebase或者merge，本例使⽤merge⽅式
+git config --global pull.rebase false
+# 重新拉取并合并分⽀
+git pull origin feature_1
+
+=== PAGE 30 ===
+git push成功之后，pr会⾃动关闭。
+七、forking⼯作流
+ 
+1. 进⼊你想要参与开发的项⽬仓库⻚⾯，点击fork按钮，将仓库fork到你⾃⼰的远程仓库。
+# 查看冲突的⽂件
+git status
+# 解决完冲突后提交
+git add .; git commit
+git push
+
+=== PAGE 31 ===
+2. 当需要同步远程仓库时，在⾃⼰fork的仓库发起pull request，需要注意将来源设置为原仓库，⽬的仓库为你
+账号下fork的仓库。
+3. 在⾃⼰fork的仓库上完成相关的功能开发。
+4. 发起pull request。
+此操作和 六、功能分⽀⼯作流 ⼩5，以及本部分⼩2的内容基本相同，只是需要设置好pull request的来
+源仓库与⽬的仓库。
+之前六、功能分⽀⼯作流 ⼩5是将仓库的feature_1 合并到同⼀仓库下的main 分⽀。
+在此处，则是需要设置你账号下fork的仓库为pull request的来源，主仓库为pull request⽬的仓库。
+发起pull request后需要按需解决冲突，参照六、功能分⽀⼯作流 ⼩6、⼩7部分
+⾄此，你已经了解如何使⽤Github进⾏协作开发。

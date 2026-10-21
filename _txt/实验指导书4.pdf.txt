@@ -1,0 +1,587 @@
+=== PAGE 1 ===
+实验4 程序构建和软件测试
+ 
+4.0 Overview 项⽬任务
+ 
+使⽤Make构建动物园程序
+使⽤gtest进⾏程序测试
+使⽤valgrind进⾏内存泄漏检测
+使⽤gprof可视化调⽤链并分析恶意占⽤CPU的代码
+使⽤perf进⾏CPU占⽤检测并绘制⽕焰图
+4.0.1 项⽬代码
+ 
+由⽼师在课上分发。
+4.1 Make使⽤
+ 
+4.1.1 实验⽬的
+ 
+了解makefile的基础规则，使⽤make构建动物园程序
+4.1.2 实验内容与要求
+ 
+独⽴完成实验内容，对实验步骤进⾏截图，并认真撰写实验报告。
+要求
+ 
+掌握makefile变量的使⽤
+掌握makefile的函数
+掌握makefile的静态规则
+掌握makefile的伪⽬标
+掌握makefile的撰写
+内容
+ 
+⼀、makefile介绍
+ 
+makefile规定了整个⼯程的编译规则。⼀个⼯程中的源⽂件不计其数，并且按类型、功能、模块分别放在若⼲个⽬
+录中，makefile定义了⼀系列的规则来指定，哪些⽂件需要先编译，哪些⽂件需要后编译，哪些⽂件需要重新编
+译，甚⾄于进⾏更复杂的功能操作。makefile中可以指定执⾏各种shell命令。
+makefile带来的好处就是——“⾃动化编译”，⼀旦写好，只需要⼀个make命令，整个⼯程完全⾃动编译，极⼤地提
+⾼了软件开发效率。 make是⼀个命令⼯具，是⼀个解释makefile中指令的命令⼯具，⼀般来说，⼤多数的IDE都有
+这个命令，⽐如：Delphi的make，Visual C++的nmake，Linux下GNU的make。可⻅，makefile都成为了⼀种在
+⼯程⽅⾯的编译⽅法。
+
+=== PAGE 2 ===
+⼆、makefile规则
+ 
+以下是make的规则的格式：
+target: 可以是⼀个⽬标⽂件(*.o)，也可以是⼀个执⾏⽂件，还可以是⼀个标签（label）。对于标签这种特
+性，在后续的“伪⽬标”章节中会有叙述。
+prerequisites: ⽣成该target所依赖的⽂件或其它target的集合。
+command: 该target要执⾏的命令。
+这是⼀个⽂件的依赖关系，也就是说，target这⼀个或多个的⽬标⽂件依赖于prerequisites中的⽂件，其⽣成规则
+定义在commands中。说⽩⼀点就是:
+prerequisites中如果有⼀个以上的⽂件⽐target⽂件要新的话，command所定义的命令就会被执⾏。
+这就是makefile的规则，也就是makefile中最核⼼的内容。
+make并不管命令是怎么⼯作的，他只管执⾏所定义的命令。make会⽐较targets⽂件和prerequisites⽂件的修改
+⽇期，如果prerequisites⽂件的⽇期要⽐targets⽂件的⽇期要新，或者target不存在的话，那么，make就会执⾏
+后续定义的命令。
+当我们在shell中输⼊make 后，make找到当前⽬录下的Makefile（默认为Makefile或makefile），找到其中的第⼀
+个target，并执⾏对应的commands。
+在本次实验中，以下代码即makefile中的第⼀个target，其中的符号和⾃动变量在之后的章节中会讲解。
+三、makefile的基础语法
+ 
+1. 变量：make中使⽤变量名 = 变量值来定义变量，使⽤$(变量名) 或${变量名} 来获得变量名中保存的变量
+值。我们代码中开头的⼀堆XDIR 即使⽤了变量定义。CXXFLAGS 中的-I${IDIR} 使⽤了变量展开，即展开
+为-I./include 。
+<target> ... : <prerequisites> ...
+    <command>
+    ...
+${BIN_TARGET}: ${OBJECT}
+   ${CXX} -o $@ $^ ${CXXFLAGS}
+IDIR = ./include
+ODIR = ./obj
+SDIR = ./src
+BDIR = ./bin
+TDIR = ./test
+SCRIPT_DIR = ./script
+CXX = g++
+CXXFLAGS = -I${IDIR} -lgtest -lpthread -std=c++14 -g -pg
+
+=== PAGE 3 ===
+2. 函数：makefile内置了很多功能函数，主要⽤来简化makefile中的字符串操作。函数的调⽤，很像变量的使
+⽤，也是以 $  来标识的，其语法如下：
+这⾥， <function>  是函数名。<arguments>  为函数参数列表。参数间以逗号 ,  分隔，⽽函数名和参数之
+间以“空格”分隔。函数调⽤以 $  开头，以圆括号或花括号把函数名和参数括起。函数中的参数可以使⽤变
+量。
+以下是⼏个常⽤的makefile函数：
+wildcard：通配符扩展函数
+该函数⽤法如上，函数⾃动匹配通配符并展开为已经存在的、使⽤空格分开的、匹配此模式的所有⽂件
+列表。
+本实验代码中的⽤法如下：
+notdir：去⽂件名函数（去掉⽬录部分，只保留⽂件名）
+从⽂件名序列 <names>  中取出⾮⽬录部分。⾮⽬录部分是指最后⼀个反斜杠（ /  ）之后的部分。返回
+⽂件名序列 <names>  的⾮⽬录部分。
+patsubst：通配符替换函数
+该函数查找text中的单词（单词以“空格”、“Tab”或“回⻋”“换⾏”分隔）是否符合模式pattern，如果匹配
+的话，则以replacement替换。
+本实验代码中的⽤法如下：
+3. ⾃动变量：可以理解为由 Makefile ⾃动产⽣的变量。
+在模式规则中，规则的⽬标和依赖的⽂件名代表了⼀类的⽂件。在 Makefile 中描述规则时，依赖⽂件和⽬标
+⽂件往往是变动的，在命令中不应该出现具体的⽂件名称，否则规则将失去意义。那么如何表示这些⽂件呢？
+使⽤“⾃动化变量”！⾃动化变量的取值，取决于执⾏规则的⽬标⽂件和依赖⽂件。
+下⾯对部分⾃动化变量进⾏说明。
+1. $@ ：规则⽬标的⽂件名。
+ $(<function> <arguments>)
+$(wildcard PATTERN...)
+# SOURCE使⽤wildcard函数匹配SRC⽬录下的.cpp⽂件
+SOURCE = $(wildcard ${SDIR}/*.cpp)
+$(notdir <names...>)
+$(patsubst pattern, replacement, text)
+# OBJECT使⽤patsubst函数将SOURCE对应的.cpp⽂件的后缀替换成.o           
+OBJECT = $(patsubst %.cpp, ${ODIR}/%.o, $(notdir ${SOURCE}))
+
+=== PAGE 4 ===
+隐含规则
+等效命令
+“.c”编译为“.o”
+$(CC) -c $(CPPFLAGS) $(CFLAGS)
+“.cc”或“.C”编译为“.o”
+$(CXX) -c $(CPPFLAGS) $(CXXFLAGS)
+2. $^ ：代表的是所有依赖⽂件列表。
+3. $< ：依赖对象集合中的第⼀个⽂件。
+本实验代码中的⽤法如下：
+四、makefile中的隐式规则
+ 
+make包含有⼀些内置的或者隐含的规则，这些规则定义了如何从不同的依赖⽂件建⽴特定类型的⽬标。隐式规则
+能够告诉make怎么样使⽤传统的技术完成任务，这样⽤户在使⽤它们的话就不必详细指定编译器的具体细节，⽽
+只需要把⽬标⽂件列出即可。make会⾃动搜索隐式规则来确定如何⽣成⽬标⽂件。
+常⻅的隐式规则如下：
+例如以下makefile使⽤显示规则撰写：
+现将上⾯定义的显式规则改为隐式规则：
+# 第⼆⾏可扩展为
+# GCC -o BIN_TARGET的值 OBJECT中的所有⽂件 CXXFLAG中的所有选项
+${BIN_TARGET}: ${OBJECT}
+   ${CXX} -o $@ $^ ${CXXFLAGS}
+objects=main.o add.o dec.o mul.o div.o
+pragram:${objects}
+   gcc $^ -o $@
+main.o:main.c
+   gcc $^ -o $@
+add.o:add.c
+   gcc $^ -o $@
+dec.o:dec.c
+   gcc $^ -o $@
+mul.o:mul.c
+   gcc $^ -o $@
+div.o:div.c
+   gcc $^ -o $@
+clean:
+   rm *.o pragram
+
+=== PAGE 5 ===
+相⽐于显式规则，隐式规则在书写上简洁很多，在⼤型项⽬中更具优势。
+五、makefile中的静态模式
+ 
+静态模式可以更加容易地定义多个⽬标的规则，可以让我们的规则变得更加有弹性和灵活。我们还是先来看⼀下语
+法：
+targets：定义了⼀系列的⽬标⽂件，可以有通配符。是⽬标的⼀个集合。
+target-pattern：是指明了targets的模式，也就是的⽬标集模式。
+prereq-patterns：是⽬标的依赖模式，它对target-pattern形成的模式再进⾏⼀次依赖⽬标的定义。
+这样描述这三个东⻄，可能还是没有说清楚，还是举个例⼦来说明⼀下吧。如果我们的<target-pattern> 定义成 
+%.o ，则代表<target> 集合中所有以 .o  结尾的<target> 。⽽如果我们的<prereq-patterns>  定义成 %.c  
+，则是对<target-pattern> 所形成的⽬标集进⾏⼆次定义，其计算⽅法是，取 <target-pattern>  模式中的 
+% （也就是%.o 中去掉了 .o  这个结尾）代表的部分，并为其加上 .c  这个结尾，形成的新集合。在多数时
+候，<target> 是可以省略的，以下是⼀个例⼦：
+本实验代码中的⽤法如下：
+objects=main.o add.o dec.o mul.o div.o
+CC=gcc
+CFLAGS=-Wall -O -g 
+pragram:$(objects)
+   ${CC} $^ -o $@
+clean:
+   rm *.o pragram
+<targets ...> : <target-pattern> : <prereq-patterns ...>
+   <commands> 
+    ...
+%.o : %.c
+   gcc -c $< -o $@
+# "静态模式+⾃动化变量" 来⽣成 ".o" ⽬标⽂件
+# $@代表target的名字，$<代表右侧输⼊的第⼀个名字
+# 该规则展开如下：
+# ./obj/foo.o : ./src/foo.c
+#    $(CXX) -c $(CXXFLAGS) foo.c -o foo.o
+$(ODIR)/%.o: $(SDIR)/%.cpp
+   $(CXX) -c $(CXXFLAGS) $< -o $@ 
+
+=== PAGE 6 ===
+六、makefile中的伪⽬标
+ 
+我们的程序代码中，我们提到过⼀个“clean”的⽬标，这是⼀个“伪⽬标”，
+正像我们前⾯例⼦中的“clean”⼀样，既然我们⽣成了许多⽂件编译⽂件，我们也应该提供⼀个清除它们的“⽬标”以
+备完整地重编译⽽⽤。 （以“make clean”来使⽤该⽬标）
+因为，我们并不⽣成“clean”这个⽂件。“伪⽬标”并不是⼀个⽂件，只是⼀个标签，由于“伪⽬标”不是⽂件，所以
+make⽆法⽣成它的依赖关系和决定它是否要执⾏。我们只有通过显式地指明这个“⽬标”才能让其⽣效。当然，“伪
+⽬标”的取名不能和⽂件名重名，不然其就失去了“伪⽬标”的意义了。
+当然，为了避免和⽂件重名的这种情况，我们可以使⽤⼀个特殊的标记“.PHONY”来显式地指明⼀个⽬标是“伪⽬
+标”，向make说明，不管是否有这个⽂件，这个⽬标就是“伪⽬标”。
+伪⽬标⼀般没有依赖的⽂件。但是，我们也可以为伪⽬标指定所依赖的⽂件。伪⽬标同样可以作为“默认⽬标”，只
+要将其放在第⼀个。⼀个示例就是，如果你的Makefile需要⼀⼝⽓⽣成若⼲个可执⾏⽂件，但你只想简单地敲⼀个
+make完事，并且，所有的⽬标⽂件都写在⼀个Makefile中，那么你可以使⽤“伪⽬标”这个特性。
+七、完整的代码
+ 
+可参⻅该项⽬的Makefile，在项⽬⽬录下使⽤make 来构建该项⽬。
+4.2 Googletest使⽤
+ 
+4.2.1 实验⽬的
+ 
+了解Googletest，编写简单的gtest测试程序
+4.2.2 实验内容与要求
+ 
+独⽴完成实验内容，对实验步骤进⾏截图，并认真撰写实验报告。
+要求
+ 
+掌握Gtest的常⽤断⾔
+掌握Gtest常⽤的测试⼿段
+编写Gtest函数
+ clean:  
+   #find $(ODIR) -name *.o -exec rm -rf {} \; #这个是find命令，不懂的可以查下资料  
+   rm -f $(ODIR)/*.o
+   rm -rf $(BDIR)/*.out
+   rm -f $(TDIR)/*.out $(TDIR)/*.txt $(TDIR)/*.png $(TDIR)/*.out
+   rm -rf gmon.out
+.PHONY : clean
+
+=== PAGE 7 ===
+内容
+ 
+⼀、Googletest基础
+ 
+Googletest（通常简称为gtest）是由Google开发的⼀个C++单元测试框架，⽤于编写和运⾏⾃动化测试。它⽀持
+各种测试⽅法，包括单元测试、集成测试和功能测试等，并提供了丰富的测试⼯具和测试报告，以帮助开发⼈员快
+速、准确地测试和验证代码的正确性和健壮性。
+使⽤GoogleTest时，⾸先要编写断⾔，这些断⾔是检查条件是否为真的语句。断⾔的结果可以是成功、⾮致命的失
+败或致命的失败。如果发⽣致命故障，则中⽌当前功能；否则程序正常继续。
+常⻅定义：
+Test Case：Test Case是指⼀个独⽴的测试⽤例，通常测试⼀个特定的函数或⽅法。每个Test Case都是使
+⽤TEST 或TEST_F 宏定义的，可以独⽴运⾏和测试。
+Test Suite：Test Suite是指⼀组相关的测试⽤例，通常⽤于打包测试⼀个共同的功能或对象。⼀个Test Suite
+可以包含多个Test Case。
+Test Fixture：当⼀个Test Suite中的多个Test Case需要共享公共的对象和⼦例程时，可以使⽤Test Fixture来
+封装共享部分。在使⽤Test Fixture时，必须使⽤TEST_F 宏，其它情况则使⽤TEST 宏。
+⼆、assertion、test suite和test fixture
+ 
+1. assertion：“断⾔”是类似于函数调⽤的宏，⽤于判定类或函数的⾏为是否达到预期。当断⾔失败时，
+GoogleTest会打印⼀条失败消息。以下两类常⻅的断⾔：
+1. ASSERT_*：当断⾔失败时，产⽣致命错误、并终⽌当前函数，包括：ASSERT_TRUE、ASSERT_FALSE、
+ASSERT_EQ、ASSERT_NE、ASSERT_STREQ、ASSERT_STRNE等。
+2. EXPECT_*：当断⾔失败时，产⽣⾮致命错误，并不会终⽌当前函数。
+2. Test Suite：Test Suite是测试的基础，其包含⼀个或多个Test Case。应将逻辑上具有相关性的测试⽤例放到
+⼀个Test Suite中。以下是⼀个Test Case的格式
+使⽤TEST()宏来定义和命名Test Case。每个Test Case可视为⼀个不返回值的普通C++函数。
+在这个函数中，连同您想要包含的任何有效的C++语句⼀起，使⽤各种GoogleTest断⾔来检查值。
+测试的结果由断⾔决定；如果测试中的任何断⾔失败（⽆论是致命的还是⾮致命的），亦或测试崩溃，
+则整个测试失败。否则成功。
+TEST(TestSuiteName, TestName) {
+  ... test body ...
+}
+
+=== PAGE 8 ===
+3. Test Fixture：当⼀个Test Suite中的多个测试需要共享公共对象和⼦例程时，可以使⽤Test Fixture对Test 
+Suite进⾏包装，以使⽤相同的数据配置进⾏不同的Test Case测试。其使⽤⽅法如下：
+1. 从::testing::Test 派⽣⼀个类。它的主体以protected: 开头，因为我们希望从⼦类访问fixture的
+成员。
+2. 在类内部，声明您计划使⽤的任何对象。
+3. 可实现虚函数virtual void SetUp() ，⽤于Test Fixture中每个Test Case的测试环境的初始化。（在
+每个Test Case中最先执⾏。）
+4. 可实现虚函数virtual void TearDown() ，⽤于Test Fixture中每个Test Case的测试环境的资源清
+理。（在每个Test Case中最后执⾏。）
+5. 如果需要，可定义⼀些测试中需要⽤到的公共的⼦例程。
+使⽤Test Fixture时，请使⽤TEST_F() ⽽不是TEST() ，因为它允许您访问Test Fixture中的对象和⼦例程：
+与TEST() 不同，在TEST_F() 中，第⼀个参数必须是Test Fixture的名称（_F代表“Fixture”）。可认为Test 
+Suite和Test Fixture同名。
+不幸的是，C++宏系统不允许我们创建⼀个可以同时处理这两种类型测试的宏。使⽤错误的宏会导致编译器错
+误。
+此外，在test_F() 中使⽤Test Fixture之前，您必须⾸先定义它，否则您将得到编译器错误“虚拟外部类声
+明”。
+对于⽤test_F() 定义的每个Test Case，GoogleTest将在运⾏时创建⼀个新的Test Fixture，并⽴即通过
+SetUp() 对其进⾏初始化，然后运⾏测试，再调⽤TearDown() 进⾏清理，最后删除该Test Fixture。请注
+意：同⼀Test Suite中的不同Test Case具有不同的Test Fixture对象。GoogleTest不会对多个Test Case重复使
+⽤同⼀个Test Fixture，即⼀个Test Case对Test Fixture所做的任何更改都不会影响其它Test Case。
+// 本代码中，MouseTest是⼀个Test Suite，包含两个Test Case（TrueName和FalseName），⽤于测试
+mouse.Name()是否返回Mouse。
+TEST(MouseTest, TrueName)
+{
+   Mouse mouse;
+   EXPECT_EQ("Mouse", mouse.Name());
+}
+TEST(MouseTest, FalseName)
+{
+   Mouse mouse;
+   EXPECT_EQ("Cat", mouse.Name());
+}
+TEST_F(TestFixtureClassName, TestName) {
+   ... test body ...
+}
+// 本代码中的test fixture
+class TigerTest : public ::testing::Test
+{
+
+=== PAGE 9 ===
+四、gtest的main函数
+ 
+使⽤以下的模板来开启并运⾏全部测试。
+五、启动本项⽬中的gtest
+ 
+4.3 Valgrind使⽤
+ 
+protected:
+   void SetUp() override
+   {
+      cout << "TigerTest Test Case SetUp" << endl;
+   }
+   void TearDown() override
+   {
+      cout << "TigerTest Test Case TearDown" << endl;
+   }
+   Tiger tiger;
+};
+TEST_F(TigerTest, TrueName)
+{
+   EXPECT_EQ("Tiger", tiger.Name());
+}
+TEST_F(TigerTest, FalseName)
+{
+   EXPECT_EQ("Cat", tiger.Name());
+}
+#include"gtest/gtest.h"
+GTEST_API_ int main(int argc, char **argv) {
+    testing::InitGoogleTest(&argc, argv);//解析命令⾏中的GoogleTest参数，它允许⽤户通过多样的
+命令⾏参数来控制测试程序的⾏为（即定制命令⾏参数的⾏为）
+    return RUN_ALL_TESTS();//将会搜索不同的Test Case和不同的源⽂件中所有已经存在测试案例，然后运
+⾏它们，所有Test都成功时返回1，否则返回0。
+}
+cd test
+make
+./gtest.out
+
+=== PAGE 10 ===
+4.3.1 实验⽬的
+ 
+了解Valgrind，并使⽤其找出内存泄漏的代码。
+4.3.2 实验内容与要求
+ 
+独⽴完成实验内容，对实验步骤进⾏截图，并认真撰写实验报告。
+要求
+ 
+使⽤valgrind进⾏内存泄漏的检测
+内容
+ 
+⼀、认识valgrind
+ 
+Valgrind是⼀套Linux下，开放源代码的仿真调试⼯具的集合。Valgrind由内核以及基于内核的其他调试⼯具组成。
+内核模拟了⼀个CPU环境，并提供服务给其他⼯具；⽽其他⼯具类似于插件，利⽤内核提供的服务完成各种特定的
+内存调试任务。本实验主要使⽤memcheck进⾏内存泄漏检查。
+⼆、检测内存泄漏
+ 
+本实验中部分动物类存在内存泄漏，执⾏valgrind --tool=memcheck --leak-check=full 
+./bin/zoo_boom.out &> val.txt 启⽤memcheck的内存泄漏检查并开始分析。
+打开val.txt⽂件，在该⽂件的末尾，我们看到
+==7843== Process terminating with default action of signal 27 (SIGPROF)
+==7843==    at 0x4B634FA: __open_nocancel (open64_nocancel.c:45)
+==7843==    by 0x4B712DF: write_gmon (gmon.c:370)
+==7843==    by 0x4B71B3E: _mcleanup (gmon.c:444)
+==7843==    by 0x4A96FDD: __cxa_finalize (cxa_finalize.c:83)
+==7843==    by 0x10A3E6: ??? (in /root/courses/SDCE/SDCE-exp4/bin/zoo_boom.out)
+==7843==    by 0x4011F6A: _dl_fini (dl-fini.c:138)
+==7843==    by 0x4A968A6: __run_exit_handlers (exit.c:108)
+==7843==    by 0x4A96A5F: exit (exit.c:139)
+==7843==    by 0x4A74089: (below main) (libc-start.c:342)
+==7843== 
+==7843== HEAP SUMMARY:
+==7843==     in use at exit: 1,075,338 bytes in 1,005 blocks
+==7843==   total heap usage: 1,020 allocs, 15 frees, 2,199,746 bytes allocated
+==7843== 
+==7843== 8 bytes in 1 blocks are definitely lost in loss record 1 of 6
+==7843==    at 0x483BE63: operator new(unsigned long) (in /usr/lib/x86_64-linux-
+gnu/valgrind/vgpreload_memcheck-amd64-linux.so)
+==7843==    by 0x10BFB3: init() (main.cpp:13)
+==7843==    by 0x10C09C: main (main.cpp:23)
+==7843== 
+==7843== 8 bytes in 1 blocks are definitely lost in loss record 2 of 6
+==7843==    at 0x483BE63: operator new(unsigned long) (in /usr/lib/x86_64-linux-
+gnu/valgrind/vgpreload_memcheck-amd64-linux.so)
+
+=== PAGE 11 ===
+我们观察record和LEAK SUMMARY发现，Mouse::Drink()  和init() 中的new 存在着内存泄漏。在定位出这两
+个问题之后，我们可以尝试修复这个bug。
+4.4 Gprof使⽤
+ 
+4.4.1 实验⽬的
+ 
+查看当前程序中的调⽤链并将其可视化，分析恶意占⽤CPU的代码。
+4.4.2 实验内容与要求
+ 
+独⽴完成实验内容，对实验步骤进⾏截图，并认真撰写实验报告。
+要求
+ 
+使⽤gprof进⾏函数调⽤链的分析。
+使⽤gprof分析恶意占⽤CPU的代码。
+将gprof的分析内容可视化。
+==7843==    by 0x10BFE6: init() (main.cpp:15)
+==7843==    by 0x10C09C: main (main.cpp:23)
+==7843== 
+==7843== 4,000 bytes in 1,000 blocks are definitely lost in loss record 3 of 6
+==7843==    at 0x483BE63: operator new(unsigned long) (in /usr/lib/x86_64-linux-
+gnu/valgrind/vgpreload_memcheck-amd64-linux.so)
+==7843==    by 0x10BED1: Mouse::Drink() (mouse.cpp:23)
+==7843==    by 0x10C1E9: Animal::Live() (animal.h:16)
+==7843==    by 0x10C10A: main (main.cpp:26)
+==7843== 
+==7843== 1,048,608 (32 direct, 1,048,576 indirect) bytes in 1 blocks are definitely 
+lost in loss record 6 of 6
+==7843==    at 0x483BE63: operator new(unsigned long) (in /usr/lib/x86_64-linux-
+gnu/valgrind/vgpreload_memcheck-amd64-linux.so)
+==7843==    by 0x10C019: init() (main.cpp:17)
+==7843==    by 0x10C09C: main (main.cpp:23)
+==7843== 
+==7843== LEAK SUMMARY:
+==7843==    definitely lost: 4,048 bytes in 1,003 blocks
+==7843==    indirectly lost: 1,048,576 bytes in 1 blocks
+==7843==      possibly lost: 0 bytes in 0 blocks
+==7843==    still reachable: 22,714 bytes in 1 blocks
+==7843==         suppressed: 0 bytes in 0 blocks
+==7843== Reachable blocks (those to which a pointer was found) are not shown.
+==7843== To see them, rerun with: --leak-check=full --show-leak-kinds=all
+==7843== 
+==7843== For lists of detected and suppressed errors, rerun with: -s
+==7843== ERROR SUMMARY: 4 errors from 4 contexts (suppressed: 0 from 0)
+
+=== PAGE 12 ===
+内容
+ 
+⼀、gprof介绍
+ 
+gprof(GNU profiler)是GNU binutils⼯具集中的⼀个⼯具，linux系统当中会⾃带这个⼯具。它可以分析程序的性
+能，能给出函数调⽤时间、调⽤次数和调⽤关系，找出程序的瓶颈所在。在编译和链接选项中都加⼊-pg之后，gcc
+会在每个函数中插⼊代码⽚段，⽤于记录函数间的调⽤关系和调⽤次数，并采集函数的调⽤时间。
+⼆、gprof使⽤及可视化
+ 
+1. ⽤gcc、g++编译程序时，使⽤-pg参数。如：g++ -pg -o test.exe test.cpp （本项⽬中编译⽐较复杂，
+可直接make）
+编译器会⾃动在⽬标代码中插⼊⽤于性能测试的代码⽚断，这些代码在程序运⾏时采集并记录函数的调⽤关系
+和调⽤次数，并记录函数⾃身执⾏时间和被调⽤函数的执⾏时间。
+2. 执⾏编译后的可执⾏程序，⽣成⽂件gmon.out 。
+该步骤运⾏程序的时间会稍慢于正常编译的可执⾏程序的运⾏时间。程序运⾏结束后，会在程序所在路径下⽣
+成⼀个缺省⽂件名为gmon.out 的⽂件，这个⽂件就是记录程序运⾏的性能、调⽤关系、调⽤次数等信息的数
+据⽂件。
+3. 使⽤gprof命令来分析记录程序运⾏信息的gmon.out⽂件。如：gprof ./bin/zoo_boom.out gmon.out> 
+gprofresult.txt 。该信息重定向到⽂本⽂件以便于后续分析。
+4. 可视化：
+由于结果gprofresult.txt 分析不太直观，可以借助gprof2dot.py与dot⼯具⽣成函数调⽤图
+gprof2dot是⼀个Python脚本，⽤于将许多性能评测⼯具的输出转换为dot graph。其可以将perf, 
+valgrind, python profilers, java HPROF等性能评测⼯具的输出转换为图⽚，如下：
+
+=== PAGE 13 ===
+dot 是graphviz⼯具的⼀部分，其可以将 dot graph 转换为常⽤的图⽚格式。
+可视化命令使⽤：
+使⽤gprof bin/zoo_boom.out gmon.out |./script/gprof2dot.py -n0 -e0 |dot -Tpng -o 
+test/output.png ⽣成函数调⽤链图⽚output.png 并保存到test⽂件夹中。
+本项⽬中，以上的操作简化为
+我们可以对test/output.png 图⽚来进⾏调⽤链分析
+三、分析恶意占⽤CPU的代码
+ 
+在上⼀步中我们⽣成了gprofresult.txt⽂件。打开该⽂件，我们可以看到
+该⽂件显示Tiger::Eat() 函数中有占⽤了⼤量的CPU时间。我们进⼊该函数，发现这是⼀个⽆⽤的超⼤循环。注
+释掉该函数后，重新⽣成gprofresult，此时该函数的TIME指标下降，说明我们解决了恶意占⽤CPU的问题。
+4.5 Perf使⽤
+ 
+4.5.1 实验⽬的
+ 
+使⽤perf进⾏CPU的分析并绘制⽕焰图。
+apt-get install graphviz # 安装dot
+git clone https://github.com/jrfonseca/gprof2dot.git # 下载gprof2dot.py
+chmod 755 gprof2dot.py # 修改gprof2dot项⽬中的gprof2dot.py的执⾏权限
+gprof bch gmon.out |./gprof2dot.py -n0 -e0 |dot -Tpng -o output.png # ⽣成调⽤函数图
+make clean
+make
+./bin/zoo_boom.out
+make gprof 
+Flat profile:
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 54.21      0.13     0.13      100     1.30     1.30  Tiger::Eat()
+ 33.36      0.21     0.08  1048576     0.00     0.00  void 
+__gnu_cxx::new_allocator<BigMem>::construct<BigMem, BigMem>(BigMem*, BigMem&&)
+  8.34      0.23     0.02      100     0.20     1.10  Wolf::Climb()
+  4.17      0.24     0.01  1048576     0.00     0.00  void 
+std::allocator_traits<std::allocator<BigMem> >::construct<BigMem, BigMem>
+(std::allocator<BigMem>&, BigMem*, BigMem&&)
+
+=== PAGE 14 ===
+4.5.2 实验内容与要求
+ 
+独⽴完成实验内容，对实验步骤进⾏截图，并认真撰写实验报告。
+要求
+ 
+使⽤perf进⾏CPU使⽤的分析
+使⽤perf画出⽕焰图
+内容
+ 
+⼀、perf介绍
+ 
+perf ⼯具是 Linux 系统⾃带的⼀个性能分析⼯具，它可以⽤于分析应⽤程序、系统内核以及硬件的性能瓶颈，帮助
+开发者优化程序性能。perf ⼯具⽀持多种性能分析操作，包括 CPU 性能分析、内存分析、锁分析、⽹络分析等，
+可以提供详细的性能指标、函数调⽤图、热点分析等信息，帮助开发者诊断和解决性能问题。举例来说，使⽤ Perf 
+可以计算每个时钟周期内的指令数，称为 IPC，IPC 偏低表明代码没有很好地利⽤ CPU。Perf 还可以对程序进⾏函
+数级别的采样，从⽽了解程序的性能瓶颈究竟在哪⾥等等。Perf 还可以替代 strace，可以添加动态内核 probe 
+点，还可以做 benchmark 衡量调度器的好坏。
+⼆、安装perf
+ 
+perf的安装有以下⽅法
+1. 通过包管理⼯具安装
+2. ⽤源码安装perf
+# 下载linux-tools-common
+$ sudo apt-get install linux-tools-common
+# 查看是否存在perf
+$ perf --version
+# 如果不存在，可以下载特定的内核版本下的tools，根据命令⾏的提示，我的命令是， 这个命令需要下载特定
+内核版本的⼯具， 命令 uname -r 查看内核版本
+$ sudo apt-get install linux-tools-5.4.0-122-generic
+# 再检查⼀下
+$ perf --version
+perf version 5.4.192
+# 查看⾃⼰内核的版本，到官⽹上去下载特定的内核源码
+>$ uname -r
+5.4.0-122-generic
+# 去官⽹上下载内核源码，可以⼿动下载，也可以使⽤wget
+>$ wget http://ftp.sjtu.edu.cn/sites/ftp.kernel.org/pub/linux/kernel/v5.x/linux-
+5.4.122.tar.gz
+# 下载完毕之后，接下内核源代码
+>$ tar -zxvf linux-5.4.122.tar.gz
+# 进⼊如下⽬录
+>$ cd linux-5.4.122/tools/perf/
+# 源码级安装, 如有些依赖包没有安装，得安装⼀下，依赖包在下⾯第⼆个链接
+
+=== PAGE 15 ===
+3. wsl2中⼿动编译perf
+三、使⽤stat来分析程序的指标
+ 
+本实验中主要使⽤perf stat来进⾏程序的检测。stat于在运⾏指令时，监测并分析其统计结果。虽然perf top也可
+以指定pid，但是必须先启动应⽤才能查看信息。perf stat能完整统计应⽤整个⽣命周期的信息。
+使⽤perf stat ./bin/zoo_boom.out 来查看当前的程序：
+task-clock(msec)是指程序运⾏期间占⽤了xx的任务时钟周期，该值⾼，说明程序的多数时间花费在 CPU 计
+算上⽽⾮ IO
+context-switches是指程序运⾏期间发⽣了xx次上下⽂切换，记录了程序运⾏过程中发⽣了多少次进程切换，
+频繁的进程切换是应该避免的。（有进程进程间频繁切换，或者内核态与⽤户态频繁切换）
+cpu-migrations 是指程序运⾏期间发⽣了xx次CPU迁移，即⽤户程序原本在⼀个CPU上运⾏，后来迁移到另
+⼀个CPU
+cycles：处理器时钟
+instructions: 机器指令数⽬，可通过cycles/instructions得出⼀条机器指令执⾏平均需要多少cycles
+其他可以监控的指标譬如分⽀预测、cache命中、page-faults等
+>$ make -j10 && make install
+# 查看perf的安装情况
+>$ perf --version
+perf version 5.4.192
+apt install flex bison
+git clone https://github.com/microsoft/WSL2-Linux-Kernel --depth 1
+cd WSL2-Linux-Kernel/tools/perf
+make -j8
+sudo cp perf /usr/local/bin
+ Performance counter stats for '/root/prog/part3/bin/zoo_boom.out':
+            732.10 msec task-clock                #    1.000 CPUs utilized          
+                 0      context-switches          #    0.000 /sec                   
+                 0      cpu-migrations            #    0.000 /sec                   
+             6,783      page-faults               #    9.265 K/sec                  
+     2,093,296,243      cycles                    #    2.859 GHz                    
+     1,440,346,562      instructions              #    0.69  insn per cycle         
+       340,372,121      branches                  #  464.923 M/sec                  
+           111,120      branch-misses             #    0.03% of all branches        
+       0.732469502 seconds time elapsed
+       0.441484000 seconds user
+       0.290978000 seconds sys
+
+=== PAGE 16 ===
+三、⽕焰图绘制
+ 
+⽕焰图项⽬地址：git clone https://github.com/brendangregg/FlameGraph.git
+1. 使⽤perf record -F 999 -g ./bin/zoo_boom.out 来⽣成perf.data ⽂件
+2. 使⽤ perf script ⼯具对 perf.data 进⾏解析，⽣成折叠后的调⽤栈， 将解析出来的信息存下来, 供⽣成⽕焰图
+perf script -i perf.data &> perf.unfold
+3. 再⽤ FlameGraph 中的 stackcollapse-perf.pl 将 perf 解析出的内容 perf.unfold 中的符号进⾏折叠，⽣成⽕
+焰图
+./stackcollapse-perf.pl perf.unfold &> perf.folded
+4. 最后再⽤ FlameGraph 中的 flamegraph.pl ⽣成 svg 图：
+./flamegraph.pl perf.folded > perf.svg
+5. 我们可以使⽤管道将上⾯的流程简化为⼀条命令
+perf script -i perf.data | FlameGraph/stackcollapse-perf.pl | FlameGraph/flamegraph.pl 
+> perf.svg
+⽕焰图会出现在process.svg⽂件中。

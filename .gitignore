@@ -1,0 +1,13 @@
+# 忽略 Cline 的缓存和检查点
+.cline/
+.checkpoints/
+
+# 忽略常见的依赖和临时文件
+node_modules/
+__pycache__/
+.venv/
+*.log
+*.tmp
+
+# 忽略 VS Code 的本地配置
+.vscode/

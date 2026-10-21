@@ -49,7 +49,7 @@ static FILETIME unixToFileTime(int64_t sec, int64_t nsec) {
     return ft;
 }
 
-static char typeFromAttrs(DWORD attr, const std::wstring& wpath) {
+static FileTypeTag typeFromAttrs(DWORD attr, const std::wstring& wpath) {
     if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
         HANDLE h = CreateFileW(wpath.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                nullptr, OPEN_EXISTING,
@@ -75,7 +75,7 @@ static char typeFromAttrs(DWORD attr, const std::wstring& wpath) {
 /* ------------------------------------------------------------- getInfo */
 ErrCode getInfo(const std::string& path, FileInfo& out, bool followSymlink) {
     out = FileInfo();
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     if (wp.empty()) return E_INVALID_PARAMETER;
 
     DWORD attr = GetFileAttributesW(wp.c_str());
@@ -129,7 +129,7 @@ ErrCode getInfo(const std::string& path, FileInfo& out, bool followSymlink) {
 
 ErrCode readLink(const std::string& path, std::string& target) {
     target.clear();
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     HANDLE h = CreateFileW(wp.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
                            nullptr, OPEN_EXISTING,
                            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
@@ -170,7 +170,7 @@ ErrCode readLink(const std::string& path, std::string& target) {
 /* ------------------------------------------------------------- 目录操作 */
 ErrCode listDir(const std::string& path, std::vector<DirEntry>& out) {
     out.clear();
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     if (wp.empty()) return E_INVALID_PARAMETER;
     WIN32_FIND_DATAW fd;
     std::wstring pat = wp + L"\\*";
@@ -191,7 +191,7 @@ ErrCode listDir(const std::string& path, std::vector<DirEntry>& out) {
 }
 
 ErrCode makeDir(const std::string& path) {
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     if (_wmkdir(wp.c_str()) == 0) return E_OK;
     if (errno == EEXIST) return E_ALREADY_EXISTS;
     return E_DESTINATION_CREATE_FAIL;
@@ -214,23 +214,23 @@ ErrCode makeDirTree(const std::string& path) {
 }
 
 ErrCode removeDir(const std::string& path) {
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     return RemoveDirectoryW(wp.c_str()) ? E_OK : E_FILE_WRITE_FAIL;
 }
 
 ErrCode removeFile(const std::string& path) {
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     return DeleteFileW(wp.c_str()) ? E_OK : E_FILE_WRITE_FAIL;
 }
 
 ErrCode renameFile(const std::string& from, const std::string& to) {
-    std::wstring wf = Path::utf8ToWide(from);
-    std::wstring wt = Path::utf8ToWide(to);
+    std::wstring wf = Path::apiWide(from);
+    std::wstring wt = Path::apiWide(to);
     return MoveFileExW(wf.c_str(), wt.c_str(), MOVEFILE_REPLACE_EXISTING) ? E_OK : E_FILE_WRITE_FAIL;
 }
 
 ErrCode exists(const std::string& path) {
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     return GetFileAttributesW(wp.c_str()) == INVALID_FILE_ATTRIBUTES ? E_NOT_FOUND : E_OK;
 }
 
@@ -256,13 +256,18 @@ ErrCode currentDir(std::string& out) {
 }
 
 ErrCode canonicalPath(const std::string& path, std::string& out) {
-    std::wstring wp = Path::utf8ToWide(path);
-    wchar_t buf[4096];
-    DWORD n = GetFullPathNameW(wp.c_str(), 4096, buf, nullptr);
-    if (n == 0 || n >= 4096) return E_INVALID_PARAMETER;
-    std::string s = Path::wideToUtf8(std::wstring(buf, n));
-    for (size_t i = 0; i < s.size(); ++i) if (s[i] == '\\') s[i] = '/';
-    out = s;
+    std::wstring wp = Path::apiWide(path);
+    std::vector<wchar_t> buf(8192);
+    DWORD n = GetFullPathNameW(wp.c_str(), DWORD(buf.size()), buf.data(), nullptr);
+    if (n == 0 || n >= buf.size()) return E_INVALID_PARAMETER;
+    std::wstring s(buf.data(), n);
+    /* \\?\ 形式的绝对化结果里带着前缀，内部规范路径不该有它：
+     * 否则后续拼接 '/' 会破坏前缀语义（apiWide 只认反斜杠前缀） */
+    if (s.size() >= 4 && s.compare(0, 4, L"\\\\?\\") == 0) s = s.substr(4);
+    else if (s.size() >= 8 && s.compare(0, 8, L"\\\\?\\UNC\\") == 0) s = L"\\\\" + s.substr(8);
+    std::string u8 = Path::wideToUtf8(s);
+    for (size_t i = 0; i < u8.size(); ++i) if (u8[i] == '\\') u8[i] = '/';
+    out = u8;
     return E_OK;
 }
 
@@ -281,7 +286,7 @@ uint64_t freeSpaceAt(const std::string& path) {
 /* ------------------------------------------------------------- 特殊文件 */
 ErrCode makeSymlink(const std::string& target, const std::string& linkPath) {
     std::wstring wt = Path::utf8ToWide(Path::normalize(target));
-    std::wstring wl = Path::utf8ToWide(linkPath);
+    std::wstring wl = Path::apiWide(linkPath);
     FileInfo fi;
     DWORD flag = (!DBKP_IS_ERR(getInfo(Path::normalize(target), fi, true)) &&
                   fi.type == FT_DIR) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
@@ -294,8 +299,8 @@ ErrCode makeSymlink(const std::string& target, const std::string& linkPath) {
 }
 
 ErrCode makeHardLink(const std::string& existing, const std::string& newPath) {
-    std::wstring we = Path::utf8ToWide(existing);
-    std::wstring wn = Path::utf8ToWide(newPath);
+    std::wstring we = Path::apiWide(existing);
+    std::wstring wn = Path::apiWide(newPath);
     return CreateHardLinkW(wn.c_str(), we.c_str(), nullptr) ? E_OK : E_FILE_WRITE_FAIL;
 }
 
@@ -312,7 +317,7 @@ ErrCode makeSocketPlaceholder(const std::string& path) {
 
 /* ------------------------------------------------------------- 元数据 */
 ErrCode setMode(const std::string& path, uint32_t mode) {
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     if (mode & 0200) {
         SetFileAttributesW(wp.c_str(), FILE_ATTRIBUTE_NORMAL);
         return E_OK;
@@ -324,7 +329,7 @@ ErrCode setOwner(const std::string&, uint32_t, uint32_t) { return E_UNSUPPORTED_
 
 ErrCode setTimes(const std::string& path, int64_t mtSec, int64_t mtNs,
                  int64_t atSec, int64_t atNs, bool follow) {
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     HANDLE h = CreateFileW(wp.c_str(), FILE_WRITE_ATTRIBUTES,
                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            nullptr, OPEN_EXISTING,
@@ -341,7 +346,7 @@ ErrCode setTimes(const std::string& path, int64_t mtSec, int64_t mtNs,
 
 /* --------------------------------------------------- 原生文件描述符 */
 int openNative(const std::string& path, int flags, int mode) {
-    std::wstring wp = Path::utf8ToWide(path);
+    std::wstring wp = Path::apiWide(path);
     if (wp.empty()) return -1;
     return _wopen(wp.c_str(), flags, mode);
 }

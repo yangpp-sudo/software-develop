@@ -28,6 +28,7 @@ static std::vector<uint8_t> pseudoRandom(size_t n, uint32_t seed) {
 
 /** 对每种输入做往返；同时要求"压缩结果不能膨胀超过 1 个块" */
 static void RoundTrip(IDataCodec& codec, const std::vector<uint8_t>& in, const char* tag) {
+    (void)tag;                       /* 仅用于调试定位，断言消息里不需要 */
     std::vector<uint8_t> enc, dec;
     ErrCode e = codec.encode(in, enc);
     ASSERT_EQ(e, E_OK);

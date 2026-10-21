@@ -19,6 +19,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <sstream>
@@ -41,9 +42,16 @@ public:
     }
     void add(const Case& c) { m_cases.push_back(c); }
     int runAll() {
-        int failed = 0, run = 0;
+        int failed = 0, run = 0, skipped = 0;
+        /* 分片运行：环境变量 DBKP_TEST_FILTER="Meta" 只跑 "Suite.Name" 含该子串的
+         * 用例。整套跑一次约 1 分钟，CI 里可按模块切片并行。 */
+        const char* flt = std::getenv("DBKP_TEST_FILTER");
         for (size_t i = 0; i < m_cases.size(); ++i) {
             const Case& c = m_cases[i];
+            if (flt != NULL && *flt != '\0') {
+                const std::string full = c.suite + "." + c.name;
+                if (full.find(flt) == std::string::npos) { ++skipped; continue; }
+            }
             m_currentFail = 0;
             std::printf("[ RUN      ] %s.%s\n", c.suite.c_str(), c.name.c_str());
             try {
@@ -64,7 +72,7 @@ public:
                 ++failed;
             }
         }
-        std::printf("[========== ] %d tests ran, %d failed\n", run, failed);
+        std::printf("[========== ] %d tests ran, %d failed, %d filtered out\n", run, failed, skipped);
         return failed == 0 ? 0 : 1;
     }
     void fail(const char* file, int line, const std::string& what) {

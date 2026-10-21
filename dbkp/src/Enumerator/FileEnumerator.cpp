@@ -78,7 +78,10 @@ ErrCode CFileEnumerator::traverseDir(const std::string& absDir,
         const bool crossDeviceOk = !(filter.noCrossDevice && m_rootDevValid &&
                                      fi.dev != m_rootDev);
         const bool depthOk = !(filter.maxDepth >= 0 && depth + 1 > filter.maxDepth);
-        const bool included = crossDeviceOk && filter.pass(relChild, fi);
+        /* --max-depth 采用与 `find -maxdepth` 相同的口径：根目录下的条目是第 1 层。
+         * 深度既要能拦住"下探"，也要拦住条目本身，否则第 2 层的文件会被入档，
+         * 而它所在的目录又不会被继续下探，产生一个"看着空却没备全"的结构。 */
+        const bool included = crossDeviceOk && depthOk && filter.pass(relChild, fi);
         /* 目录即使自身不入档，也可能需要下探：名称/尺寸/时间不应剪枝 */
         const bool canDescend = isDir && crossDeviceOk && depthOk &&
                                 filter.passForTraversal(relChild, fi) &&

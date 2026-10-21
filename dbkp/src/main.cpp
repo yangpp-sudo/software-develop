@@ -26,6 +26,10 @@
 #include "Utils/Logger.h"
 #include "Utils/PathUtil.h"
 
+#if defined(DBKP_OS_WINDOWS)
+#  include <windows.h>          /* CommandLineToArgvW / SetConsoleOutputCP */
+#endif
+
 using namespace DBKP;
 
 namespace {
@@ -34,15 +38,17 @@ void printUsage() {
     std::printf(
         "bk - Data Backup Toolkit (dbkp v%u)\n"
         "usage:\n"
-        "  bk backup  <src-dir> <archive.dbkp> [options]\n"
-        "  bk restore <archive.dbkp> <dst-dir> [-p pass] [--force]\n"
+        "  bk backup   <src-dir> <archive.dbkp|dst-dir> [options]\n"
+        "  bk restore  <archive.dbkp|backup-dir> <dst-dir> [-p pass] [--force] [--no-meta]\n"
+        "  bk schedule <src-dir> <archive-dir> --every 10s --times 5 --keep 3 [options]\n"
         "  bk list|info|verify <archive.dbkp> [-p pass]\n"
-        "  bk compare <archive.dbkp> <src-dir> [-p pass]\n"
-        "  bk selftest\n"
+        "  bk compare  <archive.dbkp> <src-dir> [-p pass]\n"
+        "  bk selftest                 (run built-in known-answer checks)\n"
+        "  pack/unpack 是 backup/restore 的别名\n"
         "backup options:\n"
         "  -a|--algo NAME       huffman | lz77 | lzhuff | rle | none\n"
         "  -c|--crypto NAME     aes256 | chacha20 | xor | none\n"
-        "  -p|--password PASS   encryption password\n"
+        "  -p|--password PASS   encryption password (PBKDF2-HMAC-SHA256 key wrap)\n"
         "  -m|--comment TEXT    archive comment\n"
         "  --include/--exclude GLOB    path filter (repeatable)\n"
         "  --name/--no-name GLOB       file-name filter (repeatable)\n"
@@ -51,7 +57,10 @@ void printUsage() {
         "  --newer-than/--older-than T  2024-01-01 | 7d | 12h\n"
         "  --uid N | --owner NAME       owner filter\n"
         "  --follow-symlink --no-cross-device --max-depth N --skip-special\n"
-        "  --no-hardlink --no-meta -q -v -h\n",
+        "  --no-hardlink --no-meta --copy --archive --no-verify\n"
+        "  --max-depth 口径同 find -maxdepth：根目录下的条目算第 1 层\n"
+        "schedule options: --every T --times N --keep M --prefix P\n"
+        "global switches:  -v debug log | -q quiet | -h help\n",
         unsigned(ARCHIVE_VERSION));
 }
 
@@ -232,6 +241,7 @@ int cmdSchedule(int argc, char** argv) {
 
 
 int cmdList(int argc, char** argv) {
+    (void)argc;
     std::vector<FileRecord> recs;
     CMyPack packer;
     ErrCode e = packer.list(argv[2], recs);
@@ -249,6 +259,7 @@ int cmdList(int argc, char** argv) {
 }
 
 int cmdInfo(int argc, char** argv) {
+    (void)argc;
     CMyPack packer;
     ArchiveHeader hdr;
     ArchiveStat st;
@@ -346,6 +357,25 @@ int cmdSelftest() {
 } /* anonymous namespace */
 
 int main(int argc, char** argv) {
+#if defined(DBKP_OS_WINDOWS)
+    /* Windows 控制台默认 GBK 码页：把输出码页设成 UTF-8，中文路径/文件名才不乱码 */
+    ::SetConsoleOutputCP(CP_UTF8);
+    /* argv 是 ANSI 码页的字节串，若按 UTF-8 解释，中文目录名会坏。
+     * 从 Unicode 命令行重新取参数，转成工程内部统一的 UTF-8。 */
+    static std::vector<std::string> utf8Args;
+    static std::vector<char*>       argPtrs;
+    int wideCount = 0;
+    LPWSTR* wideArgs = ::CommandLineToArgvW(::GetCommandLineW(), &wideCount);
+    if (wideArgs != nullptr) {
+        utf8Args.reserve(size_t(wideCount));
+        for (int i = 0; i < wideCount; ++i) utf8Args.push_back(Path::wideToUtf8(wideArgs[i]));
+        ::LocalFree(wideArgs);
+        for (size_t i = 0; i < utf8Args.size(); ++i) argPtrs.push_back(&utf8Args[i][0]);
+        argPtrs.push_back(nullptr);
+        argc = wideCount;
+        argv = argPtrs.data();
+    }
+#endif
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "-v")) Logger::instance().setLevel(LL_DEBUG);
         else if (!std::strcmp(argv[i], "-q")) Logger::instance().setLevel(LL_QUIET);

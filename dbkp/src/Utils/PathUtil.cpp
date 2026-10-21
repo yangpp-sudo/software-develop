@@ -33,6 +33,7 @@ bool isAbsolute(const std::string& p) {
 }
 
 std::string normalize(const std::string& raw) {
+    if (raw.empty()) return raw;      /* 空输入 -> 空输出（调用方另有约定） */
     std::vector<std::string> parts;
     std::string cur;
     bool absolute = isAbsolute(raw);
@@ -224,6 +225,29 @@ std::string wideToUtf8(const std::wstring& wide) {
     WideCharToMultiByte(CP_UTF8, 0, wide.data(), int(wide.size()),
                         &s[0], n, nullptr, nullptr);
     return s;
+}
+
+std::wstring apiWide(const std::string& path) {
+    std::wstring w = utf8ToWide(path);
+    if (w.empty()) return w;
+    if (w.size() >= 4 && w.compare(0, 4, L"\\\\?\\") == 0) return w;   /* 已是扩展形式 */
+
+    /* 1) 绝对化 + 折叠 ./..：GetFullPathNameW 不做存在性检查，纯字符串处理 */
+    std::vector<wchar_t> buf(8192);
+    DWORD n = GetFullPathNameW(w.c_str(), DWORD(buf.size()), buf.data(), nullptr);
+    std::wstring abs = (n > 0 && n < buf.size()) ? std::wstring(buf.data(), n) : w;
+
+    /* 2) \\?\ 只认反斜杠 */
+    for (size_t i = 0; i < abs.size(); ++i) if (abs[i] == L'/') abs[i] = L'\\';
+
+    /* 3) 只在可能踩到 260 限制时才加前缀：短路径保持原样，
+     *    便于日志/比较里看到人类可读的路径，也避免前缀形式的语义差异 */
+    if (abs.size() < 248) return abs;
+    if (abs.size() >= 2 && abs[0] == L'\\' && abs[1] == L'\\') {
+        const std::wstring rest = abs.substr(2);           /* UNC: \\srv\share\... */
+        return std::wstring(L"\\\\?\\UNC\\") + rest;
+    }
+    return std::wstring(L"\\\\?\\") + abs;
 }
 #endif /* DBKP_OS_WINDOWS */
 

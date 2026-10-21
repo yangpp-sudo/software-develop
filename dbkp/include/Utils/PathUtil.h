@@ -45,6 +45,16 @@ std::string withSuffix(const std::string& stem, const std::string& suffix);
 /* UTF-8 <-> UTF-16（Win32 W 系 API 需要） */
 std::wstring utf8ToWide(const std::string& utf8);
 std::string  wideToUtf8(const std::wstring& wide);
+/**
+ * 供 Win32 API 直接使用的宽字符路径：
+ *   - 先绝对化并折叠 "." / ".."（\\?\ 前缀要求完整限定路径）
+ *   - '/' 一律换成 '\\'
+ *   - 长度接近/超过 MAX_PATH(260) 时加 \\?\（UNC 用 \\?\UNC\）前缀，
+ *     这样就能突破 260 字符限制，最长支持约 32767 字符
+ * 说明：归档格式里的超长路径靠 'X' 扩展记录保存；能不能真正"碰到"磁盘上的
+ * 超长路径，靠的是这里，两者缺一不可。
+ */
+std::wstring apiWide(const std::string& path);
 #endif
 
 } /* namespace Path */

@@ -128,5 +128,5 @@ TEST(PackErr, ListSkipsDataBlocksCorrectly) {
     ArchiveHeader hdr;
     ArchiveStat st;
     ASSERT_EQ(packer.stat(kArc, hdr, st), E_OK);
-    EXPECT_EQ(static_cast<int64_t>(recs.size()), hdr.fileCount);
+    EXPECT_EQ(recs.size(), static_cast<size_t>(hdr.fileCount));
 }

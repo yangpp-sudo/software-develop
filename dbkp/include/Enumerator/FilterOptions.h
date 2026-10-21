@@ -45,7 +45,7 @@ struct FilterOptions {
     /* 遍历策略 */
     bool  followSymlinks = false;   /* 跟随符号链接（有环检测） */
     bool  noCrossDevice  = false;   /* 不跨越文件系统边界 */
-    int   maxDepth       = -1;      /* -1 = 不限 */
+    int   maxDepth       = -1;      /* -1 = 不限；口径同 find -maxdepth（根下条目=第1层） */
     bool  skipSpecials   = false;   /* 跳过管道/设备/套接字 */
     bool  includeDirs    = true;    /* 目录条目是否入档（还原结构需要） */
 

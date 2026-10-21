@@ -19,19 +19,6 @@ namespace DBKP {
 
 namespace {
 
-char typeAlias(char c) {
-    switch (c) {
-    case 'r': case 'R': return FT_REGULAR;
-    case 'd': case 'D': return FT_DIR;
-    case 'l': case 'L': return FT_SYMLINK;
-    case 'f': case 'F': return FT_FIFO;
-    case 'b': case 'B': return FT_BLOCK;
-    case 'c': case 'C': return FT_CHAR;
-    case 's': case 'S': return FT_SOCKET;
-    default: return c;
-    }
-}
-
 std::vector<std::string> splitList(const std::string& text, char sep) {
     std::vector<std::string> out;
     std::string cur;
@@ -96,7 +83,12 @@ bool FilterOptions::pass(const std::string& relPath, const Platform::FileInfo& f
 
     /* --- 2. 文件名称 --- */
     const std::string base = Path::fileName(relPath);
-    if (!nameGlobs.empty() && !anyGlob(nameGlobs, base)) return false;
+    if (!nameGlobs.empty() && !anyGlob(nameGlobs, base)) {
+        std::ostringstream os;
+        for (size_t i = 0; i < nameGlobs.size(); ++i) os << (i ? "," : "") << nameGlobs[i];
+        LOG_DEBUG("name allow miss: base=[" + base + "] globs=[" + os.str() + "]");
+        return false;
+    }
     if (!nameRejects.empty() && anyGlob(nameRejects, base)) return false;
 
     /* --- 5. 尺寸（仅普通文件） --- */
@@ -136,14 +128,11 @@ bool FilterOptions::passForTraversal(const std::string& relDir,
                                      const Platform::FileInfo& fi) const {
     if (fi.type != FT_DIR) return false;
     if (relDir.empty()) return true;
-    /* 路径维度会剪枝 */
+    /* 只有"路径"维度能剪断遍历；类型/名称/尺寸维度仅决定条目本身是否入档，
+       否则 --type -D（不要目录条目）会连子目录里的文件一起丢掉。 */
     if (!excludePaths.empty() && anyGlob(excludePaths, relDir)) return false;
     if (!includePaths.empty() && !anyGlob(includePaths, relDir) &&
         !isPrefixOfAny(relDir, includePaths)) return false;
-    /* 类型维度：明确不要目录时就别进去 */
-    if (std::find(typeDeny.begin(), typeDeny.end(), fi.type) != typeDeny.end()) return false;
-    if (!typeAllow.empty() &&
-        std::find(typeAllow.begin(), typeAllow.end(), fi.type) == typeAllow.end()) return false;
     return true;
 }
 
@@ -156,11 +145,31 @@ bool FilterOptions::setTypeSpec(const std::string& spec) {
     const std::string body = spec.substr(start);
     if (body.empty()) return false;
 
-    /* 两种写法都支持：字母集合 "-DL"、逗号名单 "regular,dir" */
+    /* 类型 token 有两种写法：单字母集合 "-DL" 与逗号名单 "regular,dir" */
+    struct TypeAlias { const char* text; char type; };
+    static const TypeAlias kAliases[] = {
+        { "r", FT_REGULAR }, { "regular", FT_REGULAR }, { "file", FT_REGULAR },
+        { "plain", FT_REGULAR },
+        { "d", FT_DIR }, { "dir", FT_DIR }, { "directory", FT_DIR },
+        { "l", FT_SYMLINK }, { "link", FT_SYMLINK }, { "symlink", FT_SYMLINK },
+        { "h", FT_HARDLINK }, { "hard", FT_HARDLINK }, { "hardlink", FT_HARDLINK },
+        { "f", FT_FIFO }, { "pipe", FT_FIFO }, { "fifo", FT_FIFO },
+        { "b", FT_BLOCK }, { "block", FT_BLOCK },
+        { "c", FT_CHAR }, { "char", FT_CHAR }, { "character", FT_CHAR },
+        { "s", FT_SOCKET }, { "sock", FT_SOCKET }, { "socket", FT_SOCKET },
+    };
+
+    /* 全字母且无逗号 -> 视为字母集合，逐字符拆开 */
     bool letterSet = body.size() > 1 && body.find(',') == std::string::npos;
-    static const char* kLetters = "rRdDlLfFbBcCsSH";
     for (size_t i = 0; i < body.size() && letterSet; ++i) {
-        if (!std::strchr(kLetters, body[i])) letterSet = false;
+        std::string one = body.substr(i, 1);
+        bool known = false;
+        for (size_t k = 0; k < sizeof(kAliases) / sizeof(kAliases[0]); ++k) {
+            if (std::strlen(kAliases[k].text) == 1 && kAliases[k].text[0] == std::tolower(static_cast<unsigned char>(body[i]))) {
+                known = true; break;
+            }
+        }
+        if (!known) letterSet = false;
     }
     std::vector<std::string> items;
     if (letterSet) {
@@ -169,12 +178,22 @@ bool FilterOptions::setTypeSpec(const std::string& spec) {
         items = splitList(body, ',');
     }
     if (items.empty()) return false;
+
+    std::vector<char>& bucket = deny ? typeDeny : typeAllow;
     for (size_t i = 0; i < items.size(); ++i) {
-        if (items[i].size() != 1) { LOG_WARN("ignore unknown file type: " + items[i]); continue; }
-        char t = typeAlias(items[i][0]);
-        if (deny) typeDeny.push_back(t); else typeAllow.push_back(t);
+        std::string tok;
+        for (size_t k = 0; k < items[i].size(); ++k) {
+            tok.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(items[i][k]))));
+        }
+        char t = 0;
+        for (size_t k = 0; k < sizeof(kAliases) / sizeof(kAliases[0]); ++k) {
+            if (tok == kAliases[k].text) { t = kAliases[k].type; break; }
+        }
+        if (t == 0) { LOG_WARN("ignore unknown file type: " + items[i]); continue; }
+        if (std::find(bucket.begin(), bucket.end(), t) == bucket.end()) bucket.push_back(t);
     }
-    return !typeAllow.empty() || !typeDeny.empty();
+    /* 语法正确即返回 true：非法类型名只告警并忽略（与 tar --exclude 的宽容一致） */
+    return true;
 }
 
 int64_t FilterOptions::parseSize(const std::string& text, bool* okOut) {

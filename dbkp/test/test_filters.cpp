@@ -131,6 +131,7 @@ TEST(Filter, IncludePathKeepsParents) {
 }
 
 TEST(Filter, MaxDepth) {
+    /* 口径同 `find -maxdepth`：根目录下的条目算第 1 层 */
     FiltFixture f;
     CFileEnumerator en;
     FilterOptions opt;
@@ -138,8 +139,19 @@ TEST(Filter, MaxDepth) {
     std::vector<EnumeratedEntry> out;
     ASSERT_EQ(en.enumerateFiles(kRoot, opt, out), E_OK);
     std::vector<std::string> p = relPaths(out);
-    EXPECT_TRUE(has(p, "sub1/d.txt"));
+    EXPECT_TRUE(has(p, "."));                 /* 根 */
+    EXPECT_TRUE(has(p, "a.txt"));             /* 第 1 层文件 */
+    EXPECT_TRUE(has(p, "sub1"));              /* 第 1 层目录条目本身 */
+    EXPECT_FALSE(has(p, "sub1/d.txt"));       /* 第 2 层 -> 不入档 */
+    EXPECT_FALSE(has(p, "sub1/sub2"));        /* 第 2 层目录也不入档 */
     EXPECT_FALSE(has(p, "sub1/sub2/e.dat"));
+
+    opt.maxDepth = 2;
+    out.clear();
+    ASSERT_EQ(en.enumerateFiles(kRoot, opt, out), E_OK);
+    p = relPaths(out);
+    EXPECT_TRUE(has(p, "sub1/d.txt"));        /* 第 2 层放行 */
+    EXPECT_FALSE(has(p, "sub1/sub2/e.dat"));  /* 第 3 层仍然拦住 */
 }
 
 TEST(Filter, Counters) {

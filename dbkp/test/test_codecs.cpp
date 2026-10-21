@@ -56,7 +56,8 @@ TEST(Huffman, CompressesText) {
     for (int i = 0; i < 2000; ++i) s += "the quick brown fox 12345\n";
     std::vector<uint8_t> in = bytes(s), enc;
     ASSERT_EQ(h.encode(in, enc), E_OK);
-    EXPECT_LT(enc.size(), in.size() / 4);       /* 266 字节头 + 短码表 */
+    /* 该文本约 30 个符号近似均匀，熵约 4.9bit/字符，加上 266B 码表头 */
+    EXPECT_LT(enc.size(), in.size() * 3 / 4);
 }
 
 TEST(Huffman, RejectsGarbageStream) {

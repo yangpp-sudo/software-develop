@@ -132,13 +132,42 @@ bool FilterOptions::passTraversal(const std::string& relDir) const {
     return true;
 }
 
+bool FilterOptions::passForTraversal(const std::string& relDir,
+                                     const Platform::FileInfo& fi) const {
+    if (fi.type != FT_DIR) return false;
+    if (relDir.empty()) return true;
+    /* 路径维度会剪枝 */
+    if (!excludePaths.empty() && anyGlob(excludePaths, relDir)) return false;
+    if (!includePaths.empty() && !anyGlob(includePaths, relDir) &&
+        !isPrefixOfAny(relDir, includePaths)) return false;
+    /* 类型维度：明确不要目录时就别进去 */
+    if (std::find(typeDeny.begin(), typeDeny.end(), fi.type) != typeDeny.end()) return false;
+    if (!typeAllow.empty() &&
+        std::find(typeAllow.begin(), typeAllow.end(), fi.type) == typeAllow.end()) return false;
+    return true;
+}
+
 bool FilterOptions::setTypeSpec(const std::string& spec) {
     if (spec.empty()) return false;
     bool deny = false;
     size_t start = 0;
     if (spec[0] == '-') { deny = true; start = 1; }
     else if (spec[0] == '+') { start = 1; }
-    std::vector<std::string> items = splitList(spec.substr(start), ',');
+    const std::string body = spec.substr(start);
+    if (body.empty()) return false;
+
+    /* 两种写法都支持：字母集合 "-DL"、逗号名单 "regular,dir" */
+    bool letterSet = body.size() > 1 && body.find(',') == std::string::npos;
+    static const char* kLetters = "rRdDlLfFbBcCsSH";
+    for (size_t i = 0; i < body.size() && letterSet; ++i) {
+        if (!std::strchr(kLetters, body[i])) letterSet = false;
+    }
+    std::vector<std::string> items;
+    if (letterSet) {
+        for (size_t i = 0; i < body.size(); ++i) items.push_back(body.substr(i, 1));
+    } else {
+        items = splitList(body, ',');
+    }
     if (items.empty()) return false;
     for (size_t i = 0; i < items.size(); ++i) {
         if (items[i].size() != 1) { LOG_WARN("ignore unknown file type: " + items[i]); continue; }

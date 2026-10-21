@@ -123,25 +123,42 @@ ErrCode CLZ77::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out)
 }
 
 /* ------------------------------------------------------------------ RLE */
+namespace {
+
+size_t rleRunLen(const std::vector<uint8_t>& in, size_t i) {
+    size_t r = 1;
+    while (r < 255 && i + r < in.size() && in[i + r] == in[i]) ++r;
+    return r;
+}
+
+} /* anonymous namespace */
+
 ErrCode CRle::encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
     out.clear();
-    Codec::putHeader(out, static_cast<uint16_t>(CODEC_MAGIC_RLE & 0xFFFFu), 1, 0,
+    Codec::putHeader(out, static_cast<uint16_t>(CODEC_MAGIC_RLE & 0xFFFFu), 2, 0,
                      static_cast<uint64_t>(in.size()));
-    /* 令牌：0x00 + 字面量；0x01 + [len][byte]，len 1..255 */
+    /* v2 令牌：0x00 + [len 1..255] + len 个字面量；0x01 + [count 4..255] + 重复字节
+       —— 老实现每个字面量要 2 字节，随机数据会膨胀一倍，这里最坏只多 0.4% */
     size_t i = 0;
     while (i < in.size()) {
-        size_t run = 1;
-        while (run < 255 && i + run < in.size() && in[i + run] == in[i]) ++run;
-        if (run >= 3) {
+        const size_t run = rleRunLen(in, i);
+        if (run >= 4) {
             out.push_back(0x01);
             out.push_back(static_cast<uint8_t>(run));
             out.push_back(in[i]);
             i += run;
-        } else {
-            out.push_back(0x00);
+            continue;
+        }
+        const size_t head = out.size();
+        out.push_back(0x00);
+        out.push_back(0);
+        while (i < in.size() && out.size() - head - 2 < 255) {
+            const size_t rr = rleRunLen(in, i);
+            if (rr >= 4 && out.size() > head + 2) break;
             out.push_back(in[i]);
             ++i;
         }
+        out[head + 1] = static_cast<uint8_t>(out.size() - head - 2);
     }
     return E_OK;
 }
@@ -152,21 +169,30 @@ ErrCode CRle::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) 
     size_t start = 0;
     if (!Codec::readHeader(in, static_cast<uint16_t>(CODEC_MAGIC_RLE & 0xFFFFu),
                            ver, flags, rawLen, start)) return E_COMPRESS_FAIL;
-    if (ver != 1 || flags != 0) return E_COMPRESS_FAIL;
+    if ((ver != 1 && ver != 2) || flags != 0) return E_COMPRESS_FAIL;
     if (rawLen > (1ull << 40)) return E_COMPRESS_FAIL;
     out.clear();
     out.reserve(static_cast<size_t>(rawLen));
     size_t p = start;
     while (out.size() < static_cast<size_t>(rawLen)) {
-        if (p + 1 >= in.size()) return E_TRUNCATED_ARCHIVE;
+        if (p >= in.size()) return E_TRUNCATED_ARCHIVE;
         const uint8_t tag = in[p++];
         if (tag == 0x00) {
-            out.push_back(in[p++]);
+            if (p >= in.size()) return E_TRUNCATED_ARCHIVE;
+            const size_t len = in[p++];
+            if (len == 0 || p + len > in.size()) return E_COMPRESS_FAIL;
+            const size_t remain = static_cast<size_t>(rawLen) - out.size();
+            const size_t take = len < remain ? len : remain;
+            for (size_t k = 0; k < take; ++k) out.push_back(in[p++]);
+            p += len - take;                  /* 提前填满时也要跳过剩余字节 */
         } else if (tag == 0x01) {
             if (p + 1 >= in.size()) return E_TRUNCATED_ARCHIVE;
-            const size_t len = in[p++];
+            const size_t count = in[p++];
             const uint8_t b = in[p++];
-            for (size_t k = 0; k < len && out.size() < static_cast<size_t>(rawLen); ++k) out.push_back(b);
+            if (count == 0) return E_COMPRESS_FAIL;
+            for (size_t k = 0; k < count && out.size() < static_cast<size_t>(rawLen); ++k) {
+                out.push_back(b);
+            }
         } else {
             return E_COMPRESS_FAIL;
         }

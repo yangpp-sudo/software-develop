@@ -34,8 +34,9 @@ ErrCode CFileEnumerator::enumerateFiles(const std::string& rootPath,
     m_rootDev = rootInfo.dev;
     m_rootDevValid = true;
 
-    /* 根目录本身作为 "." 入档（与讲义一致），还原时对应用户指定的目标目录 */
-    if (filter.includeDirs) {
+    /* 根目录本身作为 "." 入档（与讲义一致），还原时对应用户指定的目标目录；
+       但根目录同样要接受过滤条件（例如 --type -D 时不应留下任何目录条目）。 */
+    if (filter.includeDirs && filter.pass(".", rootInfo)) {
         EnumeratedEntry root;
         root.relPath = ".";
         root.info    = rootInfo;
@@ -73,16 +74,21 @@ ErrCode CFileEnumerator::traverseDir(const std::string& absDir,
         }
         ++m_scanned;
 
-        if (!filter.pass(relChild, fi)) { ++m_filtered; LOG_DEBUG("filtered: " + relChild); continue; }
+        const bool isDir = (fi.type == FT_DIR);
+        const bool crossDeviceOk = !(filter.noCrossDevice && m_rootDevValid &&
+                                     fi.dev != m_rootDev);
+        const bool depthOk = !(filter.maxDepth >= 0 && depth + 1 > filter.maxDepth);
+        const bool included = crossDeviceOk && filter.pass(relChild, fi);
+        /* 目录即使自身不入档，也可能需要下探：名称/尺寸/时间不应剪枝 */
+        const bool canDescend = isDir && crossDeviceOk && depthOk &&
+                                filter.passForTraversal(relChild, fi) &&
+                                filter.passTraversal(relChild);
 
-        /* 不跨设备 */
-        if (filter.noCrossDevice && m_rootDevValid && fi.dev != m_rootDev) {
-            LOG_DEBUG("skip cross-device: " + relChild);
-            ++m_skipped;
-            continue;
-        }
-
-        if (fi.type == FT_DIR && !filter.includeDirs) {
+        if (!included) {
+            ++m_filtered;
+            LOG_DEBUG("filtered: " + relChild);
+            if (!canDescend) continue;
+        } else if (isDir && !filter.includeDirs) {
             /* 目录条目本身不入档，但仍需下探 */
         } else {
             EnumeratedEntry ent;
@@ -91,12 +97,8 @@ ErrCode CFileEnumerator::traverseDir(const std::string& absDir,
             out.push_back(ent);
         }
 
-        const bool depthLimited = (filter.maxDepth >= 0) && (depth + 1 > filter.maxDepth);
-        bool descend = false;
-        if (fi.type == FT_DIR) {
-            if (!filter.passTraversal(relChild)) { ++m_skipped; continue; }
-            descend = !depthLimited;
-        } else if (fi.type == FT_SYMLINK && filter.followSymlinks && !fi.linkTarget.empty()) {
+        bool descend = canDescend;
+        if (!isDir && fi.type == FT_SYMLINK && filter.followSymlinks && !fi.linkTarget.empty()) {
             std::string real;
             if (DBKP_IS_ERR(Platform::canonicalPath(absChild, real))) {
                 LOG_DEBUG("dangling symlink: " + relChild);
@@ -109,7 +111,7 @@ ErrCode CFileEnumerator::traverseDir(const std::string& absDir,
                     /* 指向文件的链接无需下探 */
                 } else {
                     m_visitedDirs.insert(real);
-                    descend = !depthLimited;
+                    descend = depthOk;
                 }
             }
         }

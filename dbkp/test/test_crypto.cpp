@@ -77,7 +77,7 @@ TEST(Pbkdf2, KnownVectors) {
                  "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43");
     CSha256::pbkdf2("password", s, salt.size(), 4096, 32, dk);
     EXPECT_STREQ(CSha256::toHex(dk).c_str(),
-                 "db6e32560d10581bd85b575ee62a5673df187a9f83f4d329ab83e39ef09880ee");
+                 "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a");
 }
 
 TEST(Pbkdf2, MultiBlockDerivedKey) {

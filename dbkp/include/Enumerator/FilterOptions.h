@@ -53,6 +53,13 @@ struct FilterOptions {
 
     /** 判断一条相对路径的记录是否通过全部过滤维度 */
     bool pass(const std::string& relPath, const Platform::FileInfo& fi) const;
+    /**
+     * @brief 目录是否允许继续下探
+     *
+     * 名称/尺寸/时间/属主这四个维度只描述"文件本身"，不应该阻断对子目录的遍历
+     * （与 find/tar 的语义一致）；路径与类型维度则会阻断遍历。
+     */
+    bool passForTraversal(const std::string& relDir, const Platform::FileInfo& fi) const;
     /** 是否允许进入该子目录继续遍历（只看路径/深度维度） */
     bool passTraversal(const std::string& relDir) const;
 

@@ -72,7 +72,9 @@ std::string normalize(const std::string& raw) {
         if (i) res += kArchiveSep;
         res += out[i];
     }
-    if (absolute && res.empty()) res = "/";
+    /* 绝对路径必须保留前导 '/'（此前被丢掉，导致 "/x//y/" -> "x/y"） */
+    if (absolute && !drivePrefix) res = std::string(1, kArchiveSep) + res;
+    if (res.empty()) res = absolute ? std::string(1, kArchiveSep) : std::string(".");
     return res;
 }
 

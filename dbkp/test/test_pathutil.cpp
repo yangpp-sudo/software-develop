@@ -41,7 +41,8 @@ TEST(PathUtil, JoinAndSplit) {
     EXPECT_STREQ(extension("noext").c_str(), "");
     EXPECT_TRUE(isAbsolute("/a/b"));
     EXPECT_FALSE(isAbsolute("a/b"));
-    EXPECT_TRUE(isAbsolute("./a"));        /* 相对但带前缀，仍非绝对 */
+    EXPECT_FALSE(isAbsolute("./a"));      /* 以 ./ 开头仍是相对路径 */
+    EXPECT_TRUE(isAbsolute("C:/x"));      /* Windows 盘符 */
 }
 
 TEST(PathUtil, Relative) {
@@ -65,10 +66,14 @@ TEST(PathUtil, Glob) {
     EXPECT_FALSE(matchGlob("*.txt", "a.md"));
     EXPECT_TRUE(matchGlob("a?c", "abc"));
     EXPECT_FALSE(matchGlob("a?c", "ac"));
-    EXPECT_TRUE(matchGlob("[ab]c", "abc"));
+    EXPECT_TRUE(matchGlob("[ab]c", "ac"));
+    EXPECT_TRUE(matchGlob("[ab]c", "bc"));
     EXPECT_FALSE(matchGlob("[ab]c", "cc"));
+    EXPECT_FALSE(matchGlob("[ab]c", "abc"));      /* 字符类只匹配 1 个字符 */
     EXPECT_TRUE(matchGlob("[!ab]c", "cc"));
     EXPECT_FALSE(matchGlob("[!ab]c", "ac"));
+    EXPECT_TRUE(matchGlob("a[0-9]b", "a7b"));
+    EXPECT_FALSE(matchGlob("a[0-9]b", "axb"));
     EXPECT_TRUE(matchGlob("log.*", "log.txt"));
     EXPECT_FALSE(matchGlob("log.*", "mylog.txt"));
     EXPECT_TRUE(matchGlob("*", "anything"));

@@ -36,7 +36,7 @@ bin\bkd.exe --port 8080 --web web --data-root D:\sandbox --password 'S3cret!'
 | 选项 | 含义 |
 |---|---|
 | `--host` | 默认 `127.0.0.1`；`0.0.0.0` 才会被局域网访问（风险自担） |
-| `--data-root DIR` | 路径沙箱：所有备份/还原/浏览都不得越界；**不设 = 任意路径可读写** |
+| `--data-root DIR` | 路径沙箱：所有备份/还原/浏览都不得越界；**不设 = 任意路径可读写**。接口里的**相对路径一律按它解析**（不是按 `bkd` 的启动目录），所以可以直接填 `src/sub` 这样的短路径；给的是相对形式时启动即归一成绝对路径，`/api/config` 与报错信息里回显的都是完整路径 |
 | `--password` / `--password-sha256` | 登录口令（或只存摘要）；两者都不给 = 免鉴权，仅建议本机调试 |
 | `--token-ttl H` / `--secret S` | 令牌有效期（默认 12h）；固定密钥后重启服务旧令牌仍可用 |
 | `--workers N` / `--max-body MB` | 并发任务数（1~8，默认 2）；请求体上限（默认 64MB） |
@@ -46,14 +46,17 @@ bin\bkd.exe --port 8080 --web web --data-root D:\sandbox --password 'S3cret!'
 `/api/info`、`/api/login`、`/api/config`、`/api/browse`、`/api/stat`、
 `/api/jobs`（GET 列表 / POST 建任务）、`/api/jobs/:id`（`?log=1` 带任务日志）、
 `/api/jobs/:id/cancel`、`/api/events`（SSE：`hello`/`tick`/`done`/`ping`）、`/api/shutdown`。
-网页能建备份/还原/校验任务、看实时进度与日志、取消任务、浏览并读归档卷标。
+网页能建备份/还原/校验任务、看实时进度与日志、取消任务、读归档卷标；来源/目标/归档
+三个输入框旁都有「浏览…」按钮，直接走 `/api/browse` 从数据根开始点选目录或 `.dbkp` 文件。
 
 ## 4. 测试与测量
 | 目的 | 命令 | 当天实测 |
 |---|---|---|
 | 单元测试 | `powershell -File script/_verify.ps1 [-filter Meta]` | 102/102 通过 |
 | 命令行端到端 | `powershell -File script/e2e.ps1` | 19/19 通过（在临时沙箱内跑，自动清理） |
-| Web 端到端 | `powershell -File script/smoke_web.ps1` | 39/39 通过（自起自停 `bkd`，退出码 0 即全绿） |
+| Web 端到端 | `powershell -File script/smoke_web.ps1` | 48/48 通过（自起自停 `bkd`，退出码 0 即全绿） |
+| 前端静态自检 | `node script/check_webui.js` | 44/44 通过（DOM 桩跑 `index.html` 的脚本：路径 helper 边界 + 页面 id 对账 + 与 `Api.cpp` 的 browse 字段名对账 + `.hide` 是否被 `.mask{display:flex}` 的声明顺序打败，不需要浏览器和服务） |
+| 前端链路复现 | `node script/check_webui_live.js` | 需 `bkd` 在跑：无头点目录行，验“点一下真换目录、到根隐藏上一级、越界不污染游标” |
 | 性能 | `powershell -File script/perf.ps1` | 见 `doc/perf-raw.txt`（lz77 31.7 MB/s，copy 111 MB/s） |
 
 ## 5. 目录结构
@@ -62,7 +65,7 @@ include/  Backup Codec Common Crypto Enumerator Pack Platform Utils Web
 src/      同名实现 + main.cpp（CLI，7 个子命令）+ server_main.cpp（bkd）
 web/      index.html（单文件页面：内联 CSS/JS，fetch + EventSource，无前端依赖）
 test/     TestFramework.h（迷你 GoogleTest）+ 15 个测试文件
-script/   e2e.ps1 / _verify.ps1 / smoke_web.ps1 / perf.ps1 / demo.sh
+script/   e2e.ps1 / _verify.ps1 / smoke_web.ps1 / check_webui.js / check_webui_live.js / perf.ps1 / demo.sh
 doc/      01-需求分析说明书.md  02-系统设计说明书.md  03-测试报告.md  perf-raw.txt
 ```
 

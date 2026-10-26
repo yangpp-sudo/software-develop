@@ -35,6 +35,37 @@ namespace {
 std::atomic<bool> g_stop(false);
 void onSignal(int) { g_stop.store(true); }
 
+/**
+ * @brief 把 --data-root 定成绝对路径。
+ *
+ * dataRoot 同时扮演两个角色：沙箱边界 + 接口里相对路径的基准。给成 "tmp" 这种
+ * 相对形式时，用户（和报错信息）看不出它到底指哪儿，界面显示的 dataRoot 也没法
+ * 直接拿去填表。目录存在就走 canonicalPath（顺便折叠 ..、统一分隔符），不存在
+ * 就用当前目录拼一个——启动时目录还没建也允许，后面建了照样能用。
+ */
+std::string absolutizeDataRoot(const std::string& in) {
+    if (in.empty()) return in;
+    const bool explicitAbs =
+        in[0] == '/' || in[0] == '\\' || (in.size() >= 2 && in[1] == ':');
+    std::string out;
+    if (explicitAbs) {
+        out = in;
+    } else {
+        std::string abs;
+        if (Platform::canonicalPath(in, abs) == E_OK && !abs.empty()) {
+            out = abs;
+        } else {
+            std::string cur;
+            if (Platform::currentDir(cur) != E_OK || cur.empty()) return in;
+            out = cur + "/" + in;
+        }
+    }
+    if (out.size() >= 2 && out[0] == '/' && out[1] == '/') return in;   /* UNC 不动它 */
+    for (std::string::size_type i = 0; i != out.size(); ++i)
+        if (out[i] == '\\') out[i] = '/';      /* 分隔符统一，界面/报错/回显一个样 */
+    return out;
+}
+
 void printUsage() {
     std::printf(
         "usage: bkd [options]\n"
@@ -174,6 +205,7 @@ int main(int argc, char** argv) {
     if (maxBodyMb < 1) maxBodyMb = 1;
     opt.maxBodyBytes = static_cast<std::size_t>(maxBodyMb) * 1024u * 1024u;
     if (workers < 1) workers = 1;
+    ctx.dataRoot = absolutizeDataRoot(ctx.dataRoot);   /* 边界=基准，必须是绝对路径 */
 
     CJobManager jobs(workers);
     CRouter router;

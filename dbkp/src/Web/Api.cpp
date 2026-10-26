@@ -93,6 +93,27 @@ bool makeAbsolute(const std::string& in, std::string& out) {
     return true;
 }
 
+/* 看起来就是绝对路径：'/' 开头（含 //server/share 这类 UNC）或 "X:" 盘符 */
+bool looksAbsolute(const std::string& slashed) {
+    return !slashed.empty() &&
+           (slashed[0] == '/' || (slashed.size() >= 2 && slashed[1] == ':'));
+}
+
+/**
+ * @brief Web 层的相对路径解析：基准是 --data-root，不是进程的工作目录。
+ *
+ * 原来相对路径直接交给 makeAbsolute()，于是拼到 bkd 的启动目录上：同一个
+ * "webview" 在 browse 里和提交任务里的落点不同，用户照着界面显示的 dataRoot
+ * 写相对路径反而会 403。没配 dataRoot 时才退回 CWD 语义（和命令行一致）。
+ */
+bool resolveWithinRoot(const std::string& root, const std::string& in, std::string& out) {
+    if (in.empty()) return false;
+    std::string absRoot;
+    if (root.empty() || looksAbsolute(toSlash(in)) || !makeAbsolute(root, absRoot))
+        return makeAbsolute(in, out);
+    return makeAbsolute(absRoot + "/" + toSlash(in), out);
+}
+
 #ifdef _WIN32
 const bool kCaseInsensitivePath = true;
 #else
@@ -208,14 +229,17 @@ struct Spec {
         if (source.empty()) { why = "source 不能为空"; return false; }
         if (type != "verify" && destination.empty()) { why = "destination 不能为空"; return false; }
 
-        /* 路径沙箱：配了 dataRoot 就不许越界读写（pathWithinRoot 会顺便把
-           相对路径转绝对、折叠 ".."） */
+        /* 路径沙箱：配了 dataRoot 就不许越界读写。pathWithinRoot 会顺便把相对
+           路径按 dataRoot 解析、折叠 ".."，失败时 out 里仍是解析后的绝对路径，
+           直接拿去回显最有用。 */
         if (!pathWithinRoot(ctx.dataRoot, source, source)) {
-            why = "source 超出允许访问的根目录：" + ctx.dataRoot;
+            why = "source 超出允许访问的根目录：" + source + "（不在 " + ctx.dataRoot +
+                  " 内；相对路径按 dataRoot 解析）";
             return false;
         }
         if (!destination.empty() && !pathWithinRoot(ctx.dataRoot, destination, destination)) {
-            why = "destination 超出允许访问的根目录：" + ctx.dataRoot;
+            why = "destination 超出允许访问的根目录：" + destination + "（不在 " + ctx.dataRoot +
+                  " 内；相对路径按 dataRoot 解析）";
             return false;
         }
 
@@ -493,12 +517,29 @@ CHttpResponse hBrowse(ApiContext& ctx, const CHttpRequest& req) {
         e["name"] = CJsonValue::makeString(entries[i].name);
         e["type"] = CJsonValue::makeString(std::string(1, entries[i].type));
         e["isDir"] = CJsonValue::makeBool(entries[i].type == FT_DIR);
+        /* 前端与文档里用的是短名 dir：两个都给，避免再出现"字段名对不上，
+           目录被当文件渲染、点不进下一层"这类静默失配。 */
+        e["dir"] = CJsonValue::makeBool(entries[i].type == FT_DIR);
         e["size"] = CJsonValue::makeInt(cfi.size);
         e["mtime"] = CJsonValue::makeInt(cfi.mtimeSec);
         arr.push_back(e);
     }
     CJsonValue d = CJsonValue::makeObject();
     d["path"] = CJsonValue::makeString(abs);
+    /* parent 只在 dataRoot 内给；到根了就给空串，前端据此隐藏"上一级"，
+       否则用户点一次就跳出边界，之后每次点击都是 403，弹窗彻底翻不动。 */
+    std::string parentOut;
+    {
+        const std::string folded = collapsePath(abs);
+        const std::size_t slash = folded.find_last_of('/');
+        if (slash != std::string::npos && slash > 0) {
+            const std::string p = folded.substr(0, slash);
+            std::string chk;
+            if (pathWithinRoot(ctx.dataRoot, p, chk)) parentOut = p;
+        }
+    }
+    d["parent"] = CJsonValue::makeString(parentOut);
+    d["dataRoot"] = CJsonValue::makeString(ctx.dataRoot);
     d["total"] = CJsonValue::makeInt(static_cast<int64_t>(entries.size()));
     d["truncated"] = CJsonValue::makeBool(entries.size() > kLimit);
     d["entries"] = arr;
@@ -766,7 +807,8 @@ bool verifyToken(const ApiContext& ctx, const std::string& token, std::string& w
 
 bool pathWithinRoot(const std::string& root, const std::string& path, std::string& resolved) {
     if (path.empty()) return false;
-    if (!makeAbsolute(path, resolved)) return false;
+    /* 相对路径以 dataRoot 为基准（配了 root 时），绝对路径原样折叠 */
+    if (!resolveWithinRoot(root, path, resolved)) return false;
     if (root.empty()) return true;                     /* 未设根目录 = 不限制 */
     std::string absRoot;
     if (!makeAbsolute(root, absRoot)) return false;

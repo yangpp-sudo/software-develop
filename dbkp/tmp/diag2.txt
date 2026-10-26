@@ -1,0 +1,10 @@
+boot: loginCard=hide taskCard= status="已连接 dbkp api 1.0 / Windows" rootHint="数据根：D:/大四上/软件开发综合实验/dbkp/tmp" CFG=false
+boot 请求: GET /api/info -> 200 | POST /api/login -> 200 | GET /api/config -> 200 | GET /api/jobs?limit=20 -> 200
+打开弹窗后: cur="D:/大四上/软件开发综合实验/dbkp/tmp" children=13 目录项=0 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp"
+  -> 第 1 层没有可点的目录行，链路断在这里
+点上一级前: cur="D:/大四上/软件开发综合实验/dbkp/tmp" children=13 目录项=0 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp"
+点上一级后: cur="D:/大四上/软件开发综合实验/dbkp" children=13 目录项=0 mask= path显示="D:/大四上/软件开发综合实验/dbkp"
+commitBrowse -> source.value="D:/大四上/软件开发综合实验/dbkp" toast="已填入：D:/大四上/软件开发综合实验/dbkp"
+未知 id 引用: 无
+异常: 无
+全部请求: GET /api/info -> 200 | POST /api/login -> 200 | GET /api/config -> 200 | GET /api/jobs?limit=20 -> 200 | GET /api/browse?path=D%3A%2F%E5%A4%A7%E5%9B%9B%E4%B8%8A%2F%E8%BD%AF%E4%BB%B6%E5%BC%80%E5%8F%91%E7%BB%BC%E5%90%88%E5%AE%9E%E9%AA%8C%2Fdbkp%2Ftmp -> 200 | GET /api/browse?path=D%3A%2F%E5%A4%A7%E5%9B%9B%E4%B8%8A%2F%E8%BD%AF%E4%BB%B6%E5%BC%80%E5%8F%91%E7%BB%BC%E5%90%88%E5%AE%9E%E9%AA%8C%2Fdbkp%2Ftmp -> 200 | GET /api/browse?path=D%3A%2F%E5%A4%A7%E5%9B%9B%E4%B8%8A%2F%E8%BD%AF%E4%BB%B6%E5%BC%80%E5%8F%91%E7%BB%BC%E5%90%88%E5%AE%9E%E9%AA%8C%2Fdbkp -> 403 | GET /api/jobs?limit=20 -> 200

@@ -1,0 +1,47 @@
+== 前端脚本自检 ==
+  [OK]   trimSep('D:/a/') -> "D:/a"
+  [OK]   trimSep('D:\\a\\b') -> "D:/a/b"
+  [OK]   trimSep('/') -> "/"
+  [OK]   joinOf('D:/a','b.txt') -> "D:/a/b.txt"
+  [OK]   joinOf('D:/','a') -> "D:/a"
+  [OK]   joinOf('.','src') -> "src"
+  [OK]   joinOf('/','etc') -> "/etc"
+  [OK]   parentOf('D:/a/b') -> "D:/a"
+  [OK]   parentOf('D:/a') -> "D:/"
+  [OK]   parentOf('D:/') -> "D:/"
+  [OK]   parentOf('/') -> "/"
+  [OK]   parentOf('.') -> "."
+  [OK]   parentOf('src') -> "."
+  [OK]   browseSeed('') -> "."
+  [OK]   browseSeed('D:/a/b.dbkp') -> "D:/a"
+  [OK]   browseSeed('D:/a/src') -> "D:/a/src"
+  [OK]   browseSeed('out/rel.dbkp') -> "out"
+  [OK]   escapeHtml 转义尖括号 -> "&lt;script&gt;"
+  （对照了 40 个不同 id 引用 / 40 个页面 id）
+  [OK]   每个 $(id) 都能在页面里找到 -> "ok"
+  [OK]   检查并非空跑（引用数 > 20） -> "ok"
+  [OK]   isDirEntry 认 isDir -> true
+  [OK]   isDirEntry 认 dir -> true
+  [OK]   isDirEntry 认 type='D' -> true
+  [OK]   isDirEntry 不认普通文件 -> false
+  [OK]   有 dataRoot 时 browseStart 用它 -> "D:/root"
+  [OK]   withinRoot('D:/root/sub') -> true
+  [OK]   withinRoot('D:/root') -> true
+  [OK]   withinRoot('D:/other') -> false
+  [OK]   withinRoot('D:/rootx') 不做前缀糊弄 -> false
+  [OK]   browse 服务端发字段 name -> "ok"
+  [OK]   browse 服务端发字段 type -> "ok"
+  [OK]   browse 服务端发字段 isDir -> "ok"
+  [OK]   browse 服务端发字段 dir -> "ok"
+  [OK]   browse 服务端发字段 size -> "ok"
+  [OK]   browse 服务端发字段 mtime -> "ok"
+  [OK]   browse 服务端发字段 path -> "ok"
+  [OK]   browse 服务端发字段 parent -> "ok"
+  [OK]   browse 服务端发字段 dataRoot -> "ok"
+  [OK]   browse 服务端发字段 total -> "ok"
+  [OK]   browse 服务端发字段 truncated -> "ok"
+  [OK]   browse 服务端发字段 entries -> "ok"
+  [OK]   页面 <style> 里找得到 .hide 规则 -> "ok"
+  [OK]   .hide 盖得住自带 display 的组件类（mask/card/log/ghost） -> "ok"
+  [OK]   检查并非空跑（并存组件类 >= 1） -> "ok"
+WEBUI CHECK OK

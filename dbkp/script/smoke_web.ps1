@@ -43,6 +43,11 @@ function Api($method, $path, $bodyObj) {
         $status = [int]$r.StatusCode
         $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
         $text = $reader.ReadToEnd()
+        # Windows PowerShell 5.1 会把错误响应体放进 ErrorDetails.Message，流里就剩 0 字节；
+        # 断言要看 msg，所以两处都要捞。
+        if (-not $text -and $_.ErrorDetails -and $_.ErrorDetails.Message) {
+            $text = $_.ErrorDetails.Message
+        }
     }
     $obj = $null
     if ($text -and $text.TrimStart().StartsWith('{')) { try { $obj = $text | ConvertFrom-Json } catch { $obj = $null } }
@@ -177,6 +182,30 @@ try {
     Check 'dataRoot 之外的 source 被拒' ($r.status -eq 400) "实际 $($r.status) $($r.text)"
     $r = Api GET '/api/browse?path=../../../Windows' $null
     Check 'browse 目录穿越被拦' ($r.status -eq 403 -or $r.status -eq 404) "实际 $($r.status)"
+    $r = Api GET '/api/browse?path=.' $null
+    Check 'browse 用 "." 能列 dataRoot' ($r.status -eq 200 -and $r.json.data.total -ge 2) "实际 $($r.status) $($r.text)"
+    # 目录必须被标记出来：前端认不出目录就会把文件夹当文件，点不进下一层（真出过）
+    $dirs = @($r.json.data.entries | Where-Object { $_.isDir -or $_.dir -or $_.type -eq 'D' })
+    Check 'browse 条目里目录带目录标记' ($dirs.Count -ge 1) "实际标记为目录的条目数=$($dirs.Count)"
+    Check 'browse 到根时 parent 是空串（前端据此隐藏“上一级”）' `
+          ($r.json.data.PSObject.Properties.Name -contains 'parent' -and $r.json.data.parent -eq '') `
+          "实际 parent=[$($r.json.data.parent)] 属性存在=$($r.json.data.PSObject.Properties.Name -contains 'parent')"
+    $r = Api GET '/api/browse?path=src' $null
+    Check 'browse 相对路径按 dataRoot 解析' ($r.status -eq 200 -and $r.json.data.entries.name -contains 'a.txt') "实际 $($r.status) $($r.text)"
+    $r = Api GET '/api/config' $null
+    $cfgRoot = ($r.json.data.dataRoot -replace '\\', '/').TrimEnd('/')
+    $wantRoot = ($sandbox -replace '\\', '/').TrimEnd('/')
+    Check 'config 回显的 dataRoot 是绝对路径' ($cfgRoot -eq $wantRoot) "实际 $cfgRoot 期望 $wantRoot"
+    $r = Api GET '/api/browse?path=src' $null
+    $gotParent = (($r.json.data.parent -replace '\\', '/') -replace '/+$', '')
+    Check 'browse 子目录的 parent 回指 dataRoot' ($r.status -eq 200 -and $gotParent -eq $wantRoot) `
+          "实际 parent=[$($r.json.data.parent)] 期望 $wantRoot"
+    $r = Api GET '/api/browse?path=../outside' $null
+    Check 'browse 越界时报错里带上绝对根目录' ($r.status -eq 403 -and ($r.json.msg -replace '\\', '/') -match [regex]::Escape($wantRoot)) "实际 $($r.status) $($r.text)"
+    $r = Api POST '/api/jobs' @{ type = 'backup'; source = 'src'; destination = 'out/rel.dbkp' }
+    Check '任务的相对路径按 dataRoot 解析' ($r.status -eq 201) "实际 $($r.status) $($r.text)"
+    $r = Api POST '/api/jobs' @{ type = 'backup'; source = '../outside'; destination = $archive }
+    Check '相对路径想逃出 dataRoot 被拒' ($r.status -eq 400 -and ($null -eq $r.json -or $r.json.msg -match 'dataRoot')) "实际 $($r.status) $($r.text)"
     $r = Api GET '/%2e%2e/%2e%2e/Makefile' $null
     Check '静态文件穿越被拦' ($r.status -eq 403 -or $r.status -eq 404) "实际 $($r.status)"
 

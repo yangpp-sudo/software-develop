@@ -207,6 +207,17 @@ TEST(WebApi, PathWithinRootSandbox) {
     /* ".." 不能把路径顶出根：折叠后落到 /etc，于是被拒 */
     EXPECT_FALSE(pathWithinRoot("/srv/data", "/srv/data/../../etc", out));
     EXPECT_STREQ(out.c_str(), "/etc");
+    /* 配了 dataRoot：相对路径按根解析，不是按 bkd 进程的工作目录。
+       browse 的默认值 "." 必须落在根本身，前端才能拿它做目录树。 */
+    EXPECT_TRUE(pathWithinRoot("/srv/data", "webview", out));
+    EXPECT_STREQ(out.c_str(), "/srv/data/webview");
+    EXPECT_TRUE(pathWithinRoot("/srv/data", ".", out));
+    EXPECT_STREQ(out.c_str(), "/srv/data");
+    EXPECT_TRUE(pathWithinRoot("/srv/data", "sub/../src", out));
+    EXPECT_STREQ(out.c_str(), "/srv/data/src");
+    EXPECT_FALSE(pathWithinRoot("/srv/data", "../outside", out));
+    /* 根本身给成相对路径时也一样：先绝对化根，再拼相对片段 */
+    EXPECT_TRUE(pathWithinRoot("tmp", "webview", out));
     /* 未配 dataRoot = 不限制，但依然给出绝对化的解析结果 */
     EXPECT_TRUE(pathWithinRoot("", "relative/dir", out));
     EXPECT_GT(out.size(), static_cast<std::size_t>(0));

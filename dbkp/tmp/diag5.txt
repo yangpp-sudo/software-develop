@@ -1,0 +1,13 @@
+boot: loginCard=hide taskCard= status="已连接 dbkp api 1.0 / Windows" rootHint="数据根：D:/大四上/软件开发综合实验/dbkp/tmp" CFG.dataRoot="D:/大四上/软件开发综合实验/dbkp/tmp"
+boot 请求: GET /api/info -> 200 | POST /api/login -> 200 | GET /api/config -> 200 | GET /api/jobs?limit=20 -> 200
+打开弹窗后: cur="D:/大四上/软件开发综合实验/dbkp/tmp" children=18 目录项=3 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp" hint="点目录进入；点文件选中它；“用这个路径”取当前目录" bUp是否隐藏=true
+点第 1 个目录后: cur="D:/大四上/软件开发综合实验/dbkp/tmp/out" children=1 目录项=1 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp/out" hint="点目录进入；点文件选中它；“用这个路径”取当前目录" bUp是否隐藏=false
+点第 2 个目录后: cur="D:/大四上/软件开发综合实验/dbkp/tmp" children=18 目录项=3 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp" hint="点目录进入；点文件选中它；“用这个路径”取当前目录" bUp是否隐藏=true
+连点 3 次“上一级”（老版本在这里会越界卡死）:
+  第 1 次: cur="D:/大四上/软件开发综合实验/dbkp/tmp" children=18 目录项=3 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp" hint="点目录进入；点文件选中它；“用这个路径”取当前目录" bUp是否隐藏=true
+  第 2 次: cur="D:/大四上/软件开发综合实验/dbkp/tmp" children=18 目录项=3 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp" hint="点目录进入；点文件选中它；“用这个路径”取当前目录" bUp是否隐藏=true
+  第 3 次: cur="D:/大四上/软件开发综合实验/dbkp/tmp" children=18 目录项=3 mask= path显示="D:/大四上/软件开发综合实验/dbkp/tmp" hint="点目录进入；点文件选中它；“用这个路径”取当前目录" bUp是否隐藏=true
+commitBrowse -> source.value="D:/大四上/软件开发综合实验/dbkp/tmp" toast="已填入：D:/大四上/软件开发综合实验/dbkp/tmp"
+未知 id 引用: 无
+异常: 无
+全部请求: GET /api/info -> 200 | POST /api/login -> 200 | GET /api/config -> 200 | GET /api/jobs?limit=20 -> 200 | GET /api/browse?path=D%3A%2F%E5%A4%A7%E5%9B%9B%E4%B8%8A%2F%E8%BD%AF%E4%BB%B6%E5%BC%80%E5%8F%91%E7%BB%BC%E5%90%88%E5%AE%9E%E9%AA%8C%2Fdbkp%2Ftmp -> 200 | GET /api/browse?path=D%3A%2F%E5%A4%A7%E5%9B%9B%E4%B8%8A%2F%E8%BD%AF%E4%BB%B6%E5%BC%80%E5%8F%91%E7%BB%BC%E5%90%88%E5%AE%9E%E9%AA%8C%2Fdbkp%2Ftmp%2Fout -> 200 | GET /api/browse?path=D%3A%2F%E5%A4%A7%E5%9B%9B%E4%B8%8A%2F%E8%BD%AF%E4%BB%B6%E5%BC%80%E5%8F%91%E7%BB%BC%E5%90%88%E5%AE%9E%E9%AA%8C%2Fdbkp%2Ftmp -> 200 | GET /api/jobs?limit=20 -> 200

@@ -43,7 +43,24 @@
   .meta { color:var(--dim); font-size:12px; margin-top:4px; word-break:break-all; }
   pre.log { background:#0a121b; border:1px solid var(--line); border-radius:6px; padding:8px;
             max-height:190px; overflow:auto; font-size:12px; white-space:pre-wrap; margin:8px 0 0; }
-  .hide { display:none; }
+  /* hide 是全局 utility，必须盖过任何自带 display 的组件类。曾写成
+     `.hide { display:none; }`：后面的 `.mask { display:flex }` 与它特异性相同
+     （都是单个 class）却赢在声明顺序上，于是 `class="mask hide"` 的浏览弹窗
+     一加载就挡在页面上、点“取消”加了 hide 也关不掉。故用 !important。 */
+  .hide { display:none !important; }
+  /* 目录浏览弹窗：复用卡片配色，遮罩铺满视口 */
+  .mask { position:fixed; inset:0; background:rgba(4,10,16,.66); display:flex;
+          align-items:center; justify-content:center; z-index:30; padding:16px; }
+  .dlg { width:min(640px,94vw); max-height:84vh; display:flex; flex-direction:column; }
+  .blist { border:1px solid var(--line); border-radius:6px; background:#0a121b;
+           overflow:auto; flex:1; min-height:120px; margin:10px 0; }
+  .blist .it { padding:6px 10px; border-bottom:1px solid #12202c; cursor:pointer;
+               display:flex; gap:8px; align-items:center; }
+  .blist .it:hover { background:#12202e; }
+  .blist .it.sel { background:#16324c; }
+  .blist .it .sz { margin-left:auto; color:var(--dim); font-size:12px; }
+  .dlg .foot { display:flex; gap:8px; align-items:center; margin-top:12px; }
+  .dlg .foot .sp { flex:1; }
   input[type=checkbox] { width:auto; display:inline-block; margin-right:6px; }
   #toast { position:fixed; right:16px; bottom:16px; background:#0c1420; border:1px solid var(--line);
            border-left:3px solid var(--run); padding:10px 14px; border-radius:6px; opacity:0;
@@ -57,6 +74,7 @@
   <span class="meta" id="status">连接中…</span>
   <span class="sp"></span>
   <span class="meta" id="cap"></span>
+  <span class="meta" id="rootHint"></span>
   <button class="ghost" id="btnRefresh">刷新任务</button>
   <button class="ghost" id="btnLogout">退出</button>
 </header>
@@ -86,10 +104,20 @@
           <option value="copy">copy 逐文件复制</option>
         </select></div>
     </div>
-    <label>来源 source（备份=源目录；还原/校验=归档或备份目录）</label>
-    <input id="source" placeholder="D:/data/docs">
+    <label>来源 source（备份=源目录；还原/校验=归档或备份目录；相对路径按数据根解析）</label>
+    <div class="row">
+      <div><input id="source" placeholder="webview 或 D:/data/docs"></div>
+      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+        <button class="ghost" id="btnBrowseSrc">浏览…</button>
+      </div>
+    </div>
     <label>目标 destination（以 .dbkp 结尾=归档；否则=目标目录）</label>
-    <input id="destination" placeholder="D:/backup/docs.dbkp">
+    <div class="row">
+      <div><input id="destination" placeholder="out/docs.dbkp"></div>
+      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+        <button class="ghost" id="btnBrowseDst">浏览…</button>
+      </div>
+    </div>
     <div class="row">
       <div><label>压缩算法</label><select id="algorithm"></select></div>
       <div><label>加密算法</label>
@@ -122,6 +150,7 @@
         <input id="statPath" placeholder="D:/backup/docs.dbkp">
       </div>
       <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+        <button class="ghost" id="btnBrowseStat">浏览…</button>
         <button class="ghost" id="btnStat">读卷标</button>
       </div>
     </div>
@@ -129,6 +158,22 @@
   </section>
 
 </main>
+<!-- 目录浏览：接服务端 /api/browse，选完把路径回填到触发它的输入框 -->
+<div id="browseMask" class="mask hide">
+  <div class="card dlg">
+    <h2>选择目录 / 归档文件</h2>
+    <div class="meta" id="browsePath">…</div>
+    <div class="blist" id="browseList"></div>
+    <div class="meta" id="browseHint"></div>
+    <div class="foot">
+      <button class="ghost" id="bRoot">数据根</button>
+      <button class="ghost" id="bUp">上一级</button>
+      <span class="sp"></span>
+      <button class="ghost" id="bCancel">取消</button>
+      <button id="bOk">用这个路径</button>
+    </div>
+  </div>
+</div>
 <div id="toast"></div>
 <script>
 'use strict';
@@ -182,6 +227,12 @@ const yn = (b) => b ? '✓' : '✗';
 
 /* ------------------------------------------------------------------- 启动 */
 async function boot() {
+  /* 双击打开 index.html（file://）时 fetch 打不到服务，表现就是"点什么都没反应"，
+     与其卡在登录卡片，不如把话说清楚。 */
+  if (window.location.protocol === 'file:') {
+    showLogin('请用 http://127.0.0.1:8080/ 打开（现在是 file://，接口调不通）');
+    return;
+  }
   let info;
   try { info = (await api('/api/info')).data; }
   catch (e) { showLogin('无法连接服务：' + e.message); return; }
@@ -225,6 +276,9 @@ function applyConfig(cfg) {
   if (cfg.defaultSource && !$('source').value) $('source').value = cfg.defaultSource;
   if (cfg.defaultDestination && !$('destination').value) $('destination').value = cfg.defaultDestination;
   window.CFG = cfg;
+  $('rootHint').textContent = cfg.dataRoot
+    ? '数据根：' + cfg.dataRoot
+    : '数据根：未限制（可浏览进程能访问的所有路径）';
 }
 
 $('btnLogin').onclick = doLogin;
@@ -369,6 +423,143 @@ async function readStat() {
       '\n源路径: ' + d.sourcePath + '\n备注: ' + d.comment;
   } catch (e) { toast('读取失败：' + e.message, true); }
 }
+
+/* --------------------------------------------------------------- 目录浏览 */
+/* 一律用服务端回显的绝对路径继续下钻，不在前端猜拼接规则；越界时服务端会给
+   403 和原因，这里直接显出来，不额外兜圈子。 */
+let BROWSE = { cur: '', ok: '', picked: '', target: 'source' };   /* ok = 最后一个确认能列出来的目录 */
+
+const normSep = (p) => String(p).replace(/\\/g, '/');
+function trimSep(p) {
+  const s = normSep(p).replace(/\/+$/, '');
+  return s === '' ? '/' : s;            /* 盘根/POSIX 根别被削成空串 */
+}
+function joinOf(p, name) {
+  const s = trimSep(p);
+  if (s === '.' || s === '/') return s === '/' ? '/' + name : name;
+  return /^[A-Za-z]:$/.test(s) ? s + '/' + name : s + '/' + name;
+}
+function parentOf(p) {
+  const s = trimSep(p);
+  if (s === '.' || s === '/') return s;
+  if (/^[A-Za-z]:$/.test(s)) return s + '/';        /* 盘根保留斜杠，显示成 D:/ */
+  const i = s.lastIndexOf('/');
+  if (i < 0) return '.';
+  if (i === 0) return '/';
+  const head = s.slice(0, i);
+  return /^[A-Za-z]:$/.test(head) ? head + '/' : head;
+}
+function browseStart() { return (window.CFG && CFG.dataRoot) ? CFG.dataRoot : '.'; }
+/* 输入框里已经是个文件名（末段带点）时，从它所在目录开始列，否则 /api/browse
+ * 会当成目录读并报错。目录被起成 "a.b" 这种名字时只是多退一级，无害。 */
+function browseSeed(v) {
+  if (!v) return browseStart();
+  const seg = trimSep(v).split('/').pop();
+  return seg.indexOf('.') >= 0 ? parentOf(v) : v;
+}
+
+/* 数据根是服务端的硬边界。前端必须自己先挡住：一旦把 BROWSE.cur 换成根外的
+   路径，之后每次点击都会撞 403，弹窗就再也翻不动了（踩过）。 */
+function withinRoot(p) {
+  if (!window.CFG || !CFG.dataRoot) return true;      /* 老服务端没回 dataRoot：不拦 */
+  const a = normSep(trimSep(p || ''));
+  const b = normSep(trimSep(CFG.dataRoot));
+  return a === b || a.indexOf(b + '/') === 0;
+}
+function syncUp() {
+  /* 父级出根（或本来就是 “.”）就把“上一级”整个按钮藏掉：留着一个点了必然
+     403 的按钮，只会让用户以为界面坏了。 */
+  const cur = BROWSE.cur || '';
+  const up = parentOf(cur);
+  $('bUp').classList.toggle('hide', !withinRoot(up) || up === cur);
+  $('bRoot').classList.toggle('hide', trimSep(cur) === trimSep(browseStart()));
+}
+
+/* 服务端 browse 条目历史上叫 isDir，文档/前端用的是 dir，还有 type='D'。
+   三个都认，字段名单方面改动就不会再出现"目录被渲染成文件、点不进下一层"。 */
+const isDirEntry = (x) => !!x && (x.isDir === true || x.dir === true || x.type === 'D');
+function mkRow(name, e, act) {
+  const dir = isDirEntry(e);
+  const el = document.createElement('div');
+  el.className = 'it';
+  el.innerHTML = '<span class="tag">' + (dir ? '目录' : '文件') + '</span><span>' +
+    escapeHtml(name) + '</span>' +
+    (dir ? '' : '<span class="sz">' + fmtBytes(e.size || 0) + '</span>');
+  el.onclick = () => act(el);
+  return el;
+}
+
+async function loadBrowse() {
+  const box = $('browseList');
+  $('browsePath').textContent = BROWSE.cur;
+  $('browseHint').textContent = BROWSE.picked
+    ? '已选中文件：' + BROWSE.picked
+    : '点目录进入；点文件选中它；“用这个路径”取当前目录';
+  box.innerHTML = '<div class="it meta">读取中…</div>';
+  let d;
+  try { d = (await api('/api/browse?path=' + encodeURIComponent(BROWSE.cur))).data; }
+  catch (e) {
+    BROWSE.cur = BROWSE.ok || browseStart();    /* 别把游标留在列不出来的目录上，否则后面每点一次都是 403 */
+    $('browsePath').textContent = BROWSE.cur;
+    box.innerHTML = '<div class="it meta">读取失败：' + escapeHtml(e.message) + '</div>';
+    syncUp();
+    return;
+  }
+  BROWSE.cur = d.path;
+  BROWSE.ok = d.path;
+  syncUp();
+  $('browsePath').textContent = d.path + (d.truncated ? '（条目过多，只列出前 1000 项）' : '');
+  box.innerHTML = '';
+  /* 老服务端不给 parent，就本地退一级；两种情况都只在根内给入口。 */
+  const up = (typeof d.parent === 'string') ? d.parent : parentOf(d.path);
+  if (up && withinRoot(up)) box.appendChild(mkRow('..（上一级）', { dir: true }, () => loadInto(up)));
+  (d.entries || []).forEach((en) => {
+    const full = joinOf(d.path, en.name);
+    if (isDirEntry(en)) box.appendChild(mkRow(en.name, en, () => loadInto(full)));
+    else box.appendChild(mkRow(en.name, en, (el) => {
+      BROWSE.picked = full;
+      box.querySelectorAll('.it.sel').forEach((x) => x.classList.remove('sel'));
+      el.classList.add('sel');
+      $('browseHint').textContent = '已选中文件：' + full;
+    }));
+  });
+  if (!box.children.length) box.innerHTML = '<div class="it meta">空目录</div>';
+}
+
+function loadInto(p) {
+  if (p && !withinRoot(p)) { toast('已经到数据根边界，外面不给浏览', true); return; }
+  BROWSE.picked = ''; BROWSE.cur = p; loadBrowse();
+}
+function openBrowse(target) {
+  BROWSE.target = target;
+  BROWSE.picked = '';
+  BROWSE.ok = '';
+  const v = $(target).value.trim();
+  BROWSE.cur = browseSeed(v);
+  if (!withinRoot(BROWSE.cur)) BROWSE.cur = browseStart();   /* 输入框里填的是根外路径时别一开就报错 */
+  $('browseMask').classList.remove('hide');
+  syncUp();
+  loadBrowse();
+}
+function closeBrowse() { $('browseMask').classList.add('hide'); }
+function commitBrowse() {
+  const v = BROWSE.picked || trimSep(BROWSE.cur);
+  $(BROWSE.target).value = v;
+  closeBrowse();
+  toast('已填入：' + v);
+}
+
+$('btnBrowseSrc').onclick = () => openBrowse('source');
+$('btnBrowseDst').onclick = () => openBrowse('destination');
+$('btnBrowseStat').onclick = () => openBrowse('statPath');
+$('bRoot').onclick = () => loadInto(browseStart());
+$('bUp').onclick = () => { const p = parentOf(BROWSE.cur); if (p !== BROWSE.cur) loadInto(p); };
+$('bCancel').onclick = closeBrowse;
+$('bOk').onclick = commitBrowse;
+$('browseMask').onclick = (e) => { if (e.target === $('browseMask')) closeBrowse(); };
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('browseMask').classList.contains('hide')) closeBrowse();
+});
 
 $('btnSubmit').onclick = submitJob;
 $('btnStat').onclick = readStat;

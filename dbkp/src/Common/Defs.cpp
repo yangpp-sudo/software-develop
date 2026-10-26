@@ -29,6 +29,7 @@ const char* errCodeToString(ErrCode code) {
     case E_ALREADY_EXISTS:          return "already exists";
     case E_NOT_FOUND:               return "not found";
     case E_INTERNAL:                return "internal error";
+    case E_CANCELED:                return "operation canceled";
     default:                        return "unknown error";
     }
 }

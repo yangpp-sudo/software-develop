@@ -19,6 +19,7 @@
 
 #include "Codec/DataCodec.h"
 #include "Common/Defs.h"
+#include "Common/Progress.h"
 #include "Enumerator/FileEnumerator.h"
 #include "Utils/SimpleFile.h"
 
@@ -34,6 +35,7 @@ struct PackOptions {
     bool          preserveMeta   = true;  /* 元数据备份与恢复 */
     int64_t       codecThreshold = 256ll * 1024 * 1024; /* 超过则直存，避免爆内存 */
     std::string   comment;
+    IProgressSink* progress = nullptr;   /* Web/守护进程用；CLI 保持 nullptr */
 };
 
 struct UnpackOptions {
@@ -43,6 +45,7 @@ struct UnpackOptions {
     std::string password;
     /* 解包过程中的软失败计数（特殊文件在无权限时降级为告警） */
     int         warnings = 0;
+    IProgressSink* progress = nullptr;    /* 还原进度与取消 */
 };
 
 class CMyPack {

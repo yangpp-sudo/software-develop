@@ -21,13 +21,14 @@
 #include "Crypto/Sha256.h"
 #include "Enumerator/FilterOptions.h"
 #include "Pack/MyPack.h"
+#include "Platform/Args.h"
 #include "Platform/FS.h"
 #include "Utils/CRC64.h"
 #include "Utils/Logger.h"
 #include "Utils/PathUtil.h"
 
 #if defined(DBKP_OS_WINDOWS)
-#  include <windows.h>          /* CommandLineToArgvW / SetConsoleOutputCP */
+#  include <windows.h>          /* SetConsoleOutputCP（在 Platform/Args.h 里也会设，这里保留给长路径用例） */
 #endif
 
 using namespace DBKP;
@@ -357,25 +358,10 @@ int cmdSelftest() {
 } /* anonymous namespace */
 
 int main(int argc, char** argv) {
-#if defined(DBKP_OS_WINDOWS)
-    /* Windows 控制台默认 GBK 码页：把输出码页设成 UTF-8，中文路径/文件名才不乱码 */
-    ::SetConsoleOutputCP(CP_UTF8);
-    /* argv 是 ANSI 码页的字节串，若按 UTF-8 解释，中文目录名会坏。
-     * 从 Unicode 命令行重新取参数，转成工程内部统一的 UTF-8。 */
-    static std::vector<std::string> utf8Args;
-    static std::vector<char*>       argPtrs;
-    int wideCount = 0;
-    LPWSTR* wideArgs = ::CommandLineToArgvW(::GetCommandLineW(), &wideCount);
-    if (wideArgs != nullptr) {
-        utf8Args.reserve(size_t(wideCount));
-        for (int i = 0; i < wideCount; ++i) utf8Args.push_back(Path::wideToUtf8(wideArgs[i]));
-        ::LocalFree(wideArgs);
-        for (size_t i = 0; i < utf8Args.size(); ++i) argPtrs.push_back(&utf8Args[i][0]);
-        argPtrs.push_back(nullptr);
-        argc = wideCount;
-        argv = argPtrs.data();
-    }
-#endif
+    /* argv 是 ANSI 码页字节 + 控制台默认 GBK：统一换成 UTF-8 参数与输出码页
+       （实现见 Platform/Args.h，bkd 用的是同一份，避免两处各写一遍） */
+    std::vector<std::string> argStore;
+    Platform::useUtf8Args(argc, argv, argStore);
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "-v")) Logger::instance().setLevel(LL_DEBUG);
         else if (!std::strcmp(argv[i], "-q")) Logger::instance().setLevel(LL_QUIET);

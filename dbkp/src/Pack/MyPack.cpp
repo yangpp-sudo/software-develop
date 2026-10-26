@@ -105,6 +105,15 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     ErrCode e = enumerator.enumerateFiles(sourceDir, opt.filter, entries);
     if (DBKP_IS_ERR(e)) return e;
 
+    /* 进度上报：枚举完成后就能算出总字节，前端立刻得到可信的百分比 */
+    uint64_t planBytes = 0;
+    if (opt.progress) {
+        for (size_t i = 0; i < entries.size(); ++i)
+            if (entries[i].info.type == FT_REGULAR)
+                planBytes += static_cast<uint64_t>(entries[i].info.size < 0 ? 0 : entries[i].info.size);
+        opt.progress->onStart(static_cast<int64_t>(entries.size()), planBytes);
+    }
+
     std::string absSource;
     if (DBKP_IS_ERR(Platform::canonicalPath(sourceDir, absSource)))
         absSource = Path::normalize(sourceDir);
@@ -137,6 +146,8 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     /* 3. 逐条：数据块在前、头记录在后？ 统一为"头记录 + 数据块"，与讲义一致 */
     m_inodeMap.clear();
     uint64_t recordCount = 0, fileCount = 0, rawTotal = 0, storedTotal = 0;
+    uint64_t doneBytes = 0;
+    bool       canceled = false;
     for (size_t i = 0; i < entries.size(); ++i) {
         FileRecord rec = makeRecord(entries[i]);
         const Platform::FileInfo& fi = entries[i].info;
@@ -178,7 +189,22 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
         ++recordCount;
         rawTotal    += static_cast<uint64_t>(rec.size);
         storedTotal += static_cast<uint64_t>(rec.storedSize);
+        if (opt.progress) {
+            if (fi.type == FT_REGULAR && !asHardLink && fi.size > 0)
+                doneBytes += static_cast<uint64_t>(fi.size);
+            opt.progress->onProgress(static_cast<int64_t>(i + 1), doneBytes);
+            if (opt.progress->canceled()) { canceled = true; break; }
+        }
         if ((i + 1) % 1024 == 0) LOG_INFO("packed " + std::to_string(i + 1) + " entries");
+    }
+
+    /* 取消：删掉半成品，绝不留一个"看起来成功"的归档（失败必须显式） */
+    if (canceled) {
+        out.close();
+        Platform::removeFile(archivePath);
+        m_errorText = "backup canceled by user";
+        LOG_WARN(m_errorText);
+        return E_CANCELED;
     }
 
     /* 4. 回填卷标：条目数、原始/编码字节数、整段载荷 CRC */
@@ -538,7 +564,12 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
 
     CRecordReader reader;
     std::vector<FileRecord> pendingDirs;
-    int64_t entries = 0;
+    int64_t  entries = 0;
+    uint64_t rdone   = 0;
+    bool       rcancel = false;
+    if (opt.progress)
+        opt.progress->onStart(static_cast<int64_t>(hdr.fileCount),
+                              static_cast<uint64_t>(hdr.rawSize > 0 ? hdr.rawSize : 0));
     for (;;) {
         if (payloadEnd >= 0 && cur >= payloadEnd) break;
         e = in.readN(block.data(), BLOCK_SIZE);
@@ -566,7 +597,20 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
                                   rec.type == FT_REGULAR ? &data : nullptr, opt, pendingDirs);
         if (DBKP_IS_ERR(re)) { m_errorText = "restore failed: " + rec.path; return re; }
         ++entries;
+        if (opt.progress) {
+            if (rec.type == FT_REGULAR && rec.size > 0)
+                rdone += static_cast<uint64_t>(rec.size);
+            opt.progress->onProgress(entries, rdone);
+            if (opt.progress->canceled()) { rcancel = true; break; }
+        }
         if ((entries % 1024) == 0) LOG_INFO("restored " + std::to_string(entries) + " entries");
+    }
+
+    /* 取消：不再回填目录元数据，明确返回失败，前端据此显示"已取消" */
+    if (rcancel) {
+        m_errorText = "restore canceled by user";
+        LOG_WARN(m_errorText);
+        return E_CANCELED;
     }
 
     /* 目录 mtime 最后、逆序恢复（修复讲义已知缺陷：父目录时间被子项顶新） */

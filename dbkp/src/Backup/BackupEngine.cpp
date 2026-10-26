@@ -100,6 +100,7 @@ ErrCode CBackupEngine::run(BackupOptions& opt) {
     if (mode == MODE_ARCHIVE) {
         PackOptions p = opt.pack;
         p.password = opt.password;
+        p.progress = opt.progress;
         if (p.filter.isEmpty() && !opt.filter.isEmpty()) p.filter = opt.filter;
         CMyPack packer;
         ErrCode e = packer.pack(opt.source, opt.destination, p);
@@ -114,7 +115,8 @@ ErrCode CBackupEngine::run(BackupOptions& opt) {
     }
 
     FilterOptions f = opt.pack.filter.isEmpty() ? opt.filter : opt.pack.filter;
-    ErrCode e = copyBackup(opt.source, opt.destination, f, opt.preserveMeta, opt.warnings);
+    ErrCode e = copyBackup(opt.source, opt.destination, f, opt.preserveMeta, opt.warnings,
+                           opt.progress);
     if (DBKP_IS_ERR(e)) return e;
     if (opt.verifyAfter) {
         int diff = 0;
@@ -128,13 +130,20 @@ ErrCode CBackupEngine::run(BackupOptions& opt) {
 
 /* ------------------------------------------------------------ 复制备份 */
 ErrCode CBackupEngine::copyBackup(const std::string& source, const std::string& dest,
-                                  const FilterOptions& filter, bool preserveMeta, int& warnings) {
+                                  const FilterOptions& filter, bool preserveMeta, int& warnings,
+                                  IProgressSink* progress) {
     m_error.clear();
     warnings = 0;
     CFileEnumerator enumerator;
     std::vector<EnumeratedEntry> entries;
     ErrCode e = enumerator.enumerateFiles(source, filter, entries);
     if (DBKP_IS_ERR(e)) { m_error = "enumerate failed"; return e; }
+
+    uint64_t planBytes = 0;
+    for (size_t i = 0; i < entries.size(); ++i)
+        if (entries[i].info.type == FT_REGULAR && entries[i].info.size > 0)
+            planBytes += static_cast<uint64_t>(entries[i].info.size);
+    if (progress) progress->onStart(static_cast<int64_t>(entries.size()), planBytes);
 
     if (DBKP_IS_ERR(Platform::exists(dest))) {
         e = Platform::makeDirTree(dest);
@@ -148,7 +157,18 @@ ErrCode CBackupEngine::copyBackup(const std::string& source, const std::string& 
     std::vector<FileRecord> pendingDirs;
     int64_t copied = 0, dirsMade = 0, links = 0, special = 0;
 
+    uint64_t cdone = 0;
     for (size_t i = 0; i < entries.size(); ++i) {
+        if (progress) {
+            if (i > 0 && entries[i - 1].info.type == FT_REGULAR && entries[i - 1].info.size > 0)
+                cdone += static_cast<uint64_t>(entries[i - 1].info.size);
+            progress->onProgress(static_cast<int64_t>(i), cdone);
+            if (progress->canceled()) {
+                m_error = "copy backup canceled (partial copies kept)";
+                LOG_WARN(m_error);
+                return E_CANCELED;
+            }
+        }
         const EnumeratedEntry& ent = entries[i];
         FileRecord rec = recordFrom(ent);
         const std::string srcAbs = absOf(source, rec.path);
@@ -276,10 +296,10 @@ ErrCode CBackupEngine::copyOneFile(const std::string& srcAbs, const std::string&
 
 /* ------------------------------------------------------------ 从复制目录还原 */
 ErrCode CBackupEngine::copyRestore(const std::string& backupDir, const std::string& dest,
-                                   bool preserveMeta, int& warnings) {
+                                   bool preserveMeta, int& warnings, IProgressSink* progress) {
     FilterOptions all;                       /* 备份目录本身已是筛选后的结果 */
     all.includeDirs = true;
-    return copyBackup(backupDir, dest, all, preserveMeta, warnings);
+    return copyBackup(backupDir, dest, all, preserveMeta, warnings, progress);
 }
 
 /* ------------------------------------------------------------ 复制结果校验 */

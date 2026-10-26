@@ -1,0 +1,17 @@
+[WARN ] ignore unknown file type: bogus
+[ERROR] archive is encrypted, --password is required
+[ERROR] decrypt failed for one.txt (wrong password or damaged archive)
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got d5836e5513ad20b3
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got 2a61d8cfb170eb8d
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got 4f82bae3298eedb9
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got 27973a894abc587e
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got 764fa0afa2e5c015
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got 835652b4017fcca7
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got 71f02e504d5c082e
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got e8c2e51e582876e0
+[ERROR] payload checksum mismatch: expect e5ed6686d664d5e3, got 0285ab4479178dda
+[ERROR] source is not a directory: ttest_enum/a.txt
+[ERROR] cannot access source: no_such_dir_xyz (not found)
+[ERROR] target directory is not empty: ttest_pack2_out (use --force to overwrite)
+[ERROR] archive truncated during checksum pass
+[ERROR] archive truncated at: big.txt

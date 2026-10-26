@@ -29,6 +29,7 @@ struct BackupOptions {
     bool         preserveMeta = true;    /* 复制模式是否还原元数据 */
     bool         verifyAfter  = true;    /* 备份完成后自动校验 */
     std::string  password;               /* 加密口令 */
+    IProgressSink* progress = nullptr;   /* Web/守护进程：进度与取消；CLI 为 nullptr */
     int          warnings = 0;
 };
 
@@ -45,11 +46,13 @@ public:
 
     /** 逐文件复制备份（课程"基本要求"的直接备份形态） */
     ErrCode copyBackup(const std::string& source, const std::string& dest,
-                       const FilterOptions& filter, bool preserveMeta, int& warnings);
+                       const FilterOptions& filter, bool preserveMeta, int& warnings,
+                       IProgressSink* progress = nullptr);
 
     /** 从复制目录还原到新的目标目录（反向复制） */
     ErrCode copyRestore(const std::string& backupDir, const std::string& dest,
-                        bool preserveMeta, int& warnings);
+                        bool preserveMeta, int& warnings,
+                        IProgressSink* progress = nullptr);
 
     /** 校验复制结果：条目数 + 每个普通文件的 CRC64 */
     ErrCode verifyCopy(const std::string& source, const std::string& dest,

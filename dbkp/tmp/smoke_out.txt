@@ -1,0 +1,53 @@
+== 准备测试数据 ==
+== 启动 bkd ==
+== 静态页与服务信息 ==
+  [OK]   GET / 返回页面
+  [OK]   GET /api/info 免鉴权可用
+  [OK]   info 带平台能力
+  [OK]   未登录访问 /api/config 被拒 401
+== 登录 ==
+  [OK]   错误口令返回 401
+  [OK]   正确口令返回 token
+  [OK]   带 token 可访问 /api/config
+  [OK]   算法列表含 huffman
+== 备份任务（归档 + 压缩） ==
+  [OK]   POST /api/jobs 受理并返回 201
+  [OK]   自动判定 mode=archive
+  [OK]   任务最终成功（state=succeeded）
+  [OK]   进度汇报过条目
+  [OK]   任务日志非空
+  [OK]   归档文件已生成
+== 读归档卷标 ==
+  [OK]   GET /api/stat 返回卷标
+  [OK]   卷标里的算法是 huffman
+== 还原 + 校验 ==
+  [OK]   还原任务已受理
+  [OK]   还原成功（state=succeeded）
+  [OK]   还原后中文文件名存在
+  [OK]   还原后普通文件存在
+  [OK]   归档校验通过（state=succeeded）
+== 取消与错误处理 ==
+  [OK]   取消请求返回 200（已受理）或 409（已抢先跑完）
+  [OK]   终态合法（canceled）
+  [OK]   取消过的任务不会假装成功
+  [OK]   已结束的任务不能再取消 -> 409
+  [OK]   不存在的来源当场报错
+  [OK]   空请求体返回 400
+  [OK]   未知接口返回 JSON 404
+  [OK]   不支持的方法返回 405
+== 越界防护 ==
+  [OK]   dataRoot 之外的 source 被拒
+  [OK]   browse 目录穿越被拦
+  [OK]   静态文件穿越被拦
+== SSE 进度流 ==
+  [OK]   SSE 输出 event-stream
+  [OK]   SSE 推送 done 收尾
+  [OK]   SSE 事件里带进度 JSON
+== 任务列表 ==
+  [OK]   GET /api/jobs 返回列表
+  [OK]   列表按新->旧排列
+== 关闭服务 ==
+  [OK]   POST /api/shutdown 返回 200
+  [OK]   bkd 进程已退出
+
+WEB SMOKE OK

@@ -1,0 +1,8 @@
+platform        : Windows
+symlink/hardlink: yes / yes
+fifo/device     : no / no
+owner/nsec      : no / yes
+block size      : 512 bytes (extend payload 398)
+crc64(msg)      : 94280091c189a9d3
+sha256("abc")   : ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+long-path rt    : ok (2 blocks, path 300, link 150)

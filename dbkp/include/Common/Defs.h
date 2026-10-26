@@ -124,6 +124,7 @@ enum ErrCode : int {
     E_ALREADY_EXISTS        = 19,
     E_NOT_FOUND             = 20,
     E_INTERNAL              = 21,
+    E_CANCELED              = 22,  /* 用户/服务端主动取消（Web 任务取消） */
     E_UNKNOWN               = 127,
 };
 

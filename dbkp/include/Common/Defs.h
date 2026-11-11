@@ -39,6 +39,11 @@ static const std::size_t REC_INLINE_LINK = 96;
 static const std::size_t REC_INLINE_FREE = 142;
 static const std::size_t REC_EXTEND_PAYLOAD =
         REC_INLINE_PATH + REC_INLINE_LINK + REC_INLINE_FREE;   /* 398 */
+/* 卷标扩展块：checksum=sha256 时卷标占 2×512B，第二块 0..31 存整卷 SHA-256
+   摘要（其余留 0），payloadOffset 随之变成 1024。旧归档 headerSize=512，
+   解码时按 headerSize 判长，完全向后兼容。 */
+static const std::size_t ARCHIVE_HEADER_EXT    = 1024;
+static const std::size_t ARCHIVE_DIGEST_SIZE   = 32;
 static const char* const DEFAULT_ARCHIVE_SUFFIX = ".dbkp";
 
 /* ------------------------------------------------------------ 文件类型 */
@@ -81,6 +86,8 @@ enum CryptoId : uint8_t {
     CRY_AES256_CBC = 1,
     CRY_CHACHA20   = 2,
     CRY_XOR_TEST   = 3,   /* 仅用于单元测试的极弱算法，勿用于生产 */
+    CRY_DESEDE_CBC = 4,   /* 课件要求的 DES-EDE-CBC(3DES)，自实现、不依赖 OpenSSL */
+    CRY_COUNT      = 5,   /* 哨兵：合法性校验上界（对齐 ALG_COUNT 风格），非算法 */
 };
 
 enum ChecksumId : uint8_t {
@@ -197,6 +204,10 @@ struct ArchiveHeader {
     uint16_t   kdfRounds     = 0;
     std::string sourcePath;         /* 备份源绝对路径（信息用） */
     std::string comment;            /* 用户备注 */
+    /* 整卷 SHA-256 摘要：仅 checksum==CHK_SHA256 时写入/校验。
+       此前 sha256 只是个头标志字节，摘要从未落盘（整卷校验事实上只有
+       CRC64 一条腿），现在补齐；空 vector = 归档里没有摘要。 */
+    std::vector<uint8_t> payloadDigest;
 
     ArchiveHeader() { for (int i = 0; i < 16; ++i) salt[i] = 0; }
 };

@@ -78,7 +78,7 @@ int CScheduler::applyRetention(const std::string& dir, const std::string& prefix
     return removed;
 }
 
-ErrCode CScheduler::run(const ScheduleOptions& opt) {
+ErrCode CScheduler::run(const ScheduleOptions& opt, std::atomic<bool>* stopFlag) {
     std::string dir = opt.archiveDir;
     std::string prefix = opt.prefix;
     if (dir.empty()) {
@@ -95,6 +95,7 @@ ErrCode CScheduler::run(const ScheduleOptions& opt) {
              std::to_string(opt.times) + ", keep=" + std::to_string(opt.keep) +
              ", prefix=" + prefix);
     while (opt.times <= 0 || done < opt.times) {
+        if (stopFlag && stopFlag->load()) { LOG_INFO("scheduler stopped by request"); break; }
         const std::string archive = CScheduler::makeArchiveName(dir, prefix);
         BackupOptions each = opt.backup;
         each.destination = archive;
@@ -112,6 +113,7 @@ ErrCode CScheduler::run(const ScheduleOptions& opt) {
         }
         if (opt.times > 0 && done >= opt.times) break;
         for (int s = 0; s < opt.intervalSeconds; ++s) {
+            if (stopFlag && stopFlag->load()) break;
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     }

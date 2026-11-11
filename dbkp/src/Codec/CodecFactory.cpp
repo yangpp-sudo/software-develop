@@ -36,6 +36,7 @@ IDataCodec* CryptoFactory::create(CryptoId id, const std::string& password,
     case CRY_NONE:       return nullptr;
     case CRY_AES256_CBC: return NewAesCbcCodec(password, salt, kdfRounds);
     case CRY_CHACHA20:   return NewChaCha20Codec(password, salt, kdfRounds);
+    case CRY_DESEDE_CBC: return NewDesEdEcbcCodec(password, salt, kdfRounds);
     case CRY_XOR_TEST:   return newXorTestCodec(password);
     default:             return nullptr;
     }
@@ -46,6 +47,7 @@ const char* CryptoFactory::description(CryptoId id) {
     case CRY_NONE:       return "no encryption";
     case CRY_AES256_CBC: return "self-implemented AES-256-CBC, PKCS#7 padding, SHA-256 KDF";
     case CRY_CHACHA20:   return "self-implemented ChaCha20 stream cipher, SHA-256 KDF";
+    case CRY_DESEDE_CBC: return "self-implemented DES-EDE-CBC (3DES), PKCS#7 padding, SHA-256 KDF";
     case CRY_XOR_TEST:   return "test-only keystream cipher (NOT secure)";
     default:             return "unknown";
     }

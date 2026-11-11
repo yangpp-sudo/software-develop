@@ -15,6 +15,7 @@ namespace Crypto {
 static const uint16_t kMagicAes = 0x4145u;   /* 'AE' */
 static const uint16_t kMagicCha = 0x4343u;   /* 'CC' */
 static const uint16_t kMagicXor = 0x5852u;   /* 'XR' */
+static const uint16_t kMagicDes = 0x4445u;   /* 'DE' —— DES-EDE-CBC(3DES) */
 static const std::size_t kBlobHeaderSize = 12;
 static const std::size_t kTagSize = 16;      /* HMAC-SHA256 截断标签 */
 

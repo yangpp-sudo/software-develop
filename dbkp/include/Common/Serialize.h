@@ -22,8 +22,10 @@ uint32_t readLE32(const uint8_t* p);
 uint64_t readLE64(const uint8_t* p);
 
 /* ------------------------------------------------------- 归档卷标 */
+/** 编码卷标：checksum==CHK_SHA256 时输出 1024B（第二块前 32B 为整卷摘要），否则 512B */
 ErrCode encodeArchiveHeader(const ArchiveHeader& hdr, std::vector<uint8_t>& out512);
-ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr);
+/** 解码卷标。checksum==sha256 的归档必须跟进 ext512（第二块），否则报 E_INVALID_HEADER_RECORD */
+ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr, const uint8_t* ext512 = nullptr);
 
 /* ------------------------------------------------------- 文件记录 */
 /**

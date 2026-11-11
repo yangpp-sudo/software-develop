@@ -137,6 +137,43 @@ TEST(Serialize, ArchiveHeaderRoundTrip) {
     EXPECT_EQ(std::memcmp(out.salt, in.salt, 16), 0);
 }
 
+TEST(Serialize, Sha256HeaderDigestRoundTrip) {
+    ArchiveHeader in;
+    in.compAlg = ALG_NONE;
+    in.cryptoAlg = CRY_NONE;
+    in.checksum = CHK_SHA256;
+    in.payloadOffset = ARCHIVE_HEADER_EXT;
+    in.payloadSize = 4096;
+    in.sourcePath = "/tmp/s256";
+    in.payloadDigest.resize(ARCHIVE_DIGEST_SIZE);
+    for (int i = 0; i < static_cast<int>(ARCHIVE_DIGEST_SIZE); ++i)
+        in.payloadDigest[i] = static_cast<uint8_t>(0xA0 + i);
+
+    std::vector<uint8_t> bytes;
+    ASSERT_EQ(encodeArchiveHeader(in, bytes), E_OK);
+    EXPECT_EQ(bytes.size(), ARCHIVE_HEADER_EXT);   /* sha256 多占一个摘要扩展块 */
+
+    /* 正常读回：把第二块指针递给解码端，摘要必须原样还原 */
+    ArchiveHeader out;
+    ASSERT_EQ(decodeArchiveHeader(bytes.data(), out, bytes.data() + BLOCK_SIZE), E_OK);
+    EXPECT_EQ(out.checksum, CHK_SHA256);
+    EXPECT_EQ(out.headerSize, ARCHIVE_HEADER_EXT);
+    ASSERT_EQ(out.payloadDigest.size(), ARCHIVE_DIGEST_SIZE);
+    EXPECT_EQ(std::memcmp(out.payloadDigest.data(), in.payloadDigest.data(),
+                          ARCHIVE_DIGEST_SIZE), 0);
+
+    /* 声明了 sha256 却没给扩展块：卷标不完整，必须报错而不是读到脏摘要 */
+    ArchiveHeader missing;
+    EXPECT_EQ(decodeArchiveHeader(bytes.data(), missing, nullptr), E_INVALID_HEADER_RECORD);
+
+    /* 扩展块幻数被改坏（比如把数据块当摘要块）：同样拒绝 */
+    std::vector<uint8_t> bad = bytes;
+    bad[BLOCK_SIZE] = static_cast<uint8_t>(bad[BLOCK_SIZE] ^ 0xFF);
+    ArchiveHeader foreign;
+    EXPECT_EQ(decodeArchiveHeader(bad.data(), foreign, bad.data() + BLOCK_SIZE),
+              E_INVALID_HEADER_RECORD);
+}
+
 TEST(Serialize, HeaderRejectsForeignMagic) {
     std::vector<uint8_t> bytes(BLOCK_SIZE, 0);
     ArchiveHeader out;

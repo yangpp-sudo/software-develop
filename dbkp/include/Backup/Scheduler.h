@@ -4,6 +4,7 @@
 #ifndef DBKP_BACKUP_SCHEDULER_H
 #define DBKP_BACKUP_SCHEDULER_H
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -22,8 +23,9 @@ struct ScheduleOptions {
 
 class CScheduler {
 public:
-    /** 阻塞式定时备份；返回最后一次备份的错误码（全部成功则 E_OK） */
-    ErrCode run(const ScheduleOptions& opt);
+    /** 阻塞式定时备份；返回最后一次备份的错误码（全部成功则 E_OK）。
+        stopFlag 非空且置 true 时在下一个条目边界停下（Web 端 /api/schedule/stop 用）。 */
+    ErrCode run(const ScheduleOptions& opt, std::atomic<bool>* stopFlag = nullptr);
 
     /** "5m"/"2h"/"90s"/"300" -> 秒；非法返回 -1 */
     static int parseInterval(const std::string& text, bool* okOut = nullptr);

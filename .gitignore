@@ -11,3 +11,12 @@ __pycache__/
 
 # 忽略 VS Code 的本地配置
 .vscode/
+
+# 忽略备份工具的测试/运行产物（垃圾目录、临时输出、归档二进制）
+System.Collections.Hashtable/
+dbkp/tmp/
+*.dbkp
+# 仓库根目录下的临时输出（用 / 锁到根，避免误伤 dbkp/test 等真实源码）
+/test/
+/test_out/
+/tmp/

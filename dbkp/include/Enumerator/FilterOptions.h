@@ -63,8 +63,11 @@ struct FilterOptions {
     /** 是否允许进入该子目录继续遍历（只看路径/深度维度） */
     bool passTraversal(const std::string& relDir) const;
 
-    /** 解析 --type/-t 之类逗号分隔串，如 "-DL" 或 "regular,dir" */
+    /** 解析 --type/-t 之类逗号分隔串，如 "-DL" 或 "regular,dir"。
+        未知类型名现在返回 false（以前只告警并静默忽略，拼错一个 token
+        就能让整条过滤失效），原因写入 lastError。 */
     bool setTypeSpec(const std::string& spec);
+    std::string lastError;   /* 上一次 setTypeSpec/解析失败的原因 */
     /** 解析人类可读大小："10MB" "1.5G" "4096" */
     static int64_t parseSize(const std::string& text, bool* okOut = nullptr);
     /** 解析时间："2024-01-01" "2024-01-01T12:00:00" "7d"(最近 7 天) */

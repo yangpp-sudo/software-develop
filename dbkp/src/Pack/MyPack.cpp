@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "Common/Serialize.h"
+#include "Crypto/Sha256.h"
 #include "Platform/FS.h"
 #include "Utils/CRC64.h"
 #include "Utils/Logger.h"
@@ -134,7 +135,8 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     hdr.createTime = static_cast<uint64_t>(std::time(nullptr));
     hdr.sourcePath = absSource;
     hdr.comment    = opt.comment;
-    hdr.payloadOffset = BLOCK_SIZE;
+    /* sha256 卷标多占一个 512B 扩展块放摘要，载荷起点随之后移 */
+    hdr.payloadOffset = (opt.checksum == CHK_SHA256) ? ARCHIVE_HEADER_EXT : BLOCK_SIZE;
     hdr.kdfRounds = static_cast<uint16_t>(kdfRounds);
     std::memcpy(hdr.salt, salt, 16);
 
@@ -207,15 +209,18 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
         return E_CANCELED;
     }
 
-    /* 4. 回填卷标：条目数、原始/编码字节数、整段载荷 CRC */
+    /* 4. 回填卷标：条目数、原始/编码字节数、整段载荷 CRC（sha256 模式还要算整卷摘要） */
     const int64_t endPos = out.tell();
-    uint64_t payloadBytes = endPos > static_cast<int64_t>(BLOCK_SIZE)
-                          ? static_cast<uint64_t>(endPos - BLOCK_SIZE) : 0;
+    const int64_t hdrBytes = static_cast<int64_t>(hdr.payloadOffset);
+    uint64_t payloadBytes = endPos > hdrBytes
+                          ? static_cast<uint64_t>(endPos - hdrBytes) : 0;
     CRC64 payloadCrc;
+    CSha256 payloadSha;
+    const bool wantSha = hdr.checksum == CHK_SHA256;
     {
         std::vector<uint8_t> buf;
         buf.resize(64 * 1024);
-        out.seekTo(static_cast<int64_t>(BLOCK_SIZE));
+        out.seekTo(hdrBytes);
         uint64_t done = 0;
         while (done < payloadBytes) {
             int64_t want = static_cast<int64_t>(
@@ -223,11 +228,16 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
             ErrCode re = out.readN(buf.data(), want);
             if (DBKP_IS_ERR(re)) { LOG_WARN("payload checksum pass incomplete"); break; }
             payloadCrc.update(buf.data(), static_cast<size_t>(want));
+            if (wantSha) payloadSha.update(buf.data(), static_cast<size_t>(want));
             done += static_cast<uint64_t>(want);
         }
     }
     hdr.payloadSize = payloadBytes;
     hdr.payloadCrc  = payloadCrc.value();
+    if (wantSha) {
+        hdr.payloadDigest.resize(CSha256::kDigestSize);
+        payloadSha.finish(hdr.payloadDigest.data());
+    }
     hdr.rawSize     = rawTotal;
     hdr.recordCount = recordCount;
     hdr.fileCount   = fileCount;
@@ -354,6 +364,14 @@ ErrCode CMyPack::readDataBlocks(CSimpleFile& in, const FileRecord& rec,
         if (got != rec.crc) {
             LOG_ERR("checksum mismatch: " + rec.path + " (expect " +
                     CRC64::toString(rec.crc) + ", got " + CRC64::toString(got) + ")");
+            ++opt.warnings;
+            return E_CHECKSUM_MISMATCH;
+        }
+        /* 记录里的 size 字段也要和解出来的长度对得上：只过 CRC 不卡 size，
+           篡改字段就只能靠整卷摘要拦（明文 sha256 归档的盲区之一） */
+        if (rec.size != static_cast<int64_t>(work.size())) {
+            LOG_ERR("size field mismatch: " + rec.path + " (header says " +
+                    std::to_string(rec.size) + ", decoded " + std::to_string(work.size()) + ")");
             ++opt.warnings;
             return E_CHECKSUM_MISMATCH;
         }
@@ -484,15 +502,82 @@ ErrCode CMyPack::applyMetadata(const std::string& absPath, const FileRecord& rec
 }
 
 /* ------------------------------------------------------------ 读取卷标 */
+ErrCode CMyPack::readHeaderAt(CSimpleFile& in, ArchiveHeader& hdr) {
+    std::vector<uint8_t> block;
+    block.resize(BLOCK_SIZE);
+    if (DBKP_IS_ERR(in.seekTo(0))) return E_TRUNCATED_ARCHIVE;
+    ErrCode e = in.readN(block.data(), BLOCK_SIZE);
+    if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
+    /* checksum=sha256 的归档卷标后面跟一个摘要扩展块，一并读进来。
+       必须先确认第一块魔数正常再决定读扩展块：否则遇到非归档文件时，
+       第 6 字节的 headerSize 会读成随机大值（例如 'zz' = 31354），于是
+       去读第二块并在 EOF 处失败，把“这不是归档”误报成 E_TRUNCATED_ARCHIVE。 */
+    std::vector<uint8_t> ext;
+    if (readLE32(block.data()) == ARCHIVE_MAGIC &&
+        readLE16(block.data() + 6) >= ARCHIVE_HEADER_EXT) {
+        ext.resize(BLOCK_SIZE);
+        if (DBKP_IS_ERR(in.readN(ext.data(), BLOCK_SIZE))) return E_TRUNCATED_ARCHIVE;
+    }
+    return decodeArchiveHeader(block.data(), hdr, ext.empty() ? nullptr : ext.data());
+}
+
 ErrCode CMyPack::readHeader(const std::string& archivePath, ArchiveHeader& hdr) {
     CSimpleFile in;
     ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
     if (DBKP_IS_ERR(e)) return e;
-    std::vector<uint8_t> block;
-    block.resize(BLOCK_SIZE);
-    e = in.readN(block.data(), BLOCK_SIZE);
-    if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
-    return decodeArchiveHeader(block.data(), hdr);
+    return readHeaderAt(in, hdr);
+}
+
+/* -------------------------------------------------------- 整卷校验辅助 */
+ErrCode CMyPack::checkWholePayload(const std::string& archivePath, const ArchiveHeader& hdr) {
+    if (hdr.checksum == CHK_NONE || hdr.payloadSize == 0) return E_OK;
+    CSimpleFile in;
+    ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
+    if (DBKP_IS_ERR(e)) return e;
+    if (DBKP_IS_ERR(in.seekTo(static_cast<int64_t>(hdr.payloadOffset)))) return E_TRUNCATED_ARCHIVE;
+    CRC64 crc;
+    CSha256 sha;
+    const bool useSha = hdr.checksum == CHK_SHA256;
+    if (useSha && hdr.payloadDigest.size() != CSha256::kDigestSize) {
+        /* 旧版 sha256 归档只存了个标志字节，摘要从未落盘：检不出任何记录区篡改。
+           这里明说而不是静默跳过，避免用户把“选了 sha256”当成已经有保护。 */
+        LOG_ERR("archive declares sha256 but carries no digest (written by an older "
+                "version); re-create it to get whole-volume protection");
+        return E_INVALID_HEADER_RECORD;
+    }
+    std::vector<uint8_t> buf;
+    buf.resize(64 * 1024);
+    uint64_t done = 0;
+    while (done < hdr.payloadSize) {
+        const int64_t want = static_cast<int64_t>(std::min<uint64_t>(
+            hdr.payloadSize - done, static_cast<uint64_t>(buf.size())));
+        ErrCode re = in.readN(buf.data(), want);
+        if (DBKP_IS_ERR(re)) {
+            LOG_ERR("archive truncated during checksum pass");
+            return E_TRUNCATED_ARCHIVE;
+        }
+        crc.update(buf.data(), static_cast<size_t>(want));
+        if (useSha) sha.update(buf.data(), static_cast<size_t>(want));
+        done += static_cast<uint64_t>(want);
+    }
+    if (useSha) {
+        uint8_t digest[CSha256::kDigestSize];
+        sha.finish(digest);
+        if (std::memcmp(digest, hdr.payloadDigest.data(), CSha256::kDigestSize) != 0) {
+            LOG_ERR("payload sha256 mismatch: expect " + CSha256::toHex(hdr.payloadDigest.data()) +
+                    ", got " + CSha256::toHex(digest));
+            return E_CHECKSUM_MISMATCH;
+        }
+        LOG_DEBUG("payload sha256 verified: " + CSha256::toHex(digest));
+    } else {
+        if (crc.value() != hdr.payloadCrc) {
+            LOG_ERR("payload checksum mismatch: expect " + CRC64::toString(hdr.payloadCrc) +
+                    ", got " + CRC64::toString(crc.value()));
+            return E_CHECKSUM_MISMATCH;
+        }
+        LOG_DEBUG("payload crc64 verified: " + CRC64::toString(crc.value()));
+    }
+    return E_OK;
 }
 
 /* ------------------------------------------------------------ 解包 */
@@ -506,18 +591,14 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
     ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
     if (DBKP_IS_ERR(e)) { m_errorText = "cannot open archive: " + archivePath; return e; }
 
-    std::vector<uint8_t> block;
-    block.resize(BLOCK_SIZE);
-    e = in.readN(block.data(), BLOCK_SIZE);
-    if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
     ArchiveHeader hdr;
-    e = decodeArchiveHeader(block.data(), hdr);
+    e = readHeaderAt(in, hdr);
     if (DBKP_IS_ERR(e)) { m_errorText = "not a dbkp archive"; return e; }
     if (hdr.version != ARCHIVE_VERSION) {
         LOG_ERR("unsupported archive version " + std::to_string(hdr.version));
         return E_INVALID_HEADER_RECORD;
     }
-    if (hdr.compAlg >= ALG_COUNT || hdr.cryptoAlg > CRY_XOR_TEST) {
+    if (hdr.compAlg >= ALG_COUNT || hdr.cryptoAlg >= CRY_COUNT) {
         LOG_ERR("corrupted archive header");
         return E_INVALID_HEADER_RECORD;
     }
@@ -534,6 +615,17 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
         crypto.reset(makeCrypto(static_cast<CryptoId>(hdr.cryptoAlg), opt.password,
                                 hdr.salt, hdr.kdfRounds ? hdr.kdfRounds : 4096, errText));
         if (!crypto) { LOG_ERR(errText); return E_INVALID_PARAMETER; }
+    }
+
+    /* 落盘前先过整卷校验（crc64/sha256）：以前只有 verify 命令会查，
+       restore 对“记录区被改”完全无感（文件名/时间篡改能静默还原成功）。 */
+    if (!opt.verifyOnly && !opt.skipPayloadVerify) {
+        ErrCode ce = checkWholePayload(archivePath, hdr);
+        if (DBKP_IS_ERR(ce)) {
+            m_errorText = "archive failed whole-volume integrity check, restore refused";
+            LOG_ERR(m_errorText + " (" + errCodeToString(ce) + ")");
+            return ce;
+        }
     }
 
     /* 目标目录：不存在则创建；存在且非空需要 --force（对应错误码 2） */
@@ -556,9 +648,13 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
 
     int64_t cur = static_cast<int64_t>(hdr.payloadOffset);
     if (hdr.payloadOffset != BLOCK_SIZE) {
-        e = in.seekTo(cur);
+        e = in.seekTo(static_cast<int64_t>(hdr.payloadOffset));
         if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
+        cur = static_cast<int64_t>(hdr.payloadOffset);
     }
+    /* readHeaderAt 已把文件游标移到卷标之后；载荷紧跟卷标，无需再定位 */
+    std::vector<uint8_t> block;
+    block.resize(BLOCK_SIZE);
     const int64_t payloadEnd = hdr.payloadSize > 0
         ? static_cast<int64_t>(hdr.payloadOffset + hdr.payloadSize) : -1;
 
@@ -634,15 +730,15 @@ ErrCode CMyPack::list(const std::string& archivePath, std::vector<FileRecord>& r
     CSimpleFile in;
     ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
     if (DBKP_IS_ERR(e)) return e;
-    std::vector<uint8_t> block;
-    block.resize(BLOCK_SIZE);
-    e = in.readN(block.data(), BLOCK_SIZE);
-    if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
     ArchiveHeader hdr;
-    e = decodeArchiveHeader(block.data(), hdr);
+    e = readHeaderAt(in, hdr);
     if (DBKP_IS_ERR(e)) return e;
+    if (hdr.payloadOffset != BLOCK_SIZE && DBKP_IS_ERR(in.seekTo(static_cast<int64_t>(hdr.payloadOffset))))
+        return E_TRUNCATED_ARCHIVE;
 
     CRecordReader reader;
+    std::vector<uint8_t> block;
+    block.resize(BLOCK_SIZE);
     for (;;) {
         e = in.readN(block.data(), BLOCK_SIZE);
         if (DBKP_IS_ERR(e)) break;
@@ -690,35 +786,9 @@ ErrCode CMyPack::verify(const std::string& archivePath, const std::string& passw
     ErrCode e = readHeader(archivePath, hdr);
     if (DBKP_IS_ERR(e)) return e;
 
-    /* 1) 整段载荷 CRC：任何单字节损坏（含头记录区）都会在这里暴露 */
-    if (hdr.checksum == CHK_CRC64 && hdr.payloadSize > 0) {
-        CSimpleFile in;
-        e = in.open(archivePath, CSimpleFile::MODE_READ);
-        if (DBKP_IS_ERR(e)) return e;
-        if (DBKP_IS_ERR(in.seekTo(static_cast<int64_t>(hdr.payloadOffset)))) return E_TRUNCATED_ARCHIVE;
-        CRC64 crc;
-        std::vector<uint8_t> buf;
-        buf.resize(64 * 1024);
-        uint64_t done = 0;
-        while (done < hdr.payloadSize) {
-            const int64_t want = static_cast<int64_t>(std::min<uint64_t>(
-                hdr.payloadSize - done, static_cast<uint64_t>(buf.size())));
-            ErrCode re = in.readN(buf.data(), want);
-            if (DBKP_IS_ERR(re)) {
-                LOG_ERR("archive truncated during checksum pass");
-                return E_TRUNCATED_ARCHIVE;
-            }
-            crc.update(buf.data(), static_cast<size_t>(want));
-            done += static_cast<uint64_t>(want);
-        }
-        if (crc.value() != hdr.payloadCrc) {
-            LOG_ERR("payload checksum mismatch: expect " + CRC64::toString(hdr.payloadCrc) +
-                    ", got " + CRC64::toString(crc.value()));
-            ++badCount;
-            return E_CHECKSUM_MISMATCH;
-        }
-        LOG_DEBUG("payload crc64 verified: " + CRC64::toString(crc.value()));
-    }
+    /* 1) 整段载荷校验（crc64 或 sha256）：任何单字节损坏（含记录区）都会在这里暴露 */
+    ErrCode pe = checkWholePayload(archivePath, hdr);
+    if (DBKP_IS_ERR(pe)) { ++badCount; return pe; }
 
     /* 2) 逐条解码并校验每个文件的 CRC64（不落盘） */
     UnpackOptions opt;

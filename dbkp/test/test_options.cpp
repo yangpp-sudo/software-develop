@@ -47,12 +47,17 @@ TEST(FilterOptions, TypeSpec) {
     EXPECT_TRUE(b.setTypeSpec("regular,dir"));
     EXPECT_EQ(b.typeAllow.size(), 2u);
 
+    FilterOptions e;
+    EXPECT_TRUE(e.setTypeSpec("reg"));            /* help 里举的别名，必须认 */
+    EXPECT_EQ(e.typeAllow.size(), 1u);
+
     FilterOptions c;
     EXPECT_FALSE(c.setTypeSpec(""));
 
     FilterOptions d;
-    EXPECT_TRUE(d.setTypeSpec("-bogus"));   /* 非法类型名被忽略，但语法合法 */
+    EXPECT_FALSE(d.setTypeSpec("-bogus"));        /* 未知类型名现在直接判错 */
     EXPECT_TRUE(d.typeDeny.empty());
+    EXPECT_TRUE(!d.lastError.empty());            /* 并给出可直接回显的原因 */
 }
 
 TEST(FilterOptions, DescribeAndIsEmpty) {

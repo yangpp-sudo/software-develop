@@ -37,6 +37,26 @@ private:
     uint32_t m_dec[60];
 };
 
+/* ------------------------------------------------------------- DES 原语 */
+/**
+ * 自实现 DES（FIPS 46-3）单分组 8 字节。课件《加密解密》第 6 章的 CDES 对应件，
+ * 但不依赖 OpenSSL：置换/S 盒均为标准表，用已知答案向量（KAT）验证正确性。
+ * 本项目的 DES-EDE-CBC(3DES) 即在其上按 E-K1 / D-K2 / E-K1 组配（两密钥，K3=K1）。
+ */
+class CDes {
+public:
+    static const int kBlockSize = 8;
+    static const int kKeySize   = 8;
+
+    explicit CDes(const uint8_t key[kKeySize]);
+
+    void encryptBlock(const uint8_t in[8], uint8_t out[8]) const;
+    void decryptBlock(const uint8_t in[8], uint8_t out[8]) const;
+
+private:
+    std::vector<uint8_t> m_subkeys[16];   /* 每轮 48 bit */
+};
+
 /* ------------------------------------------------------- ChaCha20 原语 */
 class CChaCha20 {
 public:
@@ -63,10 +83,15 @@ ErrCode ChaChaEncrypt(const uint8_t key[32], const uint8_t macKey[32],
                       const std::vector<uint8_t>& plain, std::vector<uint8_t>& cipher);
 ErrCode ChaChaDecrypt(const uint8_t key[32], const uint8_t macKey[32],
                       const std::vector<uint8_t>& cipher, std::vector<uint8_t>& plain);
+ErrCode DesEdeCbcEncrypt(const uint8_t key[32], const uint8_t macKey[32],
+                         const std::vector<uint8_t>& plain, std::vector<uint8_t>& cipher);
+ErrCode DesEdeCbcDecrypt(const uint8_t key[32], const uint8_t macKey[32],
+                         const std::vector<uint8_t>& cipher, std::vector<uint8_t>& plain);
 
 /** IDataCodec 工厂函数（被 CryptoFactory 调用） */
 IDataCodec* NewAesCbcCodec(const std::string& password, const uint8_t salt[16], int rounds);
 IDataCodec* NewChaCha20Codec(const std::string& password, const uint8_t salt[16], int rounds);
+IDataCodec* NewDesEdEcbcCodec(const std::string& password, const uint8_t salt[16], int rounds);
 IDataCodec* newXorTestCodec(const std::string& password);
 
 /** 供测试：由口令派生加密密钥与认证密钥 */

@@ -1,5 +1,5 @@
 /* ============================================================================
- *  CryptoCodecs.cpp  -- 把 AES / ChaCha20 / XOR 封装成统一的 IDataCodec
+ *  CryptoCodecs.cpp  -- 把 AES / ChaCha20 / DES-EDE / XOR 封装成统一的 IDataCodec
  * ==========================================================================*/
 #include "Codec/DataCodec.h"
 #include "Crypto/Algorithms.h"
@@ -25,14 +25,18 @@ public:
     std::string name() const override { return cryptoName(m_id); }
 
     ErrCode encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override {
-        return m_id == CRY_AES256_CBC ? AesCbcEncrypt(m_enc, m_mac, in, out)
-                                      : ChaChaEncrypt(m_enc, m_mac, in, out);
+        if (m_id == CRY_AES256_CBC) return AesCbcEncrypt(m_enc, m_mac, in, out);
+        if (m_id == CRY_DESEDE_CBC) return DesEdeCbcEncrypt(m_enc, m_mac, in, out);
+        return ChaChaEncrypt(m_enc, m_mac, in, out);
     }
     ErrCode decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override {
-        return m_id == CRY_AES256_CBC ? AesCbcDecrypt(m_enc, m_mac, in, out)
-                                      : ChaChaDecrypt(m_enc, m_mac, in, out);
+        if (m_id == CRY_AES256_CBC) return AesCbcDecrypt(m_enc, m_mac, in, out);
+        if (m_id == CRY_DESEDE_CBC) return DesEdeCbcDecrypt(m_enc, m_mac, in, out);
+        return ChaChaDecrypt(m_enc, m_mac, in, out);
     }
-    bool needsPaddedInput() const override { return m_id == CRY_AES256_CBC; }
+    bool needsPaddedInput() const override {
+        return m_id == CRY_AES256_CBC || m_id == CRY_DESEDE_CBC;
+    }
 
 private:
     CryptoId m_id;
@@ -110,6 +114,11 @@ IDataCodec* NewAesCbcCodec(const std::string& password, const uint8_t salt[16], 
 IDataCodec* NewChaCha20Codec(const std::string& password, const uint8_t salt[16], int rounds) {
     if (password.empty()) return nullptr;
     return new CCryptoCodec(CRY_CHACHA20, password, salt, rounds);
+}
+
+IDataCodec* NewDesEdEcbcCodec(const std::string& password, const uint8_t salt[16], int rounds) {
+    if (password.empty()) return nullptr;
+    return new CCryptoCodec(CRY_DESEDE_CBC, password, salt, rounds);
 }
 
 IDataCodec* newXorTestCodec(const std::string& password) {

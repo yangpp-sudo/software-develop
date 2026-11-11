@@ -149,7 +149,7 @@ bool FilterOptions::setTypeSpec(const std::string& spec) {
     struct TypeAlias { const char* text; char type; };
     static const TypeAlias kAliases[] = {
         { "r", FT_REGULAR }, { "regular", FT_REGULAR }, { "file", FT_REGULAR },
-        { "plain", FT_REGULAR },
+        { "reg", FT_REGULAR }, { "plain", FT_REGULAR },
         { "d", FT_DIR }, { "dir", FT_DIR }, { "directory", FT_DIR },
         { "l", FT_SYMLINK }, { "link", FT_SYMLINK }, { "symlink", FT_SYMLINK },
         { "h", FT_HARDLINK }, { "hard", FT_HARDLINK }, { "hardlink", FT_HARDLINK },
@@ -189,10 +189,16 @@ bool FilterOptions::setTypeSpec(const std::string& spec) {
         for (size_t k = 0; k < sizeof(kAliases) / sizeof(kAliases[0]); ++k) {
             if (tok == kAliases[k].text) { t = kAliases[k].type; break; }
         }
-        if (t == 0) { LOG_WARN("ignore unknown file type: " + items[i]); continue; }
+        if (t == 0) {
+            /* 未知类型名以前只告警并继续：配合 --type 做“排除式备份”时，
+               一个拼错的 token 会让整条过滤静默失效（help 自己举的 reg 就踩这个坑）。
+               现在直接判错，让调用方退出去改参数。 */
+            lastError = "unknown file type: " + items[i] +
+                        " (r/reg/regular/file, d/dir, l/link, h/hardlink, f/fifo, b, c, s)";
+            return false;
+        }
         if (std::find(bucket.begin(), bucket.end(), t) == bucket.end()) bucket.push_back(t);
     }
-    /* 语法正确即返回 true：非法类型名只告警并忽略（与 tar --exclude 的宽容一致） */
     return true;
 }
 

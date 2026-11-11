@@ -75,6 +75,7 @@ const char* cryptoName(CryptoId id) {
     case CRY_AES256_CBC: return "aes256-cbc";
     case CRY_CHACHA20:   return "chacha20";
     case CRY_XOR_TEST:   return "xor-test";
+    case CRY_DESEDE_CBC: return "des-ede-cbc";
     default:             return "none";
     }
 }
@@ -83,6 +84,8 @@ CryptoId cryptoFromName(const std::string& name) {
     if (name == "aes" || name == "aes256" || name == "aes256-cbc") return CRY_AES256_CBC;
     if (name == "chacha" || name == "chacha20")                    return CRY_CHACHA20;
     if (name == "xor")                                             return CRY_XOR_TEST;
+    if (name == "des" || name == "3des" || name == "des3" ||
+        name == "des-ede" || name == "des-ede-cbc" || name == "3des-cbc") return CRY_DESEDE_CBC;
     if (name == "none" || name.empty())                            return CRY_NONE;
     return CRY_NONE;
 }

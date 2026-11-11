@@ -26,12 +26,14 @@ ifeq ($(OS),Windows_NT)
   UNAME_S  :=
   EXE      := .exe
   PLAT_SRC := src/Platform/FS_win.cpp
+  WATCH_SRC := src/Backup/Watcher_win.cpp
   SYS_LIBS := -lws2_32
   MKDIR    = @if not exist "$(BIN)" mkdir "$(BIN)"
 else
   UNAME_S  := $(shell uname -s)
   EXE      :=
   MKDIR    = @mkdir -p $(BIN)
+  WATCH_SRC := src/Backup/Watcher_posix.cpp
   ifneq (,$(findstring Darwin,$(UNAME_S)))
     PLAT_SRC := src/Platform/FS_posix.cpp
     SYS_LIBS :=
@@ -41,11 +43,13 @@ else
   endif
 endif
 
-# ---- 源文件：自动收集，Platform 下按平台挑选 -------------------------------
+# ---- 源文件：自动收集，Platform/Backup 下按平台挑选 -------------------------------
 ALL_SRC   := $(wildcard src/*/*.cpp)
 PLAT_ALL  := src/Platform/FS_posix.cpp src/Platform/FS_win.cpp
-LIB_SRC   := $(filter-out $(PLAT_ALL), $(ALL_SRC))
+WATCH_ALL := src/Backup/Watcher_posix.cpp src/Backup/Watcher_win.cpp
+LIB_SRC   := $(filter-out $(PLAT_ALL) $(WATCH_ALL), $(ALL_SRC))
 LIB_SRC   += $(PLAT_SRC)
+LIB_SRC   += $(WATCH_SRC)
 CLI_SRC   := src/main.cpp
 SRV_SRC   := src/server_main.cpp
 TEST_SRC  := $(wildcard test/*.cpp)

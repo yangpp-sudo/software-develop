@@ -6,8 +6,15 @@
  *    POST   /api/login                {password} -> {token}
  *    GET    /api/config               默认参数（前端表单预填）
  *    GET    /api/browse?path=         列目录（限 dataRoot）
- *    GET    /api/stat?path=           读 .dbkp 归档头 + 统计
- *    POST   /api/jobs                 创建备份/还原/校验任务
+ *    GET    /api/stat?path=           读 .dbkp 归档头 + 统计（&entries=1 附条目清单，offset/limit 分页）
+ *    GET    /api/compare?archive=&origin=   归档 vs 源目录逐条回源比对（同步返回 diffCount）
+ *    POST   /api/schedule             启动定时备份 {source,destination,interval,times,keep,...}（全局单实例）
+ *    GET    /api/schedule             定时任务状态
+ *    POST   /api/schedule/stop        停止定时备份（当前这轮跑完后生效）
+ *    POST   /api/watch                启动实时备份监听 {source,destination,debounce,keep,...}（全局单实例）
+ *    GET    /api/watch                实时备份状态（已自动备份次数/最近归档/错误）
+ *    POST   /api/watch/stop           停止实时备份监听
+ *    POST   /api/jobs                 创建备份/还原/校验/对比任务
  *    GET    /api/jobs                 任务列表
  *    GET    /api/jobs/:id             任务详情（?log=1 附带最近日志）
  *    POST   /api/jobs/:id/cancel      取消任务

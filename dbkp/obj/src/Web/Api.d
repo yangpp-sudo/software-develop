@@ -4,7 +4,9 @@ obj/src/Web/Api.o: src/Web/Api.cpp include/Web/Api.h include/Web/Http.h \
  include/Backup/BackupEngine.h include/Enumerator/FilterOptions.h \
  include/Platform/FS.h include/Pack/MyPack.h include/Codec/DataCodec.h \
  include/Enumerator/FileEnumerator.h include/Utils/SimpleFile.h \
- include/Crypto/Sha256.h include/Utils/Logger.h include/Web/HttpServer.h
+ include/Backup/Scheduler.h include/Backup/Watcher.h \
+ include/Crypto/Sha256.h include/Utils/CRC64.h include/Utils/Logger.h \
+ include/Utils/PathUtil.h include/Web/HttpServer.h
 
 include/Web/Api.h:
 
@@ -36,8 +38,16 @@ include/Enumerator/FileEnumerator.h:
 
 include/Utils/SimpleFile.h:
 
+include/Backup/Scheduler.h:
+
+include/Backup/Watcher.h:
+
 include/Crypto/Sha256.h:
 
+include/Utils/CRC64.h:
+
 include/Utils/Logger.h:
+
+include/Utils/PathUtil.h:
 
 include/Web/HttpServer.h:

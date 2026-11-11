@@ -4,18 +4,26 @@
 #include "Web/Api.h"
 
 #include "Backup/BackupEngine.h"
+#include "Backup/Scheduler.h"
+#include "Backup/Watcher.h"
 #include "Crypto/Sha256.h"
 #include "Enumerator/FilterOptions.h"
 #include "Pack/MyPack.h"
 #include "Platform/FS.h"
+#include "Utils/CRC64.h"
 #include "Utils/Logger.h"
+#include "Utils/PathUtil.h"
 #include "Web/HttpServer.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
+#include <mutex>
 #include <thread>
 
 namespace DBKP {
@@ -161,21 +169,29 @@ void readStringArray(const CJsonValue& arr, std::vector<std::string>& out) {
             out.push_back(arr.items()[i].asString());
 }
 
+/** 正整数解析（id/分页参数共用）；非法返回 false，out 不会被写脏 */
+bool parseId(const std::string& text, long long& id) {
+    if (text.empty() || text.size() > 18) return false;
+    for (std::size_t i = 0; i < text.size(); ++i)
+        if (!std::isdigit(static_cast<unsigned char>(text[i]))) return false;
+    id = std::strtoll(text.c_str(), nullptr, 10);
+    return id > 0;
+}
+
 /* 过滤条件：与 CLI 的 6 个维度一一对应，前端表单直接送同名 JSON 字段。
    尺寸/时间沿用 FilterOptions 的人类可读解析（"10MB"/"7d"），
-   免得 Web 端和命令行出现两套语义。 */
-void applyFilterJson(const CJsonValue& f, FilterOptions& out) {
-    if (!f.isObject()) return;
+   免得 Web 端和命令行出现两套语义。返回 false 时 why 里是可直接回显的原因。 */
+bool applyFilterJson(const CJsonValue& f, FilterOptions& out, std::string& why) {
+    if (!f.isObject()) return true;
     readStringArray(f.at("includePaths"), out.includePaths);
     readStringArray(f.at("excludePaths"), out.excludePaths);
     readStringArray(f.at("nameGlobs"), out.nameGlobs);
     readStringArray(f.at("nameRejects"), out.nameRejects);
 
     const std::string allow = jsonStr(f, "typeAllow", "");
-    if (!allow.empty()) out.setTypeSpec(allow);
+    if (!allow.empty() && !out.setTypeSpec(allow)) { why = "typeAllow：" + out.lastError; return false; }
     const std::string deny = jsonStr(f, "typeDeny", "");
-    for (std::size_t i = 0; i < deny.size(); ++i)
-        if (deny[i] != ',') out.typeDeny.push_back(deny[i]);
+    if (!deny.empty() && !out.setTypeSpec(deny)) { why = "typeDeny：" + out.lastError; return false; }
 
     bool ok = false;
     const std::string minSize = jsonStr(f, "minSize", "");
@@ -192,6 +208,15 @@ void applyFilterJson(const CJsonValue& f, FilterOptions& out) {
     out.skipSpecials   = jsonBool(f, "skipSpecials", out.skipSpecials);
     out.includeDirs    = jsonBool(f, "includeDirs", out.includeDirs);
     out.maxDepth       = static_cast<int>(jsonInt(f, "maxDepth", out.maxDepth));
+    return true;
+}
+
+const char* checksumName(uint8_t id) {
+    switch (id) {
+    case CHK_CRC64:  return "crc64";
+    case CHK_SHA256: return "sha256";
+    default:         return "none";
+    }
 }
 
 bool parseChecksum(const std::string& name, ChecksumId& out) {
@@ -213,13 +238,14 @@ struct Spec {
     bool preserveMeta = true;
     bool verifyAfter = true;
     bool overwrite = false;
+    bool skipPayloadVerify = false;   /* 还原时跳过落盘前的整卷校验 */
     std::string password;
     std::string why;                    /* 解析失败原因，直接回给前端 */
 
     bool parse(const CJsonValue& body, const ApiContext& ctx) {
         type = jsonStr(body, "type", "backup");
-        if (type != "backup" && type != "restore" && type != "verify") {
-            why = "type 只能是 backup / restore / verify";
+        if (type != "backup" && type != "restore" && type != "verify" && type != "compare") {
+            why = "type 只能是 backup / restore / verify / compare";
             return false;
         }
         label = jsonStr(body, "label", "");
@@ -228,6 +254,14 @@ struct Spec {
         password = jsonStr(body, "password", "");
         if (source.empty()) { why = "source 不能为空"; return false; }
         if (type != "verify" && destination.empty()) { why = "destination 不能为空"; return false; }
+
+        /* uid/owner 过滤在 Windows 上没有真实语义，以前是静默丢弃：现在当场说清，
+           免得用户以为过滤生效了。POSIX 侧要支持的话应走 CLI 的 --uid/--owner。 */
+        const CJsonValue& fl = body.at("filter");
+        if (fl.isObject() && (fl.at("uids").isArray() || fl.at("ownerNames").isArray())) {
+            why = "uids/ownerNames 过滤目前仅命令行支持（--uid/--owner），Web 接口暂不受理";
+            return false;
+        }
 
         /* 路径沙箱：配了 dataRoot 就不许越界读写。pathWithinRoot 会顺便把相对
            路径按 dataRoot 解析、折叠 ".."，失败时 out 里仍是解析后的绝对路径，
@@ -250,7 +284,11 @@ struct Spec {
         else { why = "mode 只能是 auto / archive / copy"; return false; }
 
         filter = FilterOptions();
-        applyFilterJson(body.at("filter"), filter);
+        std::string whyFilter;
+        if (!applyFilterJson(body.at("filter"), filter, whyFilter)) {
+            why = "filter：" + whyFilter;
+            return false;
+        }
         pack.filter = filter;
 
         const std::string alg = jsonStr(body, "algorithm", ctx.defaultAlgorithm);
@@ -262,7 +300,7 @@ struct Spec {
         const std::string cry = jsonStr(body, "crypto", "none");
         pack.crypto = cryptoFromName(cry);
         if (cry != "none" && pack.crypto == CRY_NONE) {
-            why = "未知加密算法：" + cry + "（可选 none/aes256/chacha20）";
+            why = "未知加密算法：" + cry + "（可选 none/aes256/des-ede/chacha20/xor，xor 仅供教学演示）";
             return false;
         }
         if (pack.crypto != CRY_NONE && password.empty()) {
@@ -280,12 +318,15 @@ struct Spec {
         preserveMeta = pack.preserveMeta;
         verifyAfter = jsonBool(body, "verifyAfter", true);
         overwrite = jsonBool(body, "overwrite", false);
+        skipPayloadVerify = jsonBool(body, "skipPayloadVerify", false);
         if (label.empty()) label = type + ":" + source;
         return true;
     }
 
-    /* 备份看目标后缀、还原看来源后缀，和 CLI 判据完全一致 */
+    /* 备份看目标后缀、还原看来源后缀，和 CLI 判据完全一致；
+       compare 固定针对归档（目录对比走 verify 任务已有的 verifyCopy） */
     BackupMode resolve() const {
+        if (type == "compare") return MODE_ARCHIVE;
         return CBackupEngine::resolveMode(type == "backup" ? destination : source, mode);
     }
 };
@@ -326,6 +367,7 @@ CJobManager::Task makeTask(const Spec& spec) {
                 UnpackOptions u;
                 u.overwrite = s.overwrite;
                 u.restoreMeta = s.preserveMeta;
+                u.skipPayloadVerify = s.skipPayloadVerify;
                 u.password = s.password;
                 u.progress = &sink;
                 const ErrCode ec = pack.unpack(s.source, s.destination, u);
@@ -345,7 +387,23 @@ CJobManager::Task makeTask(const Spec& spec) {
         };
     }
 
-    /* verify：归档模式只验 CRC/解码，复制模式与源目录逐条对比 */
+    /* verify：归档模式只验 CRC/解码，复制模式与源目录逐条对比。
+       compare：归档 vs 原始目录逐条回源比对（内核早已实现，这里接上接口）。 */
+    if (s.type == "compare") {
+        return [s](IProgressSink& sink, std::string& msg) -> ErrCode {
+            (void)sink;
+            CMyPack pack;
+            int diff = 0;
+            const ErrCode ec = pack.compareWithSource(s.source, s.destination, s.password, diff);
+            if (ec == E_OK)
+                msg = diff == 0 ? "对比一致：归档与源目录逐条相同"
+                                : "发现 " + std::to_string(diff) + " 处差异（详见服务端日志）";
+            else
+                msg = pack.lastErrorText().empty() ? errCodeToString(ec) : pack.lastErrorText();
+            return ec;
+        };
+    }
+
     const bool archive = (bm == MODE_ARCHIVE);
     return [s, archive](IProgressSink& sink, std::string& msg) -> ErrCode {
         if (archive) {
@@ -458,7 +516,13 @@ CHttpResponse hConfig(ApiContext& ctx, const CHttpRequest& req) {
     cr["id"] = CJsonValue::makeString("aes256");  cr["name"] = CJsonValue::makeString("AES-256-CBC");
     cryptos.push_back(cr);
     cr = CJsonValue::makeObject();
+    cr["id"] = CJsonValue::makeString("des-ede"); cr["name"] = CJsonValue::makeString("DES-EDE-CBC(3DES)");
+    cryptos.push_back(cr);
+    cr = CJsonValue::makeObject();
     cr["id"] = CJsonValue::makeString("chacha20"); cr["name"] = CJsonValue::makeString("ChaCha20");
+    cryptos.push_back(cr);
+    cr = CJsonValue::makeObject();   /* 内核一直支持 xor（CRY_XOR_TEST），白名单补齐；仅教学演示 */
+    cr["id"] = CJsonValue::makeString("xor");     cr["name"] = CJsonValue::makeString("XOR（教学演示，勿用于生产）");
     cryptos.push_back(cr);
     d["cryptos"] = cryptos;
 
@@ -476,7 +540,8 @@ CHttpResponse hConfig(ApiContext& ctx, const CHttpRequest& req) {
 
     d["filterFields"] = CJsonValue::makeString(
         "includePaths,excludePaths,nameGlobs,nameRejects,typeAllow,typeDeny,"
-        "mtimeAfter,mtimeBefore,minSize,maxSize,maxDepth,followSymlinks,noCrossDevice,skipSpecials");
+        "mtimeAfter,mtimeBefore,minSize,maxSize,maxDepth,followSymlinks,noCrossDevice,"
+        "skipSpecials,includeDirs");
     return CHttpResponse::jsonOk(d);
 }
 
@@ -566,8 +631,13 @@ CHttpResponse hStat(ApiContext& ctx, const CHttpRequest& req) {
     CJsonValue d = CJsonValue::makeObject();
     d["path"] = CJsonValue::makeString(abs);
     d["formatVersion"] = CJsonValue::makeInt(hdr.version);
+    d["headerSize"] = CJsonValue::makeInt(hdr.headerSize);
     d["algorithm"] = CJsonValue::makeString(algorithmName(static_cast<AlgorithmId>(hdr.compAlg)));
     d["crypto"] = CJsonValue::makeString(cryptoName(static_cast<CryptoId>(hdr.cryptoAlg)));
+    /* 把校验类型原样告诉前端：以前选了 sha256 卷标里却只看得到 CRC，根本看不出差异 */
+    d["checksum"] = CJsonValue::makeString(checksumName(hdr.checksum));
+    if (hdr.checksum == CHK_SHA256 && !hdr.payloadDigest.empty())
+        d["payloadDigest"] = CJsonValue::makeString(CSha256::toHex(hdr.payloadDigest.data()));
     d["fileCount"] = CJsonValue::makeInt(static_cast<int64_t>(hdr.fileCount));
     d["rawBytes"] = CJsonValue::makeInt(static_cast<int64_t>(hdr.rawSize));
     d["storedBytes"] = CJsonValue::makeInt(static_cast<int64_t>(hdr.payloadSize));
@@ -581,15 +651,67 @@ CHttpResponse hStat(ApiContext& ctx, const CHttpRequest& req) {
     if (hdr.rawSize > 0)
         d["ratio"] = CJsonValue::makeDouble(static_cast<double>(hdr.payloadSize) /
                                             static_cast<double>(hdr.rawSize));
+
+    /* 条目清单：元数据早就在归档里，以前只是没地方看。默认不返（保持老
+       调用方轻量），带 ?entries=1 才附前 200 条，?offset/&limit 分页（上限 1000）。 */
+    if (req.query("entries", "0") != "0") {
+        std::vector<FileRecord> recs;
+        if (pack.list(abs, recs) == E_OK) {
+            long long off = 0, lim = 200;
+            if (!parseId(req.query("offset", ""), off)) off = 0;
+            if (!parseId(req.query("limit", ""), lim)) lim = 200;
+            if (lim > 1000) lim = 1000;
+            if (off < 0) off = 0;
+            CJsonValue arr = CJsonValue::makeArray();
+            for (long long i = off; i < static_cast<long long>(recs.size()) && i < off + lim; ++i) {
+                const FileRecord& r = recs[static_cast<size_t>(i)];
+                CJsonValue e = CJsonValue::makeObject();
+                e["path"] = CJsonValue::makeString(r.path);
+                e["type"] = CJsonValue::makeString(std::string(1, r.type));
+                e["size"] = CJsonValue::makeInt(r.size);
+                e["storedSize"] = CJsonValue::makeInt(r.storedSize);
+                e["mode"] = CJsonValue::makeInt(r.mode);
+                e["uid"] = CJsonValue::makeInt(r.uid);
+                e["gid"] = CJsonValue::makeInt(r.gid);
+                e["mtime"] = CJsonValue::makeInt(r.mtimeSec);
+                e["mtimeNs"] = CJsonValue::makeInt(r.mtimeNSec);
+                e["nlink"] = CJsonValue::makeInt(r.nlink);
+                e["algorithm"] = CJsonValue::makeString(algorithmName(static_cast<AlgorithmId>(r.compAlg)));
+                e["crypto"] = CJsonValue::makeString(cryptoName(static_cast<CryptoId>(r.cryptoAlg)));
+                e["crc64"] = CJsonValue::makeString(CRC64::toString(r.crc));
+                if (!r.link.empty()) e["link"] = CJsonValue::makeString(r.link);
+                arr.push_back(e);
+            }
+            d["entries"] = arr;
+            d["entriesTotal"] = CJsonValue::makeInt(static_cast<int64_t>(recs.size()));
+            d["entriesOffset"] = CJsonValue::makeInt(off);
+        }
+    }
     return CHttpResponse::jsonOk(d);
 }
 
-bool parseId(const std::string& text, long long& id) {
-    if (text.empty() || text.size() > 18) return false;
-    for (std::size_t i = 0; i < text.size(); ++i)
-        if (!std::isdigit(static_cast<unsigned char>(text[i]))) return false;
-    id = std::strtoll(text.c_str(), nullptr, 10);
-    return id > 0;
+/* 同步的“归档 vs 源目录”对比：内核循环在干小时级作业，不适合丢进任务队列
+   占 worker；前端本来就是“点一下等结果”，直接同步返回差异计数。 */
+CHttpResponse hCompare(ApiContext& ctx, const CHttpRequest& req) {
+    CHttpResponse denied;
+    if (authFailed(req, ctx, denied)) return denied;
+
+    std::string arcAbs, srcAbs;
+    if (!pathWithinRoot(ctx.dataRoot, req.query("archive", ""), arcAbs)
+        || !pathWithinRoot(ctx.dataRoot, req.query("origin", ""), srcAbs))
+        return CHttpResponse::jsonError(403, "archive/origin 必须都在数据根范围内", 403);
+
+    CMyPack pack;
+    int diff = 0;
+    const ErrCode ec = pack.compareWithSource(arcAbs, srcAbs, req.query("password", ""), diff);
+    if (DBKP_IS_ERR(ec))
+        return CHttpResponse::jsonError(ec,
+            pack.lastErrorText().empty() ? errCodeToString(ec) : pack.lastErrorText(), 400);
+    CJsonValue d = CJsonValue::makeObject();
+    d["archive"] = CJsonValue::makeString(arcAbs);
+    d["origin"] = CJsonValue::makeString(srcAbs);
+    d["diffCount"] = CJsonValue::makeInt(diff);
+    return CHttpResponse::jsonOk(d, diff == 0 ? "逐条一致" : ("发现 " + std::to_string(diff) + " 处差异"));
 }
 
 CHttpResponse hCreateJob(ApiContext& ctx, const CHttpRequest& req) {
@@ -781,6 +903,313 @@ CHttpResponse hShutdown(ApiContext& ctx, const CHttpRequest& req) {
     return CHttpResponse::jsonOk(CJsonValue(), "服务即将退出");
 }
 
+/* ------------------------------------------------------ 定时备份（后台单实例） */
+/* CScheduler 早就在内核里，但只有 CLI 能用；这里给它接上接口：全局只跑一个
+   定时器，用独立线程而非任务 worker（一次“每天 03:00”能挂几天，不能霸 worker）。 */
+struct ScheduleState {
+    std::mutex mtx;
+    std::atomic<bool> running;
+    std::atomic<bool> stopReq;
+    std::thread worker;
+    std::string source, archiveDir, prefix;
+    int intervalSeconds = 0, times = 0, keep = 0;
+    long long startedAt = 0;
+    std::string lastError;
+    ScheduleState() : running(false), stopReq(false) {}
+
+    ~ScheduleState() { joinQuietly(); }
+
+    void joinQuietly() {
+        stopReq.store(true);
+        if (worker.joinable()) worker.join();
+    }
+
+    CJsonValue snapshotLocked() {
+        CJsonValue d = CJsonValue::makeObject();
+        d["running"] = CJsonValue::makeBool(running.load());
+        d["source"] = CJsonValue::makeString(source);
+        d["archiveDir"] = CJsonValue::makeString(archiveDir);
+        d["prefix"] = CJsonValue::makeString(prefix);
+        d["intervalSeconds"] = CJsonValue::makeInt(intervalSeconds);
+        d["times"] = CJsonValue::makeInt(times);
+        d["keep"] = CJsonValue::makeInt(keep);
+        d["startedAt"] = CJsonValue::makeInt(startedAt);
+        d["lastError"] = CJsonValue::makeString(lastError);
+        return d;
+    }
+};
+ScheduleState g_schedule;
+
+CHttpResponse hScheduleStart(ApiContext& ctx, const CHttpRequest& req) {
+    CHttpResponse denied;
+    if (authFailed(req, ctx, denied)) return denied;
+
+    CJsonValue body;
+    std::string err;
+    if (!req.json(body, err))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "请求体不是合法 JSON：" + err, 400);
+
+    std::string src, dst;
+    if (!pathWithinRoot(ctx.dataRoot, jsonStr(body, "source", ""), src)
+        || !pathWithinRoot(ctx.dataRoot, jsonStr(body, "destination", ""), dst))
+        return CHttpResponse::jsonError(403, "source/destination 必须都在数据根范围内", 403);
+    if (Platform::exists(src) != E_OK)
+        return CHttpResponse::jsonError(E_SOURCE_NOT_FOUND, "源目录不存在：" + src, 400);
+
+    bool okInterval = false;
+    const int interval = CScheduler::parseInterval(jsonStr(body, "interval", "5m"), &okInterval);
+    if (!okInterval || interval <= 0)
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "interval 不合法（例 90s/5m/2h）", 400);
+
+    ScheduleOptions so;
+    so.intervalSeconds = interval;
+    so.times = static_cast<int>(jsonInt(body, "times", 3));
+    so.keep = static_cast<int>(jsonInt(body, "keep", 0));
+    so.prefix = jsonStr(body, "prefix", "");
+    so.archiveDir = dst;
+    so.backup.source = src;
+    so.backup.destination = dst;          /* times=1 时文件名兜底用；调度内部会用 makeArchiveName */
+    so.backup.mode = MODE_ARCHIVE;
+    so.backup.verifyAfter = jsonBool(body, "verifyAfter", true);
+    so.backup.pack.comp = algorithmFromName(jsonStr(body, "algorithm", ctx.defaultAlgorithm));
+    so.backup.pack.crypto = cryptoFromName(jsonStr(body, "crypto", "none"));
+    so.backup.pack.password = jsonStr(body, "password", "");
+    std::string whyFilter;
+    if (!applyFilterJson(body.at("filter"), so.backup.pack.filter, whyFilter))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "filter：" + whyFilter, 400);
+    ChecksumId cs = CHK_CRC64;
+    if (!parseChecksum(jsonStr(body, "checksum", "crc64"), cs))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "checksum 只能是 none/crc64/sha256", 400);
+    so.backup.pack.checksum = cs;
+    if (so.backup.pack.crypto != CRY_NONE && so.backup.pack.password.empty())
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "选择了加密算法但没有给密码", 400);
+
+    std::lock_guard<std::mutex> lk(g_schedule.mtx);
+    if (g_schedule.running.load())
+        return CHttpResponse::jsonError(E_ALREADY_EXISTS,
+                                        "已有定时任务在跑，先调 /api/schedule/stop", 409);
+    g_schedule.joinQuietly();             /* 回收上一轮已结束的线程 */
+
+    g_schedule.stopReq.store(false);
+    g_schedule.source = src;
+    g_schedule.archiveDir = dst;
+    g_schedule.prefix = so.prefix;
+    g_schedule.intervalSeconds = interval;
+    g_schedule.times = so.times;
+    g_schedule.keep = so.keep;
+    g_schedule.startedAt = nowSec();
+    g_schedule.lastError.clear();
+    g_schedule.running.store(true);
+    /* 线程自己把 running 拨回 false；主进程退出靠进程结束兑底（本机工具，不做强持久化） */
+    g_schedule.worker = std::thread([so]() {
+        CScheduler sched;
+        const ErrCode ec = sched.run(so, &g_schedule.stopReq);
+        std::lock_guard<std::mutex> lk2(g_schedule.mtx);
+        g_schedule.running.store(false);
+        if (DBKP_IS_ERR(ec)) g_schedule.lastError = errCodeToString(ec);
+    });
+    LOG_INFO("定时备份已启动：" + src + " 每 " + std::to_string(interval) + "s × " +
+             std::to_string(so.times) + " 次，保留 " + std::to_string(so.keep) + " 份");
+
+    CJsonValue d = g_schedule.snapshotLocked();
+    return CHttpResponse::jsonOk(d, "定时备份已启动");   /* worker 保持 joinable：跑完后再启动时先 join */
+}
+
+CHttpResponse hScheduleStatus(ApiContext& ctx, const CHttpRequest& req) {
+    CHttpResponse denied;
+    if (authFailed(req, ctx, denied)) return denied;
+    std::lock_guard<std::mutex> lk(g_schedule.mtx);
+    return CHttpResponse::jsonOk(g_schedule.snapshotLocked());
+}
+
+CHttpResponse hScheduleStop(ApiContext& ctx, const CHttpRequest& req) {
+    CHttpResponse denied;
+    if (authFailed(req, ctx, denied)) return denied;
+    std::lock_guard<std::mutex> lk(g_schedule.mtx);
+    if (!g_schedule.running.load() && !g_schedule.worker.joinable())
+        return CHttpResponse::jsonError(E_NOT_FOUND, "当前没有定时任务", 404);
+    g_schedule.stopReq.store(true);
+    return CHttpResponse::jsonOk(g_schedule.snapshotLocked(),
+                                 "已请求停止，定时备份会在当前这轮跑完后停下");
+}
+
+/* ------------------------------------------------------ 实时备份（后台单实例） */
+/* 把 CLI 的 bk watch 接上 Web：CDirWatcher 感知文件变化，上层 debounce 触发
+   一次全量归档。与定时备份同理用独立线程而非任务 worker（监听会长期挂）。 */
+struct WatchState {
+    std::mutex mtx;
+    std::atomic<bool> running;
+    std::atomic<bool> stopReq;
+    std::thread worker;
+    CDirWatcher* watcher = nullptr;
+    std::string source, archiveDir, prefix;
+    int debounceSeconds = 2, keep = 0;
+    bool native = false;
+    long long startedAt = 0;
+    long long backupCount = 0, failCount = 0;
+    std::string lastArchive, lastError;
+
+    WatchState() : running(false), stopReq(false) {}
+    ~WatchState() { shutdown(); }
+
+    /* 仅当 running==false（上一轮线程已退出）时调用：join 已结束的线程 + 销毁 watcher */
+    void shutdown() {
+        stopReq.store(true);
+        if (worker.joinable()) worker.join();
+        if (watcher) { watcher->stop(); delete watcher; watcher = nullptr; }
+    }
+
+    CJsonValue snapshotLocked() {
+        CJsonValue d = CJsonValue::makeObject();
+        d["running"] = CJsonValue::makeBool(running.load());
+        d["stopping"] = CJsonValue::makeBool(stopReq.load() && running.load());
+        d["native"] = CJsonValue::makeBool(native);
+        d["source"] = CJsonValue::makeString(source);
+        d["archiveDir"] = CJsonValue::makeString(archiveDir);
+        d["prefix"] = CJsonValue::makeString(prefix);
+        d["debounceSeconds"] = CJsonValue::makeInt(debounceSeconds);
+        d["keep"] = CJsonValue::makeInt(keep);
+        d["startedAt"] = CJsonValue::makeInt(startedAt);
+        d["backupCount"] = CJsonValue::makeInt(backupCount);
+        d["failCount"] = CJsonValue::makeInt(failCount);
+        d["lastArchive"] = CJsonValue::makeString(lastArchive);
+        d["lastError"] = CJsonValue::makeString(lastError);
+        return d;
+    }
+};
+WatchState g_watch;
+
+/* 工作线程主体：轮询 takeDirty() → debounce → 跑一次归档 + retention */
+static void watchWorkerLoop(BackupOptions base, std::string archiveDir, std::string prefix,
+                            int debounceSeconds, int keep) {
+    bool pending = false;
+    std::time_t pendingSince = 0;
+    while (!g_watch.stopReq.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        CDirWatcher* w = g_watch.watcher;
+        if (w && w->takeDirty()) {
+            if (!pending) { pending = true; pendingSince = std::time(nullptr); }
+        }
+        if (!pending) continue;
+        if (static_cast<int>(std::time(nullptr) - pendingSince) < debounceSeconds) continue;
+        pending = false;
+        const std::string archive = CScheduler::makeArchiveName(archiveDir, prefix);
+        BackupOptions each = base;
+        each.destination = archive;
+        CBackupEngine engine;
+        const ErrCode e = engine.run(each);
+        std::lock_guard<std::mutex> lk(g_watch.mtx);
+        if (DBKP_IS_ERR(e)) {
+            ++g_watch.failCount;
+            g_watch.lastError = engine.lastError();
+        } else {
+            ++g_watch.backupCount;
+            g_watch.lastArchive = archive;
+            g_watch.lastError.clear();
+            CScheduler::applyRetention(archiveDir, prefix, keep);
+        }
+    }
+    if (g_watch.watcher) g_watch.watcher->stop();   /* 停掉内部监听线程 */
+    std::lock_guard<std::mutex> lk(g_watch.mtx);
+    g_watch.running.store(false);
+}
+
+CHttpResponse hWatchStart(ApiContext& ctx, const CHttpRequest& req) {
+    CHttpResponse denied;
+    if (authFailed(req, ctx, denied)) return denied;
+    CJsonValue body;
+    std::string err;
+    if (!req.json(body, err))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "请求体不是合法 JSON：" + err, 400);
+
+    std::string src, dst;
+    if (!pathWithinRoot(ctx.dataRoot, jsonStr(body, "source", ""), src)
+        || !pathWithinRoot(ctx.dataRoot, jsonStr(body, "destination", ""), dst))
+        return CHttpResponse::jsonError(403, "source/destination 必须都在数据根范围内", 403);
+    if (Platform::exists(src) != E_OK)
+        return CHttpResponse::jsonError(E_SOURCE_NOT_FOUND, "源目录不存在：" + src, 400);
+
+    bool okDebounce = false;
+    const int debounce = CScheduler::parseInterval(jsonStr(body, "debounce", "2s"), &okDebounce);
+    if (!okDebounce || debounce < 0)
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "debounce 不合法（例 2s/1m）", 400);
+
+    std::lock_guard<std::mutex> lk(g_watch.mtx);
+    if (g_watch.running.load())
+        return CHttpResponse::jsonError(E_ALREADY_EXISTS, "已有实时备份在监听，先调 /api/watch/stop", 409);
+    g_watch.shutdown();                 /* 回收上一轮已结束的线程/watcher */
+
+    BackupOptions base;
+    base.source = src;
+    base.destination = dst;
+    base.mode = MODE_ARCHIVE;
+    base.verifyAfter = jsonBool(body, "verifyAfter", true);
+    base.pack.comp = algorithmFromName(jsonStr(body, "algorithm", ctx.defaultAlgorithm));
+    base.pack.crypto = cryptoFromName(jsonStr(body, "crypto", "none"));
+    base.pack.password = jsonStr(body, "password", "");
+    base.password = base.pack.password;
+    std::string whyFilter;
+    if (!applyFilterJson(body.at("filter"), base.pack.filter, whyFilter))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "filter：" + whyFilter, 400);
+    ChecksumId cs = CHK_CRC64;
+    if (!parseChecksum(jsonStr(body, "checksum", "crc64"), cs))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "checksum 只能是 none/crc64/sha256", 400);
+    base.pack.checksum = cs;
+    if (base.pack.crypto != CRY_NONE && base.pack.password.empty())
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER, "选择了加密算法但没有给密码", 400);
+
+    std::string prefix = jsonStr(body, "prefix", "");
+    if (prefix.empty()) prefix = Path::fileName(Path::normalize(src));
+    if (prefix.empty() || prefix == ".") prefix = "backup";
+    if (DBKP_IS_ERR(Platform::exists(dst))) Platform::makeDirTree(dst);
+
+    /* 同步启动 watcher：目录不合法立即报错返回，不放进线程 */
+    CDirWatcher* w = new CDirWatcher();
+    const ErrCode we = w->start(src);
+    if (DBKP_IS_ERR(we)) {
+        const std::string msg = w->lastError();
+        delete w;
+        return CHttpResponse::jsonError(we, "启动监听失败：" + msg, 400);
+    }
+    g_watch.watcher = w;
+    g_watch.source = src;
+    g_watch.archiveDir = dst;
+    g_watch.prefix = prefix;
+    g_watch.debounceSeconds = debounce > 0 ? debounce : 2;
+    g_watch.keep = static_cast<int>(jsonInt(body, "keep", 0));
+    g_watch.native = w->nativeEventDriven();
+    g_watch.startedAt = nowSec();
+    g_watch.backupCount = 0;
+    g_watch.failCount = 0;
+    g_watch.lastArchive.clear();
+    g_watch.lastError.clear();
+    g_watch.stopReq.store(false);
+    g_watch.running.store(true);
+
+    g_watch.worker = std::thread(watchWorkerLoop, base, dst, prefix, g_watch.debounceSeconds, g_watch.keep);
+    LOG_INFO("实时备份已启动：" + src + " -> " + dst + " [" +
+             (g_watch.native ? "原生事件" : "轮询") + "]");
+    return CHttpResponse::jsonOk(g_watch.snapshotLocked(), "实时备份监听已启动");
+}
+
+CHttpResponse hWatchStatus(ApiContext& ctx, const CHttpRequest& req) {
+    CHttpResponse denied;
+    if (authFailed(req, ctx, denied)) return denied;
+    std::lock_guard<std::mutex> lk(g_watch.mtx);
+    return CHttpResponse::jsonOk(g_watch.snapshotLocked());
+}
+
+CHttpResponse hWatchStop(ApiContext& ctx, const CHttpRequest& req) {
+    CHttpResponse denied;
+    if (authFailed(req, ctx, denied)) return denied;
+    std::lock_guard<std::mutex> lk(g_watch.mtx);
+    if (!g_watch.running.load() && !g_watch.worker.joinable())
+        return CHttpResponse::jsonError(E_NOT_FOUND, "当前没有实时备份在监听", 404);
+    g_watch.stopReq.store(true);
+    return CHttpResponse::jsonOk(g_watch.snapshotLocked(),
+                                 "已请求停止，监听会在当前这轮备份后退出");
+}
+
 } /* anonymous namespace */
 
 /* ------------------------------------------------------------ 令牌/路径 */
@@ -828,6 +1257,15 @@ void registerApiRoutes(CRouter& router, ApiContext& ctx) {
     router.get("/api/config", [&ctx](const CHttpRequest& req) { return hConfig(ctx, req); });
     router.get("/api/browse", [&ctx](const CHttpRequest& req) { return hBrowse(ctx, req); });
     router.get("/api/stat", [&ctx](const CHttpRequest& req) { return hStat(ctx, req); });
+    router.get("/api/compare", [&ctx](const CHttpRequest& req) { return hCompare(ctx, req); });
+
+    router.post("/api/schedule", [&ctx](const CHttpRequest& req) { return hScheduleStart(ctx, req); });
+    router.get("/api/schedule", [&ctx](const CHttpRequest& req) { return hScheduleStatus(ctx, req); });
+    router.post("/api/schedule/stop", [&ctx](const CHttpRequest& req) { return hScheduleStop(ctx, req); });
+
+    router.post("/api/watch", [&ctx](const CHttpRequest& req) { return hWatchStart(ctx, req); });
+    router.get("/api/watch", [&ctx](const CHttpRequest& req) { return hWatchStatus(ctx, req); });
+    router.post("/api/watch/stop", [&ctx](const CHttpRequest& req) { return hWatchStop(ctx, req); });
 
     router.post("/api/jobs", [&ctx](const CHttpRequest& req) { return hCreateJob(ctx, req); });
     router.get("/api/jobs", [&ctx](const CHttpRequest& req) { return hListJobs(ctx, req); });

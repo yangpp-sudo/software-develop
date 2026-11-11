@@ -17,7 +17,7 @@ const src = m[1];
 
 const mkEl = () => ({
   textContent: '', value: '', innerHTML: '', checked: false, dataset: {}, style: {},
-  classList: { add() {}, remove() {}, contains: () => true },
+  classList: { add() {}, remove() {}, toggle() {}, contains: () => true },
   appendChild() {}, querySelectorAll: () => [], querySelector: () => null,
   addEventListener() {}, focus() {},
 });

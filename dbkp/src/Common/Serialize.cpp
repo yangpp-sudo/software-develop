@@ -67,12 +67,16 @@ void zeroBlock(uint8_t* block) { std::memset(block, 0, BLOCK_SIZE); }
 
 /* ------------------------------------------------------ 归档卷标 */
 ErrCode encodeArchiveHeader(const ArchiveHeader& hdr, std::vector<uint8_t>& out512) {
-    out512.assign(BLOCK_SIZE, 0);
+    /* sha256 归档带第二块（存整卷摘要）；其余模式维持旧布局 512B，
+       新旧归档在 payloadOffset / headerSize 两个字段里自描述，读取端不需要版本判断。 */
+    const bool withDigest = hdr.checksum == CHK_SHA256;
+    const size_t total = withDigest ? ARCHIVE_HEADER_EXT : BLOCK_SIZE;
+    out512.assign(total, 0);
     uint8_t* p = out512.data();
     BlockWriter w{p};
     w.u32(0,  hdr.magic);
     w.u16(4,  hdr.version);
-    w.u16(6,  hdr.headerSize);
+    w.u16(6,  static_cast<uint16_t>(total));   /* headerSize 与实际写出长度一致 */
     w.u8 (8,  hdr.compAlg);
     w.u8 (9,  hdr.cryptoAlg);
     w.u8 (10, hdr.checksum);
@@ -90,10 +94,23 @@ ErrCode encodeArchiveHeader(const ArchiveHeader& hdr, std::vector<uint8_t>& out5
     w.u16(88, uint16_t(hdr.comment.size() > 160 ? 160 : hdr.comment.size()));
     w.raw(90, hdr.sourcePath, 256);   /* 90..345  */
     w.raw(346, hdr.comment, 166);     /* 346..511 */
+    if (withDigest) {
+        /* 扩展块（文件偏移 512..1023）：前 4 字节写幻数（和第一块同一个
+           ARCHIVE_MAGIC，供读取端识别“这确实是摘要块而非数据块”），
+           紧接的 32 字节才是整卷 SHA-256 摘要。 */
+        uint8_t* e = p + BLOCK_SIZE;
+        e[0] = static_cast<uint8_t>(ARCHIVE_MAGIC & 0xFF);
+        e[1] = static_cast<uint8_t>((ARCHIVE_MAGIC >> 8) & 0xFF);
+        e[2] = static_cast<uint8_t>((ARCHIVE_MAGIC >> 16) & 0xFF);
+        e[3] = static_cast<uint8_t>((ARCHIVE_MAGIC >> 24) & 0xFF);
+        const size_t n = hdr.payloadDigest.size() < ARCHIVE_DIGEST_SIZE
+                       ? hdr.payloadDigest.size() : ARCHIVE_DIGEST_SIZE;
+        if (n) std::memcpy(e + 4, hdr.payloadDigest.data(), n);
+    }
     return E_OK;
 }
 
-ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr) {
+ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr, const uint8_t* ext512) {
     if (readLE32(in512) != ARCHIVE_MAGIC) return E_INVALID_HEADER_RECORD;
     hdr.magic         = readLE32(in512 + 0);
     hdr.version       = readLE16(in512 + 4);
@@ -116,6 +133,12 @@ ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr) {
     if (srcLen > 256 || comLen > 166) return E_INVALID_HEADER_RECORD;
     hdr.sourcePath.assign(reinterpret_cast<const char*>(in512 + 90), srcLen);
     hdr.comment.assign(reinterpret_cast<const char*>(in512 + 346), comLen);
+    hdr.payloadDigest.clear();
+    if (hdr.checksum == CHK_SHA256) {
+        if (!ext512) return E_INVALID_HEADER_RECORD;   /* 声明了 sha256 却没给扩展块：卷标不完整 */
+        if (readLE32(ext512) != ARCHIVE_MAGIC) return E_INVALID_HEADER_RECORD; /* 幻数回显，防把数据块当摘要块 */
+        hdr.payloadDigest.assign(ext512 + 4, ext512 + 4 + ARCHIVE_DIGEST_SIZE);
+    }
     return E_OK;
 }
 

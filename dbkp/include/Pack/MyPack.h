@@ -42,6 +42,7 @@ struct UnpackOptions {
     bool        overwrite  = false;       /* 目标非空时是否继续 */
     bool        verifyOnly = false;       /* 只校验不落盘 */
     bool        restoreMeta = true;
+    bool        skipPayloadVerify = false;/* 跳过落盘前的整卷校验（大归档赶时间时用） */
     std::string password;
     /* 解包过程中的软失败计数（特殊文件在无权限时降级为告警） */
     int         warnings = 0;
@@ -82,6 +83,11 @@ private:
     };
 
     ErrCode writeRecord(CSimpleFile& out, const FileRecord& rec);
+    /** 读卷标（含 sha256 归档的摘要扩展块）：readHeader/unpack/list 共用 */
+    ErrCode readHeaderAt(CSimpleFile& in, ArchiveHeader& hdr);
+    /** 整卷校验（CRC64 或 SHA-256，按卷标里的 checksum 字段选择）：
+        verify 的第一步与 restore 落盘前的前置检查共用，不再各写一遍 */
+    ErrCode checkWholePayload(const std::string& archivePath, const ArchiveHeader& hdr);
     ErrCode writeFileData(CSimpleFile& out, const std::string& absPath, FileRecord& rec,
                           IDataCodec* comp, IDataCodec* crypto, const PackOptions& opt);
     ErrCode readDataBlocks(CSimpleFile& in, const FileRecord& rec,

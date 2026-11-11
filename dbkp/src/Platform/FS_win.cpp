@@ -63,7 +63,11 @@ static FileTypeTag typeFromAttrs(DWORD attr, const std::wstring& wpath) {
             CloseHandle(h);
             if (ok && ret >= 4) {
                 DWORD tag = *reinterpret_cast<DWORD*>(buf);
-                if (tag == IO_REPARSE_TAG_SYMLINK) return FT_SYMLINK;
+                /* F1：junction（IO_REPARSE_TAG_MOUNT_POINT）与符号链接同类，
+                   都必须判成 FT_SYMLINK——以前落到下面被按 FILE_ATTRIBUTE_DIRECTORY
+                   误判成 FT_DIR，枚举器直接下探，围栏与环检测全部形同虚设。 */
+                if (tag == IO_REPARSE_TAG_SYMLINK ||
+                    tag == IO_REPARSE_TAG_MOUNT_POINT) return FT_SYMLINK;
             }
         }
         return (attr & FILE_ATTRIBUTE_DIRECTORY) ? FT_DIR : FT_SYMLINK;
@@ -142,28 +146,41 @@ ErrCode readLink(const std::string& path, std::string& target) {
     CloseHandle(h);
     if (!ok || ret < 8) return E_UNSUPPORTED_FEATURE;
 
-    /* 手工解析 REPARSE_DATA_BUFFER，避免依赖不同 SDK 版本的结构体定义 */
+    /* 手工解析 REPARSE_DATA_BUFFER，避免依赖不同 SDK 版本的结构体定义。
+       统一尾部布局（symlink 与 mount point/junction 完全一致）：
+         p+0  ReparseTag(4)  p+4 ReparseDataLength(2)  p+6 Reserved(2)
+         data=p+8：SubstituteNameOffset(2) SubstituteNameLength(2)
+                    PrintNameOffset(2)    PrintNameLength(2)
+         pathBuf=data+8：实际宽字符名（偏移相对 pathBuf 起算）
+       F1 之前 junction 被误判成 FT_DIR，本函数从不在 junction 上被调用，
+       旧实现把字段基址错写成 data+ReparseDataLength，解析恒为空。现按规范
+       修正，link 目标得以还原——环检测（修法②）与 restore link 校验（修法④）
+       都依赖它。 */
     const uint8_t* p = buf;
     DWORD tag = *reinterpret_cast<const DWORD*>(p);
-    uint16_t sub = *reinterpret_cast<const uint16_t*>(p + 4);
-    const uint8_t* data = p + 8;
-    std::wstring wname;
-    if (tag == IO_REPARSE_TAG_SYMLINK) {
-        uint16_t printOff = *reinterpret_cast<const uint16_t*>(data + sub);
-        uint16_t printLen = *reinterpret_cast<const uint16_t*>(data + sub + 2);
-        wname.assign(reinterpret_cast<const wchar_t*>(data + sub + 4 + printOff),
-                     printLen / 2);
-    } else if (tag == IO_REPARSE_TAG_MOUNT_POINT) {
-        uint16_t tOff = *reinterpret_cast<const uint16_t*>(data + sub);
-        uint16_t tLen = *reinterpret_cast<const uint16_t*>(data + sub + 2);
-        wname.assign(reinterpret_cast<const wchar_t*>(data + sub + 4 + tOff), tLen / 2);
-        if (wname.size() >= 4 && wname.compare(0, 4, L"\\??\\") == 0) wname = wname.substr(4);
-    } else {
+    if (tag != IO_REPARSE_TAG_SYMLINK && tag != IO_REPARSE_TAG_MOUNT_POINT)
         return E_UNSUPPORTED_FEATURE;
+    if (ret < 16) return E_UNSUPPORTED_FEATURE;
+    const uint8_t* data = p + 8;
+    const size_t pathBufAvail = ret - 16;   /* pathBuf 起（p+16）到缓冲区末尾的字节数 */
+    const uint8_t* pathBuf = data + 8;
+    uint16_t subOff = *reinterpret_cast<const uint16_t*>(data + 0);
+    uint16_t subLen = *reinterpret_cast<const uint16_t*>(data + 2);
+    uint16_t priOff = *reinterpret_cast<const uint16_t*>(data + 4);
+    uint16_t priLen = *reinterpret_cast<const uint16_t*>(data + 6);
+    std::wstring wname;
+    /* 优先 SubstituteName（真实目标）；为空时退回 PrintName（展示名）。 */
+    if (subLen > 0 && size_t(subOff) + subLen <= pathBufAvail) {
+        wname.assign(reinterpret_cast<const wchar_t*>(pathBuf + subOff), subLen / 2);
+    } else if (priLen > 0 && size_t(priOff) + priLen <= pathBufAvail) {
+        wname.assign(reinterpret_cast<const wchar_t*>(pathBuf + priOff), priLen / 2);
     }
+    /* junction 的 SubstituteName 常带 \??\ 设备前缀，去掉它得到可读路径 */
+    if (wname.size() >= 4 && wname.compare(0, 4, L"\\??\\") == 0) wname = wname.substr(4);
     std::string raw = Path::wideToUtf8(wname);
     for (size_t i = 0; i < raw.size(); ++i) if (raw[i] == '\\') raw[i] = '/';
     target = raw;
+    if (target.empty()) return E_UNSUPPORTED_FEATURE;
     return E_OK;
 }
 
@@ -258,6 +275,28 @@ ErrCode currentDir(std::string& out) {
 ErrCode canonicalPath(const std::string& path, std::string& out) {
     std::wstring wp = Path::apiWide(path);
     std::vector<wchar_t> buf(8192);
+    /* F1：存在的路径优先做"真实解析"——GetFinalPathNameByHandleW 会把
+       junction/symlink 链一直展开到最终位置；纯词法绝对化（GetFullPathNameW）
+       看不见链接，正是 data-root 围栏被绕过的根源。打不开（不存在/无权限）
+       时退回词法结果，保持"不存在的路径也能规范化"的原有能力。 */
+    HANDLE hLink = CreateFileW(wp.c_str(), FILE_READ_ATTRIBUTES,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+                               nullptr);
+    if (hLink != INVALID_HANDLE_VALUE) {
+        DWORD fn = GetFinalPathNameByHandleW(hLink, buf.data(), DWORD(buf.size()),
+                                             VOLUME_NAME_DOS | FILE_NAME_NORMALIZED);
+        CloseHandle(hLink);
+        if (fn > 0 && fn < buf.size()) {
+            std::wstring s(buf.data(), fn);
+            if (s.size() >= 8 && s.compare(0, 8, L"\\\\?\\UNC\\") == 0) s = L"\\\\" + s.substr(8);
+            else if (s.size() >= 4 && s.compare(0, 4, L"\\\\?\\") == 0) s = s.substr(4);
+            std::string u8 = Path::wideToUtf8(s);
+            for (size_t i = 0; i < u8.size(); ++i) if (u8[i] == '\\') u8[i] = '/';
+            out = u8;
+            return E_OK;
+        }
+    }
     DWORD n = GetFullPathNameW(wp.c_str(), DWORD(buf.size()), buf.data(), nullptr);
     if (n == 0 || n >= buf.size()) return E_INVALID_PARAMETER;
     std::wstring s(buf.data(), n);

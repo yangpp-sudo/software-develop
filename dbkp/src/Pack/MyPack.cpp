@@ -426,6 +426,16 @@ ErrCode CMyPack::restoreEntry(const std::string& targetDir, const FileRecord& re
 
     if (rec.type == FT_SYMLINK) {
         if (opt.verifyOnly) return E_OK;
+        /* F1 修法第 4 点（F21）：归档里的 link 目标同样是不可信输入。
+           绝对路径（"C:/x"、"/x"、"\\server\x"）或含 ".." 的相对值一旦照建，
+           还原出的链接就能把后续读写引到目标目录之外。path 字段早就有
+           isPathTraversalSafe 把关，link 字段以前是"任意值照建"。 */
+        if (!Path::isPathTraversalSafe(rec.link)) {
+            LOG_ERR("unsafe link target in archive (refused): " + rec.path +
+                    " -> " + rec.link);
+            ++opt.warnings;
+            return E_INVALID_PARAMETER;
+        }
         if (!parent.empty()) Platform::makeDirTree(parent);
         if (!Platform::supportsSymlink()) {
             LOG_WARN("symbolic links unsupported here, skip: " + rec.path);

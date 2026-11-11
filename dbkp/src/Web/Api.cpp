@@ -101,7 +101,42 @@ bool makeAbsolute(const std::string& in, std::string& out) {
     return true;
 }
 
-/* 看起来就是绝对路径：'/' 开头（含 //server/share 这类 UNC）或 "X:" 盘符 */
+/* F1 修法第 3 点：把"词法意义上的绝对路径"换成"真实路径"。
+   沿父链上溯到最近的存在祖先，用 canonicalPath（Windows 走
+   GetFinalPathNameByHandleW，POSIX 走 realpath）把 junction/symlink 链
+   全部展开，再把尚不存在的尾部拼回去。纯词法比较看得见 ".."，看不见
+   链接：data-root 里放一个指向围栏外的 junction，字符串检查会一路放行，
+   browse/restore 就从围栏里"名正言顺"地钻出去。失败返回 false，
+   调用方退回原有的词法比较。 */
+bool resolveRealPath(const std::string& absCollapsed, std::string& out) {
+    std::string cur = absCollapsed;
+    std::string rest;
+    for (;;) {
+        if (cur.empty()) return false;
+        if (Platform::exists(cur) == E_OK) {
+            std::string real;
+            if (DBKP_IS_ERR(Platform::canonicalPath(cur, real)) || real.empty())
+                return false;
+            const bool trailing = real[real.size() - 1] == '/';
+            out = rest.empty() ? real
+                : (trailing ? real + rest : real + "/" + rest);
+            /* 盘根解析结果带尾斜杠（"d:/"）；统一去掉，交给调用方的
+               "根 + '/'" 拼接规则，避免 "d:" + "/" 变 "d://" 全部误拒。 */
+            while (out.size() > 1 && out[out.size() - 1] == '/')
+                out.erase(out.size() - 1);
+            return true;
+        }
+        const std::size_t slash = cur.find_last_of('/');
+        if (slash == std::string::npos) return false;   /* 不该有相对路径进来 */
+        const std::string last = cur.substr(slash + 1);
+        if (!last.empty()) rest = rest.empty() ? last : (last + "/" + rest);
+        std::string parent = (slash == 0) ? std::string("/") : cur.substr(0, slash);
+        if (parent.size() == 2 && parent[1] == ':') parent += '/';  /* "c:" -> "c:/" */
+        if (parent == cur) return false;
+        cur = parent;
+    }
+}
+
 bool looksAbsolute(const std::string& slashed) {
     return !slashed.empty() &&
            (slashed[0] == '/' || (slashed.size() >= 2 && slashed[1] == ':'));
@@ -1241,8 +1276,21 @@ bool pathWithinRoot(const std::string& root, const std::string& path, std::strin
     if (root.empty()) return true;                     /* 未设根目录 = 不限制 */
     std::string absRoot;
     if (!makeAbsolute(root, absRoot)) return false;
-    const std::string a = lowerIfWin(absRoot);
-    const std::string b = lowerIfWin(resolved);
+
+    /* F1 修法第 3 点：词法折叠只防得住 ".."，防不住 data-root 里放的
+       junction/symlink——字符串上"在根内"，真实位置在根外。browse/
+       backup/restore/stat 全部走这一关，所以比较时两侧都解析成真实路径；
+       任一解析失败（盘符/根不存在等）退回词法值。回显 resolved 保持词法
+       结果不变：合法路径词法即真实，含"仍在根内"的 junction 时按词法路径
+       操作也不越界，而越界的已在下面被拒。 */
+    std::string cmpRoot = absRoot, cmpPath = resolved;
+    std::string realRoot, realPath;
+    if (resolveRealPath(absRoot, realRoot)) {
+        cmpRoot = realRoot;
+        if (resolveRealPath(resolved, realPath)) cmpPath = realPath;
+    }
+    const std::string a = lowerIfWin(cmpRoot);
+    const std::string b = lowerIfWin(cmpPath);
     if (a == b) return true;
     const std::string withSlash = a == "/" ? a : a + "/";
     return b.compare(0, withSlash.size(), withSlash) == 0;

@@ -30,7 +30,8 @@ public:
     /** "5m"/"2h"/"90s"/"300" -> 秒；非法返回 -1 */
     static int parseInterval(const std::string& text, bool* okOut = nullptr);
 
-    /** 生成 <prefix>-YYYYmmdd-HHMMSS.dbkp 形式的路径 */
+    /** 生成 <prefix>-YYYYmmdd-HHMMSS-mmm.dbkp 形式的路径（F11：毫秒段 +
+        同毫秒冲突时 -xN 计数后缀，保证同秒双写得到两个不同名箱） */
     static std::string makeArchiveName(const std::string& dir, const std::string& prefix);
 
     /** 按名称时间序删除最旧的归档，只保留最近 keep 份，返回删除数量 */

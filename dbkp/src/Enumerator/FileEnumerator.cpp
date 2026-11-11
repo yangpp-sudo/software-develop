@@ -10,6 +10,20 @@
 
 namespace DBKP {
 
+bool CFileEnumerator::isExcluded(const std::string& absPath) const {
+    if (m_excludedAbs.empty()) return false;
+#if defined(DBKP_OS_WINDOWS)
+    /* Windows 文件系统不区分大小写：判重时做大小写无关比较 */
+    for (std::set<std::string>::const_iterator it = m_excludedAbs.begin();
+         it != m_excludedAbs.end(); ++it) {
+        if (Path::iequals(Path::normalize(*it), Path::normalize(absPath))) return true;
+    }
+    return false;
+#else
+    return m_excludedAbs.count(Path::normalize(absPath)) != 0;
+#endif
+}
+
 ErrCode CFileEnumerator::enumerateFiles(const std::string& rootPath,
                                        const FilterOptions& filter,
                                        std::vector<EnumeratedEntry>& out) {
@@ -63,6 +77,14 @@ ErrCode CFileEnumerator::traverseDir(const std::string& absDir,
         const std::string absChild = absDir + "/" + de.name;
         const std::string relChild = (relDir == "." || relDir.empty())
                                    ? de.name : relDir + "/" + de.name;
+
+        /* F9：归档目标（dest / dest.tmp）落在源目录内时必须整体跳过——
+           既不入档也不下探，否则"箱里套箱"每轮体积翻倍、永远备不完。 */
+        if (isExcluded(absChild)) {
+            LOG_INFO("excluded (archive target inside source): " + relChild);
+            ++m_filtered;
+            continue;
+        }
 
         Platform::FileInfo fi;
         ErrCode ge = Platform::getInfo(absChild, fi, false);   /* 关键：不跟随链接 */

@@ -21,7 +21,15 @@ public:
     explicit CSimpleFile(const std::string& path) { open(path, MODE_READ); }
     ~CSimpleFile();
 
-    enum OpenMode { MODE_READ, MODE_WRITE_NEW, MODE_WRITE_APPEND, MODE_READ_WRITE };
+    enum OpenMode {
+        MODE_READ,
+        MODE_WRITE_NEW,
+        MODE_WRITE_APPEND,
+        MODE_READ_WRITE,
+        MODE_READ_WRITE_CREATE  /* F4：O_RDWR|O_CREAT 但不 O_TRUNC——
+                                   先建/开文件→加跨进程锁→再显式截断，
+                                   杜绝两个进程在 open 与 lock 之间互相截尾 */
+    };
 
     ErrCode open(const std::string& path, OpenMode mode);
     ErrCode close();

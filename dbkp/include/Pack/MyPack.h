@@ -35,6 +35,7 @@ struct PackOptions {
     bool          preserveMeta   = true;  /* 元数据备份与恢复 */
     int64_t       codecThreshold = 256ll * 1024 * 1024; /* 超过则直存，避免爆内存 */
     std::string   comment;
+    bool          force = false;          /* F4：目标已存在/残留 .tmp 时覆盖清理 */
     IProgressSink* progress = nullptr;   /* Web/守护进程用；CLI 保持 nullptr */
 };
 

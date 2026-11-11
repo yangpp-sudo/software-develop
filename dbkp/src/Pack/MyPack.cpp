@@ -83,6 +83,24 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     m_errorText.clear();
     if (sourceDir.empty() || archivePath.empty()) return E_INVALID_PARAMETER;
 
+    /* ---------------- F4：原子写前置检查 ----------------
+       正式箱从头到尾不被就地改写：所有内容由 "<archive>.tmp" 承载，写完整、
+       校验通过后才 rename 替换正式名。tmp 同时就是"进行中"标记（F6b）：
+       启动时它还在，说明上次备份被打断/杀死，必须显式 --force 才继续。 */
+    const std::string tmpPath = archivePath + ".tmp";
+
+    if (Platform::exists(archivePath) == E_OK && !opt.force) {
+        m_errorText = "archive already exists: " + archivePath + " (use --force to overwrite)";
+        LOG_ERR(m_errorText);
+        return E_ALREADY_EXISTS;
+    }
+    if (Platform::exists(tmpPath) == E_OK && !opt.force) {
+        m_errorText = "previous backup incomplete (temp file present): " + tmpPath +
+                      " (use --force to discard it and retry)";
+        LOG_ERR(m_errorText);
+        return E_INCOMPLETE;
+    }
+
     std::unique_ptr<IDataCodec> comp(makeComp(opt.comp, m_errorText));
     if (!comp && opt.comp != ALG_NONE) { LOG_ERR(m_errorText); return E_INVALID_PARAMETER; }
 
@@ -97,8 +115,19 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
         makeCrypto(opt.crypto, opt.password, salt, kdfRounds, m_errorText));
     if (!crypto && opt.crypto != CRY_NONE) { LOG_ERR(m_errorText); return E_INVALID_PARAMETER; }
 
-    /* 1. 先序枚举（含根目录自身 "."） */
+    /* 1. 先序枚举（含根目录自身 "."）。
+       F9：归档目标（含 .tmp）若落在源目录内，必须从扫描中排除——否则下一轮
+       备份会把上一轮的箱装进箱里，体积逐轮膨胀且永远备不完。 */
     CFileEnumerator enumerator;
+    {
+        std::set<std::string> excluded;
+        std::string canon;
+        if (DBKP_IS_ERR(Platform::canonicalPath(archivePath, canon))) canon = archivePath;
+        excluded.insert(Path::normalize(canon));
+        if (DBKP_IS_ERR(Platform::canonicalPath(tmpPath, canon))) canon = tmpPath;
+        excluded.insert(Path::normalize(canon));
+        enumerator.setExcludedAbsPaths(excluded);
+    }
     std::vector<EnumeratedEntry> entries;
     ErrCode e = enumerator.enumerateFiles(sourceDir, opt.filter, entries);
     if (DBKP_IS_ERR(e)) return e;
@@ -116,14 +145,51 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     if (DBKP_IS_ERR(Platform::canonicalPath(sourceDir, absSource)))
         absSource = Path::normalize(sourceDir);
 
-    /* 2. 卷标占位，最后回填计数与 CRC */
+    /* 2. 卷标占位，最后回填计数与 CRC —— 全部写进 tmp 文件。
+       打开顺序刻意设计为"无 O_TRUNC 打开 → 加跨进程独占锁 → 显式截断"：
+       两个进程同时备份同一目标时，后到者在锁上失败（E_BUSY），
+       绝不会出现互相将对方刚写的数据截掉的情况（F4 验收①）。
+       残留的旧 tmp 不需要先删：拿到锁后 truncate(0) 就把它洗干净了，
+       而"先删后开"在 Windows 上会连带删掉别人正在写的句柄，是错误做法。 */
     CSimpleFile out;
-    e = out.open(archivePath, CSimpleFile::MODE_READ_WRITE);
+    e = out.open(tmpPath, CSimpleFile::MODE_READ_WRITE_CREATE);
     if (DBKP_IS_ERR(e)) {
-        m_errorText = "cannot create archive: " + archivePath;
+        m_errorText = "cannot create archive temp: " + tmpPath;
         LOG_ERR(m_errorText);
         return e;
     }
+    e = Platform::tryLockFile(out.fd());
+    if (DBKP_IS_ERR(e)) {
+        out.close();
+        m_errorText = "archive is locked by another backup process: " + archivePath;
+        LOG_ERR(m_errorText);
+        return e;
+    }
+    e = Platform::truncateFile(out.fd(), 0);
+    if (DBKP_IS_ERR(e)) {
+        Platform::unlockFile(out.fd());
+        out.close();
+        Platform::removeFile(tmpPath);
+        m_errorText = "cannot reset archive temp: " + tmpPath;
+        LOG_ERR(m_errorText);
+        return e;
+    }
+
+    /* 安全垫：rename 提交之前任何提前 return（错误/取消）都清掉 tmp，
+       绝不在正式名旁留下残骸（F4/F6b 验收"正式名下无残骸"）。
+       Windows 上删除仍被句柄打开的文件会失败，所以先显式 close（幂等），
+       锁也随句柄关闭自动释放。 */
+    struct TmpGuard {
+        const std::string& m_tmp;
+        CSimpleFile* m_out;
+        bool m_committed = false;
+        ~TmpGuard() {
+            if (m_committed) return;
+            m_out->close();
+            if (Platform::exists(m_tmp) == E_OK) Platform::removeFile(m_tmp);
+        }
+    };
+    TmpGuard tmpGuard = { tmpPath, &out };
 
     ArchiveHeader hdr;
     hdr.compAlg   = static_cast<uint8_t>(comp ? opt.comp : ALG_NONE);
@@ -140,7 +206,13 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     std::vector<uint8_t> block;
     encodeArchiveHeader(hdr, block);
     e = out.writeN(block.data(), static_cast<int64_t>(block.size()));
-    if (DBKP_IS_ERR(e)) { m_errorText = "write archive header failed"; return e; }
+    if (DBKP_IS_ERR(e)) {
+        m_errorText = "write archive header failed";
+        LOG_ERR(m_errorText);
+        out.close();
+        Platform::removeFile(tmpPath);
+        return e;
+    }
 
     /* 3. 逐条：数据块在前、头记录在后？ 统一为"头记录 + 数据块"，与讲义一致 */
     m_inodeMap.clear();
@@ -197,10 +269,10 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
         if ((i + 1) % 1024 == 0) LOG_INFO("packed " + std::to_string(i + 1) + " entries");
     }
 
-    /* 取消：删掉半成品，绝不留一个"看起来成功"的归档（失败必须显式） */
+    /* 取消：close 释放锁，tmpGuard 删掉半成品——正式名下的旧箱纹丝不动，
+       也绝不留一个"看起来成功"的归档（失败必须显式）。 */
     if (canceled) {
         out.close();
-        Platform::removeFile(archivePath);
         m_errorText = "backup canceled by user";
         LOG_WARN(m_errorText);
         return E_CANCELED;
@@ -241,13 +313,59 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     encodeArchiveHeader(hdr, block);
     out.seekTo(0);
     e = out.writeN(block.data(), static_cast<int64_t>(block.size()));
-    if (DBKP_IS_ERR(e)) { m_errorText = "rewrite archive header failed"; return e; }
+    if (DBKP_IS_ERR(e)) {
+        m_errorText = "rewrite archive header failed";
+        LOG_ERR(m_errorText);
+        out.close();
+        Platform::removeFile(tmpPath);
+        return e;
+    }
     ErrCode fe = out.flush();
     ErrCode ce = out.close();
+    /* 锁随 close 释放；此后 tmp 已完整落盘，正式名仍未被动过 */
+    if (DBKP_IS_ERR(fe) || DBKP_IS_ERR(ce)) {
+        m_errorText = "failed to finalize archive temp: " + tmpPath;
+        LOG_ERR(m_errorText);
+        Platform::removeFile(tmpPath);
+        return DBKP_IS_ERR(fe) ? fe : ce;
+    }
+
+    /* 5. F4 提交前自校验：tmp 写完立刻按正式归档标准 verify 一遍，
+       校验不过绝不 rename——保证正式名下永远只有"完整且自洽"的箱。 */
+    {
+        ArchiveHeader vh;
+        ErrCode ve = readHeader(tmpPath, vh);
+        if (DBKP_IS_ERR(ve)) {
+            m_errorText = "archive temp header invalid before commit";
+            LOG_ERR(m_errorText);
+            Platform::removeFile(tmpPath);
+            return ve;
+        }
+        ve = checkWholePayload(tmpPath, vh);
+        if (DBKP_IS_ERR(ve)) {
+            m_errorText = "archive temp failed self-verify before commit";
+            LOG_ERR(m_errorText);
+            Platform::removeFile(tmpPath);
+            return ve;
+        }
+    }
+
+    /* 6. 原子替换：MoveFileEx(REPLACE_EXISTING) / rename()。
+       崩溃/kill 只可能发生在 rename 前（旧箱完好）或 rename 后（新箱完好），
+       不存在"半新半旧"的中间态。 */
+    e = Platform::renameFile(tmpPath, archivePath);
+    if (DBKP_IS_ERR(e)) {
+        m_errorText = "atomic rename failed: " + tmpPath + " -> " + archivePath;
+        LOG_ERR(m_errorText);
+        Platform::removeFile(tmpPath);
+        return e;
+    }
+    tmpGuard.m_committed = true;   /* 提交成功，残骸清理责任解除 */
+
     LOG_INFO("archive written: " + std::to_string(fileCount) + " entries, " +
              std::to_string(rawTotal) + " -> " + std::to_string(storedTotal) +
              " bytes (payload " + std::to_string(payloadBytes) + ")");
-    return DBKP_IS_ERR(fe) ? fe : ce;
+    return E_OK;
 }
 
 /* ------------------------------------------------------------ 写一条记录 */
@@ -537,6 +655,15 @@ ErrCode CMyPack::readHeader(const std::string& archivePath, ArchiveHeader& hdr) 
 
 /* -------------------------------------------------------- 整卷校验辅助 */
 ErrCode CMyPack::checkWholePayload(const std::string& archivePath, const ArchiveHeader& hdr) {
+    /* F6b：payloadSize==0 但记录区声称有条目——这是"空壳箱"（半成品/人造残骸），
+       以前直接返回 E_OK 让 verify 绿灯通过，现在必须拒绝。
+       判据取 recordCount 与 fileCount 任一非零：正常备份哪怕源目录为空，
+       也至少有根目录 "." 一条记录，两者同时为 0 的箱只可能是空卷标。 */
+    if (hdr.payloadSize == 0 && (hdr.recordCount != 0 || hdr.fileCount != 0)) {
+        LOG_ERR("archive declares " + std::to_string(hdr.recordCount) +
+                " record(s) but carries an empty payload (incomplete archive)");
+        return E_TRUNCATED_ARCHIVE;
+    }
     if (hdr.checksum == CHK_NONE || hdr.payloadSize == 0) return E_OK;
     CSimpleFile in;
     ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
@@ -789,6 +916,15 @@ ErrCode CMyPack::stat(const std::string& archivePath, ArchiveHeader& hdr, Archiv
 /* ------------------------------------------------------------ 校验 */
 ErrCode CMyPack::verify(const std::string& archivePath, const std::string& password, int& badCount) {
     badCount = 0;
+    /* F6b：正式箱旁边若还留着 .tmp，说明上一次备份没有走到 rename 提交
+       （被打断/杀死/崩溃）。tmp 即天然进行中标记，这里只报告不删除，
+       删除责任在 pack --force，避免两套清理机制互相误删。 */
+    if (Platform::exists(archivePath + ".tmp") == E_OK) {
+        LOG_ERR("temp file present next to archive, previous backup did not finish: " +
+                archivePath + ".tmp");
+        ++badCount;
+        return E_INCOMPLETE;
+    }
     ArchiveHeader hdr;
     ErrCode e = readHeader(archivePath, hdr);
     if (DBKP_IS_ERR(e)) return e;

@@ -335,6 +335,34 @@ int64_t fileSizeOf(int fd) {
     return static_cast<int64_t>(st.st_size);
 }
 
+/* ------------------------------------------------- 跨进程文件锁（F4） */
+ErrCode tryLockFile(int fd) {
+    /* flock 锁的是"打开文件描述"：同一文件不同 open() 得到的 fd 之间互斥，
+       跨进程与同进程多线程两个层面都覆盖（与 Windows LockFileEx 口径一致）。 */
+    for (;;) {
+        if (::flock(fd, LOCK_EX | LOCK_NB) == 0) return E_OK;
+        if (errno == EINTR) continue;
+        if (errno == EWOULDBLOCK || errno == EAGAIN) return E_BUSY;
+        return E_FILE_OPEN_FAIL;
+    }
+}
+
+void unlockFile(int fd) {
+    for (;;) {
+        if (::flock(fd, LOCK_UN) == 0) return;
+        if (errno != EINTR) return;
+    }
+}
+
+ErrCode truncateFile(int fd, int64_t size) {
+    for (;;) {
+        if (::ftruncate(fd, static_cast<off_t>(size)) == 0) return E_OK;
+        if (errno == EINTR) continue;
+        if (errno == ENOSPC) return E_NOT_ENOUGH_SPACE;
+        return E_FILE_WRITE_FAIL;
+    }
+}
+
 /* ------------------------------------------------------------- 能力查询 */
 bool supportsSymlink()    { return true; }
 bool supportsHardlink()   { return true; }

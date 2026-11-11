@@ -45,9 +45,24 @@ std::string CScheduler::makeArchiveName(const std::string& dir, const std::strin
 #else
     localtime_r(&now, &tmv);
 #endif
-    char stamp[32];
+    /* F11：秒级时间戳会让同一秒内的两次备份互相顶名（调度器/守护进程/
+       手工双开都会撞上）。补毫秒，并在名字已占用时递增计数后缀 -1、-2…，
+       保证同秒双写产生两个不同名箱；字典序仍≈时间序，保留策略不受影响。 */
+    const long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count() % 1000;
+    char stamp[48];
     std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &tmv);
-    std::string name = prefix + "-" + stamp + DEFAULT_ARCHIVE_SUFFIX;
+    std::string stem = prefix + "-" + stamp;
+    char tail[8];
+    std::snprintf(tail, sizeof(tail), "%03ld", ms);
+    stem += std::string("-") + tail;   /* 毫秒段：同秒不同毫秒直接分开 */
+    std::string name = stem + DEFAULT_ARCHIVE_SUFFIX;
+    for (int dup = 1; dup < 1000; ++dup) {
+        if (Platform::exists(Path::join(dir, name)) != E_OK) break;   /* 未占用 */
+        char suffix[16];
+        std::snprintf(suffix, sizeof(suffix), "-x%d", dup);
+        name = stem + suffix + DEFAULT_ARCHIVE_SUFFIX;
+    }
     return Path::join(dir, name);
 }
 

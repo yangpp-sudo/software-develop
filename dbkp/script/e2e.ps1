@@ -76,7 +76,7 @@ function Case($name, $backupArgs, $restoreArgs, $verifyArgs, $allowMissing, $exp
     Write-Host ("=== " + $name + " ===")
     New-Tree "tsrc"
     if (Test-Path "tout") { Remove-Item -Recurse -Force "tout" }
-    & $BK backup tsrc out.dbkp @backupArgs -q
+    & $BK backup tsrc out.dbkp @backupArgs --force -q
     if ($LASTEXITCODE -ne 0) { Write-Host ("  FAIL backup rc=" + $LASTEXITCODE); $script:fail++; return }
     # 先断言归档条目数：否则过滤用例可能"0 条目也算 PASS"（空断言）
     $script:lastArchiveFiles = Get-EntryCount "out.dbkp" $false
@@ -224,7 +224,7 @@ else {
 
 Write-Host "=== wrong password rejection ==="
 New-Tree "tsrc"
-& $BK backup tsrc out.dbkp -c aes256 -p rightpass -q | Out-Null
+& $BK backup tsrc out.dbkp -c aes256 -p rightpass --force -q | Out-Null
 if (Test-Path "tout") { Remove-Item -Recurse -Force "tout" }
 & $BK restore out.dbkp tout --force -p wrongpass -q 2>$null
 if ($LASTEXITCODE -ne 0) { Write-Host ("  PASS rejected rc=" + $LASTEXITCODE); $script:pass++ }

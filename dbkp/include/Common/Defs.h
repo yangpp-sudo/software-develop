@@ -132,6 +132,8 @@ enum ErrCode : int {
     E_NOT_FOUND             = 20,
     E_INTERNAL              = 21,
     E_CANCELED              = 22,  /* 用户/服务端主动取消（Web 任务取消） */
+    E_BUSY                  = 23,  /* F4：目标正被另一进程写入（跨进程文件锁占用中） */
+    E_INCOMPLETE            = 24,  /* F6b：目标旁残留 .tmp，上次备份未完成 */
     E_UNKNOWN               = 127,
 };
 

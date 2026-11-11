@@ -70,6 +70,7 @@ void printUsage() {
         "  --uid N | --owner NAME       owner filter\n"
         "  --follow-symlink --no-cross-device --max-depth N --skip-special\n"
         "  --no-hardlink --no-meta --copy --archive --no-verify\n"
+        "  --force             目标归档已存在或存在未完成残骸(.tmp)时覆盖重写（F4）\n"
         "  --max-depth 口径同 find -maxdepth：根目录下的条目算第 1 层\n"
         "schedule options: --every T --times N --keep M --prefix P\n"
         "global switches:  -v debug log | -q quiet | -h help\n",
@@ -142,6 +143,7 @@ int cmdBackup(int argc, char** argv) {
         else if (a == "--max-depth") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.maxDepth = std::atoi(v.c_str()); }
         else if (a == "--no-hardlink") opt.hardlinkDedupe = false;
         else if (a == "--no-meta")     opt.preserveMeta = false;
+        else if (a == "--force")       opt.force = true;   /* F4：覆盖已存在目标/清残骸 */
         else if (a == "--copy")        forceCopy = true;
         else if (a == "--archive")     forceArchive = true;
         else if (a == "--no-verify")   noVerify = true;

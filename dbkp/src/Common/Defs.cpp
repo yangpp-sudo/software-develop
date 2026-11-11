@@ -30,6 +30,8 @@ const char* errCodeToString(ErrCode code) {
     case E_NOT_FOUND:               return "not found";
     case E_INTERNAL:                return "internal error";
     case E_CANCELED:                return "operation canceled";
+    case E_BUSY:                    return "target is locked by another backup process";
+    case E_INCOMPLETE:              return "previous backup incomplete (temp file left behind)";
     default:                        return "unknown error";
     }
 }

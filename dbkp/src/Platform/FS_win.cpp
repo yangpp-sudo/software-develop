@@ -418,6 +418,34 @@ int64_t fileSizeOf(int fd) {
     return end;
 }
 
+/* ------------------------------------------------- 跨进程文件锁（F4） */
+ErrCode tryLockFile(int fd) {
+    /* LockFileEx 锁的是"文件句柄"而非进程：同进程两个句柄、跨进程句柄
+       都会互相冲突，正好同时满足清单要求的"进程内 + 跨进程"两层锁。
+       FAIL_IMMEDIATELY：拿不到立刻返回，绝不阻塞 UI/守护线程。 */
+    HANDLE h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+    if (h == INVALID_HANDLE_VALUE) return E_FILE_OPEN_FAIL;
+    OVERLAPPED ov;
+    std::memset(&ov, 0, sizeof(ov));
+    /* 锁 1 字节偏移 0：整文件独占。解锁/关闭句柄时系统自动释放。 */
+    if (LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                   0, 1, 0, &ov))
+        return E_OK;
+    return E_BUSY;
+}
+
+void unlockFile(int fd) {
+    HANDLE h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+    if (h == INVALID_HANDLE_VALUE) return;
+    OVERLAPPED ov;
+    std::memset(&ov, 0, sizeof(ov));
+    UnlockFileEx(h, 0, 1, 0, &ov);
+}
+
+ErrCode truncateFile(int fd, int64_t size) {
+    return _chsize_s(fd, size) == 0 ? E_OK : E_FILE_WRITE_FAIL;
+}
+
 /* ------------------------------------------------------------- 能力查询 */
 bool supportsSymlink()    { return true;   /* 需开发者模式或管理员权限 */ }
 bool supportsHardlink()   { return true; }

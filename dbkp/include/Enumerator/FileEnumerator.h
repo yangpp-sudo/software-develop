@@ -54,11 +54,17 @@ public:
     /** 单项 stat 失败（权限/竞态）时的策略：true=中止，false=记为错误并继续 */
     void setStrict(bool strict) { m_strict = strict; }
 
+    /** F9：扫描时跳过这些绝对路径（调用方传入已规范化/normalize 的路径）。
+     *  用于排除落在源目录内部的归档目标（dest 与 dest.tmp），防止递归膨胀。 */
+    void setExcludedAbsPaths(const std::set<std::string>& paths) { m_excludedAbs = paths; }
+
 private:
     bool shouldDescend(const std::string& relDir, int depth,
                        const FilterOptions& filter, const Platform::FileInfo& fi) const;
+    bool isExcluded(const std::string& absPath) const;
 
     std::set<std::string> m_visitedDirs;   /* 跟随符号链接时的环检测 */
+    std::set<std::string> m_excludedAbs;   /* F9：显式排除的绝对路径 */
     uint32_t m_rootDev = 0;
     bool     m_rootDevValid = false;
     bool     m_strict = false;

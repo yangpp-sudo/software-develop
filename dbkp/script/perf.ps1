@@ -43,7 +43,7 @@ $totalRaw = (Get-ChildItem src -File | Measure-Object Length -Sum).Sum
 
 $rows = @()
 foreach ($cfg in @('none', 'huffman', 'lz77', 'lzhuff', 'rle')) {
-    $t = TimeIt { & $BK backup src "p.dbkp" -a $cfg -q }
+    $t = TimeIt { & $BK backup src "p.dbkp" -a $cfg --force -q }
     $stored = (Get-Item "p.dbkp").Length
     $t2 = TimeIt { & $BK restore "p.dbkp" out --force -q }
     Remove-Item -Recurse -Force out -EA SilentlyContinue
@@ -52,14 +52,14 @@ foreach ($cfg in @('none', 'huffman', 'lz77', 'lzhuff', 'rle')) {
         backupMBs = [Math]::Round($totalRaw / 1MB / $t, 1); restoreMBs = [Math]::Round($totalRaw / 1MB / $t2, 1) }
 }
 foreach ($cfg in @('aes256', 'chacha20')) {
-    $t = TimeIt { & $BK backup src "p.dbkp" -a none -c $cfg -p 'S3cret!' -q }
+    $t = TimeIt { & $BK backup src "p.dbkp" -a none -c $cfg -p 'S3cret!' --force -q }
     $t2 = TimeIt { & $BK restore "p.dbkp" out --force -p 'S3cret!' -q }
     Remove-Item -Recurse -Force out -EA SilentlyContinue
     $rows += [pscustomobject]@{ algo = "none+$cfg"; backupSec = [Math]::Round($t, 2);
         restoreSec = [Math]::Round($t2, 2); storedMB = [Math]::Round((Get-Item "p.dbkp").Length / 1MB, 1);
         backupMBs = [Math]::Round($totalRaw / 1MB / $t, 1); restoreMBs = [Math]::Round($totalRaw / 1MB / $t2, 1) }
 }
-$t = TimeIt { & $BK backup src "p.dbkp" -a huffman -c aes256 -p 'S3cret!' -q }
+$t = TimeIt { & $BK backup src "p.dbkp" -a huffman -c aes256 -p 'S3cret!' --force -q }
 $rows += [pscustomobject]@{ algo = 'huffman+aes256'; backupSec = [Math]::Round($t, 2);
     restoreSec = 0; storedMB = [Math]::Round((Get-Item "p.dbkp").Length / 1MB, 1);
     backupMBs = [Math]::Round($totalRaw / 1MB / $t, 1); restoreMBs = 0 }

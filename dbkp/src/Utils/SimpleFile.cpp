@@ -18,6 +18,7 @@ static int toNativeFlags(CSimpleFile::OpenMode mode) {
     case CSimpleFile::MODE_WRITE_NEW:    flags = O_WRONLY | O_CREAT | O_TRUNC; break;
     case CSimpleFile::MODE_WRITE_APPEND: flags = O_WRONLY | O_CREAT | O_APPEND; break;
     case CSimpleFile::MODE_READ_WRITE:   flags = O_RDWR | O_CREAT | O_TRUNC; break;
+    case CSimpleFile::MODE_READ_WRITE_CREATE: flags = O_RDWR | O_CREAT; break;
     }
 #if defined(DBKP_OS_WINDOWS)
     flags |= O_BINARY;

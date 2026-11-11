@@ -90,6 +90,22 @@ int   closeNative(int fd);
 int   fsyncNative(int fd);
 int64_t fileSizeOf(int fd);
 
+/* ------------------------------------------------- 跨进程文件锁（F4） */
+/**
+ * @brief 对已打开的文件描述符尝试加独占锁（非阻塞）。
+ *        Windows: LockFileEx(FAIL_IMMEDIATELY)；POSIX: flock(LOCK_EX|LOCK_NB)。
+ * @return E_OK 加锁成功；E_BUSY 已被其它进程持有；其它 = 平台错误
+ */
+ErrCode tryLockFile(int fd);
+/** 释放 tryLockFile 持有的锁（进程退出时系统兜底回收，但正常路径显式解锁） */
+void    unlockFile(int fd);
+/**
+ * @brief F4：把已打开文件截断/置为指定长度（配合"先无 O_TRUNC 打开→加锁→
+ *        再截断"的顺序，避免两个进程在 open 与 lock 之间互相截掉对方数据）。
+ *        Windows: _chsize_s；POSIX: ftruncate（EINTR 重试）。
+ */
+ErrCode truncateFile(int fd, int64_t size);
+
 /* ------------------------------------------------------------- 属主解析 */
 ErrCode uidToName(uint32_t uid, std::string& name);
 ErrCode nameToUid(const std::string& name, uint32_t& uid);

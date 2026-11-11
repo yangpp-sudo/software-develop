@@ -353,6 +353,9 @@ struct Spec {
         preserveMeta = pack.preserveMeta;
         verifyAfter = jsonBool(body, "verifyAfter", true);
         overwrite = jsonBool(body, "overwrite", false);
+        /* F4：与 CLI --force 双侧同口径——请求体 force 布尔字段，缺省 false。
+           目标已存在或残留 .tmp 时拒绝备份，force=true 才覆盖/清残骸。 */
+        pack.force = jsonBool(body, "force", false);
         skipPayloadVerify = jsonBool(body, "skipPayloadVerify", false);
         if (label.empty()) label = type + ":" + source;
         return true;

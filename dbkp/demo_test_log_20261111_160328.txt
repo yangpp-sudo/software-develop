@@ -1,0 +1,9 @@
+T1   selftest                               [PASS] exit=0
+T2   backup -> archive                      [PASS] exit=0 size=81920
+T3   list shows entries                     [PASS] exit=0
+T4   verify archive                         [PASS] exit=0
+T5   restore + sha256 match                 [PASS] exit=0 readme=True data=True note=True empty=True
+T6   compare box vs source                  [PASS] exit=0
+T7   encrypted wrong/right pw               [PASS] bk=0 wrongpw_exit=1 rightpw_exit=0 data_ok=True
+T8   tampered box detected                  [PASS] exit=1 (expect != 0)
+T9   plain dir copy mode                    [PASS] exit=0 data_ok=True

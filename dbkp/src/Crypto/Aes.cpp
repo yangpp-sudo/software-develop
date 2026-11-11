@@ -9,9 +9,22 @@
 
 #include <cstring>
 #include <ctime>
+#include <stdexcept>
 
 #include "Common/Serialize.h"
 #include "Crypto/Sha256.h"
+#include "Platform/Compat.h"      /* DBKP_OS_WINDOWS / DBKP_OS_POSIX 平台宏 */
+
+#if defined(DBKP_OS_WINDOWS)
+#  include <windows.h>
+#  include <bcrypt.h>             /* F3：BCryptGenRandom（系统首选 CSPRNG） */
+#else
+#  include <errno.h>
+#  if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
+#    define DBKP_HAS_GETRANDOM 1  /* glibc >= 2.25 */
+#    include <sys/random.h>
+#  endif
+#endif
 
 namespace DBKP {
 
@@ -147,18 +160,43 @@ static bool readBlobHeader(const std::vector<uint8_t>& in, uint16_t magic,
     return Crypto::readCipherHeader(in, magic, rawLen, start);
 }
 
+/* F3 修复：原实现是 time()+栈地址播种的 xorshift，IV/nonce/salt 可预测。
+ * 现改为 OS 原生密码学强随机源，接口签名保持不变：
+ *   Windows: BCryptGenRandom(BCRYPT_USE_SYSTEM_PREFERRED_RNG)（链接 bcrypt）
+ *   POSIX:   getrandom()（glibc>=2.25），否则读 /dev/urandom 并检查返回值
+ * 取不到系统随机字节时直接抛异常失败，绝不静默退回弱随机。 */
 void fillRandom(uint8_t* out, std::size_t n) {
-    static uint64_t s_state = 0;
-    if (s_state == 0) {
-        s_state = static_cast<uint64_t>(std::time(nullptr)) * 0x9E3779B97F4A7C15ull ^
-                  (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(out)) << 1);
+    if (n == 0) return;
+#if defined(DBKP_OS_WINDOWS)
+    const NTSTATUS st = BCryptGenRandom(nullptr, out, static_cast<ULONG>(n),
+                                        BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    if (!BCRYPT_SUCCESS(st)) {
+        throw std::runtime_error("BCryptGenRandom failed");
     }
-    for (std::size_t i = 0; i < n; ++i) {
-        s_state ^= s_state << 13;
-        s_state ^= s_state >> 7;
-        s_state ^= s_state << 17;
-        out[i] = static_cast<uint8_t>(s_state >> 24);
+#else
+#  if defined(DBKP_HAS_GETRANDOM)
+    std::size_t got = 0;
+    while (got < n) {
+        const ssize_t r = getrandom(out + got, n - got, 0);
+        if (r > 0) { got += static_cast<std::size_t>(r); continue; }
+        if (r < 0 && errno == EINTR) continue;
+        throw std::runtime_error("getrandom failed");
     }
+#  else
+    /* /dev/urandom 打开或读取失败同样视为致命，不允许弱随机兜底 */
+    const int fd = ::open("/dev/urandom", O_RDONLY);
+    if (fd < 0) throw std::runtime_error("open /dev/urandom failed");
+    std::size_t got = 0;
+    while (got < n) {
+        const ssize_t r = ::read(fd, out + got, n - got);
+        if (r > 0) { got += static_cast<std::size_t>(r); continue; }
+        if (r < 0 && errno == EINTR) continue;
+        ::close(fd);
+        throw std::runtime_error("read /dev/urandom failed");
+    }
+    ::close(fd);
+#  endif
+#endif
 }
 
 void deriveCipherKeys(const std::string& password, const uint8_t salt[16], int rounds,

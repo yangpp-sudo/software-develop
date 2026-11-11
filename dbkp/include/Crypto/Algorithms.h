@@ -97,7 +97,8 @@ IDataCodec* newXorTestCodec(const std::string& password);
 /** 供测试：由口令派生加密密钥与认证密钥 */
 void deriveCipherKeys(const std::string& password, const uint8_t salt[16], int rounds,
                       uint8_t encKey[32], uint8_t macKey[32]);
-/** 供测试：生成随机字节（时间+地址播种的 xorshift，非密码学强随机） */
+/** 生成随机字节（F3 修复后为 OS 原生 CSPRNG：
+ *  Windows BCryptGenRandom / POSIX getrandom 或 /dev/urandom；失败抛异常） */
 void fillRandom(uint8_t* out, std::size_t n);
 
 } /* namespace DBKP */

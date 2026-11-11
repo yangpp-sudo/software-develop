@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "Common/Serialize.h"
+#include "Crypto/Algorithms.h"    /* F3：fillSalt 改走 fillRandom（系统 CSPRNG） */
 #include "Crypto/Sha256.h"
 #include "Platform/FS.h"
 #include "Utils/CRC64.h"
@@ -28,14 +29,10 @@ std::string absOf(const std::string& root, const std::string& rel) {
     return Path::normalize(root + "/" + rel);
 }
 
+/* F3 修复：KDF salt 原为 time()+栈地址播种的 xorshift，与 fillRandom 同款弱随机。
+ * 统一改走 fillRandom（Windows: BCryptGenRandom；POSIX: getrandom/urandom）。 */
 void fillSalt(uint8_t salt[16]) {
-    uint64_t seed = static_cast<uint64_t>(std::time(nullptr)) ^
-                    (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&seed)) << 17) ^
-                    0x9E3779B97F4A7C15ull;
-    for (int i = 0; i < 16; ++i) {
-        seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17;
-        salt[i] = static_cast<uint8_t>(seed & 0xFF);
-    }
+    fillRandom(salt, 16);
 }
 
 /** 由遍历结果生成头记录（含元数据标志位） */

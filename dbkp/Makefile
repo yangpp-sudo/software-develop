@@ -27,7 +27,8 @@ ifeq ($(OS),Windows_NT)
   EXE      := .exe
   PLAT_SRC := src/Platform/FS_win.cpp
   WATCH_SRC := src/Backup/Watcher_win.cpp
-  SYS_LIBS := -lws2_32
+  # F3：fillRandom 改用 BCryptGenRandom，需链接 bcrypt.lib
+  SYS_LIBS := -lws2_32 -lbcrypt
   MKDIR    = @if not exist "$(BIN)" mkdir "$(BIN)"
 else
   UNAME_S  := $(shell uname -s)

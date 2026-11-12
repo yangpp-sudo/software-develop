@@ -94,6 +94,13 @@ int CScheduler::applyRetention(const std::string& dir, const std::string& prefix
 }
 
 ErrCode CScheduler::run(const ScheduleOptions& opt, std::atomic<bool>* stopFlag) {
+    /* F7：times <= 0 以前被解释成"一直跑"，而 CLI 里 --times 0 / --times abc
+       （atoi 失败返回 0）都会落进这个无限分支，前台进程再也停不下来。
+       次数必须显式给定且 >= 1；"常驻"是 watch/守护进程的职责，不是这里的。 */
+    if (opt.times < 1) {
+        LOG_ERR("invalid schedule times: " + std::to_string(opt.times) + " (must be >= 1)");
+        return E_INVALID_PARAMETER;
+    }
     std::string dir = opt.archiveDir;
     std::string prefix = opt.prefix;
     if (dir.empty()) {
@@ -109,7 +116,8 @@ ErrCode CScheduler::run(const ScheduleOptions& opt, std::atomic<bool>* stopFlag)
     LOG_INFO("scheduler start: every " + std::to_string(opt.intervalSeconds) + "s, times=" +
              std::to_string(opt.times) + ", keep=" + std::to_string(opt.keep) +
              ", prefix=" + prefix);
-    while (opt.times <= 0 || done < opt.times) {
+    /* F7：入口已保证 times >= 1，这里不再有 "<=0 一直跑" 的无限分支 */
+    while (done < opt.times) {
         if (stopFlag && stopFlag->load()) { LOG_INFO("scheduler stopped by request"); break; }
         const std::string archive = CScheduler::makeArchiveName(dir, prefix);
         BackupOptions each = opt.backup;
@@ -126,7 +134,7 @@ ErrCode CScheduler::run(const ScheduleOptions& opt, std::atomic<bool>* stopFlag)
             LOG_INFO("scheduled backup #" + std::to_string(done) + " -> " + archive);
             CScheduler::applyRetention(dir, prefix, opt.keep);
         }
-        if (opt.times > 0 && done >= opt.times) break;
+        if (done >= opt.times) break;
         for (int s = 0; s < opt.intervalSeconds; ++s) {
             if (stopFlag && stopFlag->load()) break;
             std::this_thread::sleep_for(std::chrono::seconds(1));

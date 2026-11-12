@@ -15,7 +15,7 @@
 param([switch]$Keep)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$BK   = Join-Path $root "bin\bk.exe"
+$BK = Join-Path $root "bin\bk.exe"
 if (!(Test-Path $BK)) { Write-Host "build first: $BK not found"; exit 1 }
 
 $work = Join-Path $env:TEMP ("dbkp_e2e_" + $PID)
@@ -82,7 +82,7 @@ function Case($name, $backupArgs, $restoreArgs, $verifyArgs, $allowMissing, $exp
     $script:lastArchiveFiles = Get-EntryCount "out.dbkp" $false
     if ($expectFiles -ge 0 -and $script:lastArchiveFiles -ne $expectFiles) {
         Write-Host ("  FAIL entry count: expected " + $expectFiles +
-                    " files, archive has " + $script:lastArchiveFiles)
+            " files, archive has " + $script:lastArchiveFiles)
         $script:fail++; return
     }
     & $BK verify out.dbkp @verifyArgs -q
@@ -95,36 +95,37 @@ function Case($name, $backupArgs, $restoreArgs, $verifyArgs, $allowMissing, $exp
     $b = Get-TreeHash "tout"
     $missA = @($a.files.Keys | Where-Object { -not $b.files.ContainsKey($_) })
     $missB = @($b.files.Keys | Where-Object { -not $a.files.ContainsKey($_) })
-    $diff  = @($a.files.Keys | Where-Object { $b.files.ContainsKey($_) -and $a.files[$_] -ne $b.files[$_] })
+    $diff = @($a.files.Keys | Where-Object { $b.files.ContainsKey($_) -and $a.files[$_] -ne $b.files[$_] })
     $bad = $missB.Count + $diff.Count
     if (-not $allowMissing) { $bad += $missA.Count }
     foreach ($d in $a.dirs) { if ($b.dirs -notcontains $d) { if (-not $allowMissing) { $bad++ } } }
     if ($bad -eq 0) {
         $info = ((& $BK info out.dbkp) | Select-String 'bytes|compression')
         Write-Host ("  PASS  archive-files=" + $script:lastArchiveFiles +
-                    " restored=" + $b.files.Count + " (src=" + $a.files.Count + ")")
+            " restored=" + $b.files.Count + " (src=" + $a.files.Count + ")")
         Write-Host ("  " + ($info -join ' | '))
         $script:pass++
-    } else {
+    }
+    else {
         Write-Host ("  FAIL missing=" + ($missA -join ',') + " extra=" + ($missB -join ',') +
-                   " contentdiff=" + ($diff -join ','))
+            " contentdiff=" + ($diff -join ','))
         $script:fail++
     }
 }
 
 # 每个用例都给定"归档里应有的文件数"，防止过滤失效/全被过滤也显示 PASS
 Case "plain backup/restore"  @() @() @() $false 7
-Case "huffman"               @("-a","huffman") @() @() $false 7
-Case "lz77"                  @("-a","lz77")    @() @() $false 7
-Case "lzhuff (lz77+huffman)" @("-a","lzhuff")  @() @() $false 7
-Case "rle"                   @("-a","rle")     @() @() $false 7
-Case "aes256-cbc + huffman"  @("-a","huffman","-c","aes256","-p","S3cret!") @("-p","S3cret!") @("-p","S3cret!") $false 7
-Case "chacha20 + lz77"       @("-a","lz77","-c","chacha20","-p","S3cret!")  @("-p","S3cret!") @("-p","S3cret!") $false 7
-Case "filter: exclude *.tmp" @("--no-name",$PAT_TMP) @() @() $true 6
-Case "filter: only *.txt"    @("--name",$PAT_TXT)    @() @() $true 4
-Case "filter: max-depth 1"   @("--max-depth","1")    @() @() $true 4
-Case "filter: min-size 1KB"  @("--min-size","1KB")   @() @() $true 3
-Case "filter: type deny dir" @("--type","-D")        @() @() $true 7
+Case "huffman"               @("-a", "huffman") @() @() $false 7
+Case "lz77"                  @("-a", "lz77")    @() @() $false 7
+Case "lzhuff (lz77+huffman)" @("-a", "lzhuff")  @() @() $false 7
+Case "rle"                   @("-a", "rle")     @() @() $false 7
+Case "aes256-cbc + huffman"  @("-a", "huffman", "-c", "aes256", "-p", "S3cret!") @("-p", "S3cret!") @("-p", "S3cret!") $false 7
+Case "chacha20 + lz77"       @("-a", "lz77", "-c", "chacha20", "-p", "S3cret!")  @("-p", "S3cret!") @("-p", "S3cret!") $false 7
+Case "filter: exclude *.tmp" @("--no-name", $PAT_TMP) @() @() $true 6
+Case "filter: only *.txt"    @("--name", $PAT_TXT)    @() @() $true 4
+Case "filter: max-depth 1"   @("--max-depth", "1")    @() @() $true 4
+Case "filter: min-size 1KB"  @("--min-size", "1KB")   @() @() $true 3
+Case "filter: type deny dir" @("--type", "-D")        @() @() $true 7
 
 # --- 目录条目语义（改动过的行为，单独钉住） -------------------------------
 Write-Host "=== filter: directory entry counts ==="
@@ -135,10 +136,10 @@ New-Tree "tsrc"
 & $BK backup tsrc dc_type.dbkp  --type -D -q
 $checks = @(
     @{ n = "plain dirs (. + sub1 + sub1/sub2 + emptydir)"; got = Get-EntryCount "dc_plain.dbkp" $true; want = 4 },
-    @{ n = "plain files";                                  got = Get-EntryCount "dc_plain.dbkp" $false; want = 7 },
-    @{ n = "--name *.txt dirs (目录不匹配则不入档)";        got = Get-EntryCount "dc_name.dbkp" $true;  want = 0 },
-    @{ n = "--max-depth 1 dirs (根+第1层目录)";             got = Get-EntryCount "dc_depth.dbkp" $true; want = 3 },
-    @{ n = "--type -D dirs (显式拒绝目录)";                  got = Get-EntryCount "dc_type.dbkp"  $true; want = 0 }
+    @{ n = "plain files"; got = Get-EntryCount "dc_plain.dbkp" $false; want = 7 },
+    @{ n = "--name *.txt dirs (目录不匹配则不入档)"; got = Get-EntryCount "dc_name.dbkp" $true; want = 0 },
+    @{ n = "--max-depth 1 dirs (根+第1层目录)"; got = Get-EntryCount "dc_depth.dbkp" $true; want = 3 },
+    @{ n = "--type -D dirs (显式拒绝目录)"; got = Get-EntryCount "dc_type.dbkp"  $true; want = 0 }
 )
 $dirBad = 0
 foreach ($c in $checks) {
@@ -152,19 +153,19 @@ New-Tree "tsrc"
 # 给每个条目不同的时间戳；若目录元数据不是"先子后父"恢复，父目录时间会被顶掉
 $t0 = [DateTime]'2021-03-04 05:06:07'
 (Get-Item "tsrc/sub1/sub2").LastWriteTime = $t0.AddSeconds(120)
-(Get-Item "tsrc/sub1").LastWriteTime      = $t0.AddSeconds(60)
-(Get-Item "tsrc").LastWriteTime           = $t0
-(Get-Item "tsrc/a.txt").LastWriteTime     = $t0.AddSeconds(180)
+(Get-Item "tsrc/sub1").LastWriteTime = $t0.AddSeconds(60)
+(Get-Item "tsrc").LastWriteTime = $t0
+(Get-Item "tsrc/a.txt").LastWriteTime = $t0.AddSeconds(180)
 & $BK backup tsrc meta.dbkp -q
 if ($LASTEXITCODE -ne 0) { Write-Host "  FAIL backup(meta)"; $script:fail++ }
 else {
     if (Test-Path "tmout") { Remove-Item -Recurse -Force "tmout" }
     & $BK restore meta.dbkp tmout --force -q
     $pairs = @(
-        @{ p = "tmout";            want = $t0 },
-        @{ p = "tmout/sub1";       want = $t0.AddSeconds(60) },
-        @{ p = "tmout/sub1/sub2";  want = $t0.AddSeconds(120) },
-        @{ p = "tmout/a.txt";      want = $t0.AddSeconds(180) }
+        @{ p = "tmout"; want = $t0 },
+        @{ p = "tmout/sub1"; want = $t0.AddSeconds(60) },
+        @{ p = "tmout/sub1/sub2"; want = $t0.AddSeconds(120) },
+        @{ p = "tmout/a.txt"; want = $t0.AddSeconds(180) }
     )
     $mBad = 0
     foreach ($m in $pairs) {
@@ -192,7 +193,7 @@ if ($LASTEXITCODE -ne 0) { Write-Host "  FAIL copy backup"; $script:fail++ }
 else {
     $a = Get-TreeHash "tsrc"; $b = Get-TreeHash "tcopy"
     $missA = @($a.files.Keys | Where-Object { -not $b.files.ContainsKey($_) })
-    $diff  = @($a.files.Keys | Where-Object { $b.files.ContainsKey($_) -and $a.files[$_] -ne $b.files[$_] })
+    $diff = @($a.files.Keys | Where-Object { $b.files.ContainsKey($_) -and $a.files[$_] -ne $b.files[$_] })
     if (($missA.Count + $diff.Count) -eq 0) { Write-Host ("  PASS copied " + $b.files.Count + " files"); $script:pass++ }
     else { Write-Host ("  FAIL missing=" + ($missA -join ',') + " diff=" + ($diff -join ',')); $script:fail++ }
 }
@@ -204,7 +205,7 @@ if ($LASTEXITCODE -ne 0) { Write-Host ("  FAIL restore-copy rc=" + $LASTEXITCODE
 else {
     $a = Get-TreeHash "tsrc"; $b = Get-TreeHash "tcopy2"
     $missA = @($a.files.Keys | Where-Object { -not $b.files.ContainsKey($_) })
-    $diff  = @($a.files.Keys | Where-Object { $b.files.ContainsKey($_) -and $a.files[$_] -ne $b.files[$_] })
+    $diff = @($a.files.Keys | Where-Object { $b.files.ContainsKey($_) -and $a.files[$_] -ne $b.files[$_] })
     if (($missA.Count + $diff.Count) -eq 0) { Write-Host "  PASS round-trip via copy dir"; $script:pass++ }
     else { Write-Host ("  FAIL missing=" + ($missA -join ',') + " diff=" + ($diff -join ',')); $script:fail++ }
 }

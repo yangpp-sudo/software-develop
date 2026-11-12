@@ -75,6 +75,38 @@ ErrCode streamCopy(const std::string& src, const std::string& dst, uint64_t& crc
     return ce;
 }
 
+/* F2：把路径解析成"可比较"的形态 —— 优先真实路径（穿过符号链接/junction、
+   折叠 ..、大小写由调用方用 iequals 处理），解析失败（目标尚不存在等）时
+   退化为纯词法归一化。 */
+std::string comparablePath(const std::string& p) {
+    std::string canon;
+    if (DBKP_IS_ERR(Platform::canonicalPath(p, canon))) canon = p;
+    return Path::normalize(canon);
+}
+
+/* F2：copy 模式下源与目标重叠会自毁数据（streamCopy 以 CREATE|TRUNC 打开
+   目标，目标==源时先把源清成 0 字节，随后 verify 拿同一文件比自身恒等，
+   于是"备份成功"）。归档模式不受影响：目标只是一个新文件，且 F9 已把它
+   排除出扫描。返回 E_OK 表示允许继续。 */
+ErrCode checkSourceDestOverlap(const std::string& source, const std::string& destination,
+                               BackupMode mode, std::string& why) {
+    const std::string src = comparablePath(source);
+    const std::string dst = comparablePath(destination);
+    if (Path::iequals(src, dst)) {
+        why = "source and destination are the same path (" + src + ")";
+        return E_INVALID_PARAMETER;
+    }
+    if (mode == MODE_COPY) {
+        /* relative() 在"不是前缀"和"完全相等"时都返回空串，相等已在上面判过 */
+        if (!Path::relative(src, dst).empty()) {
+            why = "destination is inside source (" + dst + " under " + src +
+                  ") in copy mode; copying onto yourself destroys the source";
+            return E_INVALID_PARAMETER;
+        }
+    }
+    return E_OK;
+}
+
 } /* anonymous namespace */
 
 BackupMode CBackupEngine::resolveMode(const std::string& destination, BackupMode requested) {
@@ -96,6 +128,12 @@ ErrCode CBackupEngine::run(BackupOptions& opt) {
     }
     const BackupMode mode = resolveMode(opt.destination, opt.mode);
     LOG_INFO("backup mode = " + std::string(backupModeName(mode)));
+
+    {
+        std::string why;
+        ErrCode oe = checkSourceDestOverlap(opt.source, opt.destination, mode, why);
+        if (DBKP_IS_ERR(oe)) { m_error = why; LOG_ERR("backup refused: " + why); return oe; }
+    }
 
     if (mode == MODE_ARCHIVE) {
         PackOptions p = opt.pack;

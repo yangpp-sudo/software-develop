@@ -14,7 +14,7 @@ namespace DBKP {
 
 struct ScheduleOptions {
     int          intervalSeconds = 300;   /* --every 5m|2h|90s */
-    int          times = 1;               /* --times N，<=0 表示一直跑 */
+    int          times = 1;               /* --times N，必须 >= 1（F7：<=0 直接拒绝） */
     std::string  archiveDir;              /* 输出目录，默认取 backup.destination 的父目录 */
     std::string  prefix;                  /* 归档文件名前缀，默认 backup 源目录名 */
     int          keep = 0;                /* 保留最近 N 份，0 = 不删除 */

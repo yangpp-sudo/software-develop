@@ -206,6 +206,45 @@ bool matchGlob(const std::string& pattern, const std::string& text) {
     return p == pattern.size();
 }
 
+/* F8：语法预校验。规则严格对齐 matchCharClass/matchGlob 的方言：
+   - 每个 '[' 必须在串内闭合（未闭合时 matchCharClass 恒 false，整条模式永不匹配）；
+   - 字符类体非空（"[]" 同样恒 false）；
+   - 类体支持 !/^ 取反、a-z 形式的区间，区间上界 < 下界时该段永不匹配，视为非法。
+   目的：坏模式在"入口"就报出来，而不是匹配不到任何文件后产出 0 条目的空箱。 */
+bool validateGlob(const std::string& pattern, std::string& why) {
+    why.clear();
+    if (pattern.empty()) {
+        why = "glob 模式为空，不可能匹配任何文件";
+        return false;
+    }
+    size_t i = 0;
+    while (i < pattern.size()) {
+        if (pattern[i] != '[') { ++i; continue; }
+        size_t q = i + 1;
+        if (q < pattern.size() && (pattern[q] == '!' || pattern[q] == '^')) ++q;
+        const size_t bodyStart = q;
+        bool closed = false;
+        while (q < pattern.size()) {
+            if (pattern[q] == ']') { closed = true; break; }
+            /* 与 matchCharClass 完全相同的三元组判定：X-Y 且 Y 不是 ']' */
+            if (q + 2 < pattern.size() && pattern[q + 1] == '-' && pattern[q + 2] != ']') {
+                if (static_cast<unsigned char>(pattern[q + 2]) <
+                    static_cast<unsigned char>(pattern[q])) {
+                    why = "字符类区间上下界颠倒：[" + pattern.substr(q, 3) + "]";
+                    return false;
+                }
+                q += 3;
+            } else {
+                ++q;
+            }
+        }
+        if (!closed) { why = "字符类未闭合：'" + pattern.substr(i) + "' 缺少 ']'"; return false; }
+        if (q == bodyStart) { why = "字符类为空：'[]' 永远匹配不到任何名字"; return false; }
+        i = q + 1;
+    }
+    return true;
+}
+
 #if defined(DBKP_OS_WINDOWS)
 std::wstring utf8ToWide(const std::string& utf8) {
     if (utf8.empty()) return std::wstring();

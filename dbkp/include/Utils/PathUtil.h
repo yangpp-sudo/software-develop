@@ -36,6 +36,10 @@ std::string relative(const std::string& parent, const std::string& child);
 bool   isPathTraversalSafe(const std::string& archivePath);
 /** 简易 glob：支持 * ? []，用于 -name 过滤 */
 bool   matchGlob(const std::string& pattern, const std::string& text);
+/** F8：预校验 glob 语法（与 matchGlob 的方言一致：* ? [类]，类支持 !/^ 取反、
+    a-z 区间）。语法非法返回 false，why 里放可直接回显的原因。
+    以前坏模式（如 "["）不会报错，只会恒不匹配，最后产出 0 条目的"成功"空箱。 */
+bool   validateGlob(const std::string& pattern, std::string& why);
 /** 大小写无关比较（Windows 路径判重用） */
 bool   iequals(const std::string& a, const std::string& b);
 std::string baseNameWithoutExt(const std::string& p);

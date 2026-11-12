@@ -111,6 +111,15 @@ bool timeArg(const std::string& text, int64_t& out) {
     return ok && out > 0;
 }
 
+/* F8：四个 glob 入口（--include/--exclude/--name/--no-name）共用同一句报错。
+   语法非法返回 false 并打印原因，调用方 exit 2。 */
+bool checkGlobArg(const std::string& flag, const std::string& value) {
+    std::string why;
+    if (Path::validateGlob(value, why)) return true;
+    LOG_ERR(flag + " 的 glob 模式非法：" + why + "（模式：" + value + "）");
+    return false;
+}
+
 int cmdBackup(int argc, char** argv) {
     std::vector<std::string> pos;
     PackOptions opt;
@@ -126,10 +135,10 @@ int cmdBackup(int argc, char** argv) {
         }
         else if (a == "-p" || a == "--password") { if (!nextValue(argc, argv, i, opt.password)) return 2; }
         else if (a == "-m" || a == "--comment") { if (!nextValue(argc, argv, i, opt.comment)) return 2; }
-        else if (a == "--include") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.includePaths.push_back(Path::normalize(v)); }
-        else if (a == "--exclude") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.excludePaths.push_back(Path::normalize(v)); }
-        else if (a == "--name") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.nameGlobs.push_back(v); }
-        else if (a == "--no-name") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.nameRejects.push_back(v); }
+        else if (a == "--include") { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--include", v)) return 2; opt.filter.includePaths.push_back(Path::normalize(v)); }
+        else if (a == "--exclude") { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--exclude", v)) return 2; opt.filter.excludePaths.push_back(Path::normalize(v)); }
+        else if (a == "--name") { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--name", v)) return 2; opt.filter.nameGlobs.push_back(v); }
+        else if (a == "--no-name") { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--no-name", v)) return 2; opt.filter.nameRejects.push_back(v); }
         else if (a == "--type") { if (!nextValue(argc, argv, i, v) || !opt.filter.setTypeSpec(v)) return 2; }
         else if (a == "--min-size") { if (!nextValue(argc, argv, i, v) || !sizeArg(v, opt.filter.minSize)) return 2; }
         else if (a == "--max-size") { if (!nextValue(argc, argv, i, v) || !sizeArg(v, opt.filter.maxSize)) return 2; }
@@ -152,6 +161,12 @@ int cmdBackup(int argc, char** argv) {
         else pos.push_back(a);
     }
     if (pos.size() != 2) { LOG_ERR("backup needs <src-dir> <dst>"); return 2; }
+    /* F5：口令与加密算法必须同时出现，否则是"看着加密、其实明文"的假象 */
+    if (!opt.password.empty() && opt.crypto == CRY_NONE) {
+        LOG_ERR("-p/--password 需要配合 -c/--crypto 使用"
+                "（-c aes256|chacha20|3des），否则拒绝生成未加密的归档");
+        return 2;
+    }
 
     BackupOptions bo;
     bo.source = pos[0];
@@ -257,7 +272,18 @@ int cmdSchedule(int argc, char** argv) {
             so.intervalSeconds = CScheduler::parseInterval(v, &ok);
             if (!ok || so.intervalSeconds <= 0) { LOG_ERR("bad --every value"); return 2; }
         }
-        else if (a == "--times") { if (!nextValue(argc, argv, i, v)) return 2; so.times = std::atoi(v.c_str()); }
+        else if (a == "--times") {
+            if (!nextValue(argc, argv, i, v)) return 2;
+            /* F7：必须是 >=1 的整数。以前 atoi 静默把 "0"/"abc" 变成 0，
+               而 0 在调度器里被当作"一直跑"，前台进程再也停不下来。 */
+            char* end = nullptr;
+            long n = std::strtol(v.c_str(), &end, 10);
+            if (!end || *end != '\0' || n < 1) {
+                LOG_ERR("bad --times value: " + v + " (需要 >= 1 的整数)");
+                return 2;
+            }
+            so.times = static_cast<int>(n);
+        }
         else if (a == "--keep")  { if (!nextValue(argc, argv, i, v)) return 2; so.keep = std::atoi(v.c_str()); }
         else if (a == "--prefix") { if (!nextValue(argc, argv, i, so.prefix)) return 2; }
         else if (a == "-a" || a == "--algo") { if (!nextValue(argc, argv, i, v)) return 2; opt.comp = algorithmFromName(v); }
@@ -268,14 +294,20 @@ int cmdSchedule(int argc, char** argv) {
             }
         }
         else if (a == "-p" || a == "--password") { if (!nextValue(argc, argv, i, opt.password)) return 2; }
-        else if (a == "--exclude") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.excludePaths.push_back(Path::normalize(v)); }
-        else if (a == "--name")    { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.nameGlobs.push_back(v); }
-        else if (a == "--no-name") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.nameRejects.push_back(v); }
+        else if (a == "--exclude") { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--exclude", v)) return 2; opt.filter.excludePaths.push_back(Path::normalize(v)); }
+        else if (a == "--name")    { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--name", v)) return 2; opt.filter.nameGlobs.push_back(v); }
+        else if (a == "--no-name") { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--no-name", v)) return 2; opt.filter.nameRejects.push_back(v); }
         else if (!a.empty() && a[0] == '-') { LOG_ERR("unknown option: " + a); return 2; }
         else pos.push_back(a);
     }
     if (pos.size() != 2) {
         LOG_ERR("schedule needs <src-dir> <archive-dir>  (with --every/--times/--keep)");
+        return 2;
+    }
+    /* F5：同 backup —— 口令必须配算法，否则每次定时产出都是明文假象 */
+    if (!opt.password.empty() && opt.crypto == CRY_NONE) {
+        LOG_ERR("-p/--password 需要配合 -c/--crypto 使用"
+                "（-c aes256|chacha20|3des），否则拒绝生成未加密的归档");
         return 2;
     }
     so.backup.source = pos[0];
@@ -320,14 +352,20 @@ int cmdWatch(int argc, char** argv) {
             }
         }
         else if (a == "-p" || a == "--password") { if (!nextValue(argc, argv, i, bopt.password)) return 2; bopt.pack.password = bopt.password; }
-        else if (a == "--exclude")  { if (!nextValue(argc, argv, i, v)) return 2; bopt.pack.filter.excludePaths.push_back(Path::normalize(v)); }
-        else if (a == "--name")     { if (!nextValue(argc, argv, i, v)) return 2; bopt.pack.filter.nameGlobs.push_back(v); }
-        else if (a == "--no-name")  { if (!nextValue(argc, argv, i, v)) return 2; bopt.pack.filter.nameRejects.push_back(v); }
+        else if (a == "--exclude")  { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--exclude", v)) return 2; bopt.pack.filter.excludePaths.push_back(Path::normalize(v)); }
+        else if (a == "--name")     { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--name", v)) return 2; bopt.pack.filter.nameGlobs.push_back(v); }
+        else if (a == "--no-name")  { if (!nextValue(argc, argv, i, v) || !checkGlobArg("--no-name", v)) return 2; bopt.pack.filter.nameRejects.push_back(v); }
         else if (!a.empty() && a[0] == '-') { LOG_ERR("unknown option: " + a); return 2; }
         else pos.push_back(a);
     }
     if (pos.size() != 2) {
         LOG_ERR("watch needs <src-dir> <archive-dir>  [--debounce 2s] [--keep N] [--prefix P]");
+        return 2;
+    }
+    /* F5：同 backup —— watch 会反复产出归档，口令没配算法时不能默默明文运行 */
+    if (!bopt.password.empty() && bopt.pack.crypto == CRY_NONE) {
+        LOG_ERR("-p/--password 需要配合 -c/--crypto 使用"
+                "（-c aes256|chacha20|3des），否则拒绝生成未加密的归档");
         return 2;
     }
     bopt.source      = pos[0];

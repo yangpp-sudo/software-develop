@@ -172,6 +172,28 @@ std::string lowerIfWin(const std::string& s) {
     return out;
 }
 
+/* F2（提交侧）：source 与 destination 指向同一目录、或 copy 模式下目标嵌在
+   源里面，复制流程会一边读一边把源清空。任务线程里的 CBackupEngine::run
+   也拦同一件事，但那是异步失败，用户只看到一个 failed；这里在受理当场就
+   把话说清楚。real 解析失败时退回词法值，与 pathWithinRoot 的策略一致。 */
+bool pathSameDir(const std::string& a, const std::string& b) {
+    return lowerIfWin(a) == lowerIfWin(b);
+}
+
+bool pathInside(const std::string& parent, const std::string& child) {
+    const std::string p = lowerIfWin(parent);
+    const std::string c = lowerIfWin(child);
+    if (p == c) return false;
+    const std::string withSlash = p == "/" ? p : p + "/";
+    return c.compare(0, withSlash.size(), withSlash) == 0;
+}
+
+void realOrLexical(const std::string& in, std::string& out) {
+    out = in;
+    std::string real;
+    if (resolveRealPath(in, real) && !real.empty()) out = real;
+}
+
 bool authFailed(const CHttpRequest& req, const ApiContext& ctx, CHttpResponse& out) {
     std::string why;
     if (verifyToken(ctx, req.bearerToken(), why)) return false;
@@ -222,6 +244,23 @@ bool applyFilterJson(const CJsonValue& f, FilterOptions& out, std::string& why) 
     readStringArray(f.at("excludePaths"), out.excludePaths);
     readStringArray(f.at("nameGlobs"), out.nameGlobs);
     readStringArray(f.at("nameRejects"), out.nameRejects);
+
+    /* F8：坏 glob 语法（如 "["）会恒不匹配，最后产出 0 条目的"成功"空箱。
+       与 CLI 同口径，在入口逐条校验，非法就当场 400。 */
+    static const char* kGlobFields[] = { "includePaths", "excludePaths",
+                                         "nameGlobs", "nameRejects" };
+    const std::vector<std::string>* kGlobLists[] = { &out.includePaths, &out.excludePaths,
+                                                     &out.nameGlobs, &out.nameRejects };
+    for (int gi = 0; gi < 4; ++gi) {
+        for (std::size_t k = 0; k < kGlobLists[gi]->size(); ++k) {
+            std::string gWhy;
+            if (!Path::validateGlob((*kGlobLists[gi])[k], gWhy)) {
+                why = std::string(kGlobFields[gi]) + " 的 glob 模式非法：" + gWhy +
+                      "（模式：" + (*kGlobLists[gi])[k] + "）";
+                return false;
+            }
+        }
+    }
 
     const std::string allow = jsonStr(f, "typeAllow", "");
     if (!allow.empty() && !out.setTypeSpec(allow)) { why = "typeAllow：" + out.lastError; return false; }
@@ -340,6 +379,13 @@ struct Spec {
         }
         if (pack.crypto != CRY_NONE && password.empty()) {
             why = "选择了加密算法但没有给密码";
+            return false;
+        }
+        /* F5：反向检查。只有 backup 需要拦——restore/verify/compare 的算法记在
+           归档头里，带 -p 不带 crypto 是正常用法（与 CLI 各子命令口径一致）。 */
+        if (type == "backup" && pack.crypto == CRY_NONE && !password.empty()) {
+            why = "给了 password 但没选加密算法（crypto），拒绝生成未加密的归档；"
+                  "请同时指定 crypto（aes256/des-ede/chacha20）或去掉 password";
             return false;
         }
         if (!parseChecksum(jsonStr(body, "checksum", "crc64"), pack.checksum)) {
@@ -777,6 +823,24 @@ CHttpResponse hCreateJob(ApiContext& ctx, const CHttpRequest& req) {
     if (sp.type == "verify" && sp.resolve() == MODE_COPY
         && !sp.destination.empty() && Platform::exists(sp.destination) != E_OK)
         return CHttpResponse::jsonError(E_SOURCE_NOT_FOUND, "对比目录不存在：" + sp.destination, 400);
+    /* F2：backup 任务在受理时就拒绝 source/dest 重叠（与引擎内守卫同口径，
+       但这里能立刻回 400，而不是让任务异步失败）。 */
+    if (sp.type == "backup") {
+        std::string srcReal, dstReal;
+        realOrLexical(sp.source, srcReal);
+        realOrLexical(sp.destination, dstReal);
+        const bool overlapSame = pathSameDir(srcReal, dstReal);
+        const bool overlapInner = sp.resolve() == MODE_COPY
+                                  && pathInside(srcReal, dstReal);
+        if (overlapSame || overlapInner) {
+            const std::string why = overlapSame
+                ? "source 与 destination 是同一目录：" + srcReal
+                : "copy 模式下 destination 位于 source 内部：" + dstReal;
+            LOG_WARN("建任务被拒（F2 自毁防护）：" + why);
+            return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+                why + "，拒绝执行（会把源数据清空）", 400);
+        }
+    }
     if (!ctx.jobs)
         return CHttpResponse::jsonError(E_INTERNAL, "任务管理器未就绪", 500);
 
@@ -1002,6 +1066,10 @@ CHttpResponse hScheduleStart(ApiContext& ctx, const CHttpRequest& req) {
     ScheduleOptions so;
     so.intervalSeconds = interval;
     so.times = static_cast<int>(jsonInt(body, "times", 3));
+    /* F7：与 CLI 同口径，次数必须 >= 1，不再把 <=0 当"一直跑" */
+    if (so.times < 1)
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+                                        "times 需要 >= 1 的整数（常驻请用 /api/watch）", 400);
     so.keep = static_cast<int>(jsonInt(body, "keep", 0));
     so.prefix = jsonStr(body, "prefix", "");
     so.archiveDir = dst;
@@ -1195,6 +1263,11 @@ CHttpResponse hWatchStart(ApiContext& ctx, const CHttpRequest& req) {
     base.pack.checksum = cs;
     if (base.pack.crypto != CRY_NONE && base.pack.password.empty())
         return CHttpResponse::jsonError(E_INVALID_PARAMETER, "选择了加密算法但没有给密码", 400);
+    /* F5：反向检查，与 CLI 同口径 —— 只给 password 不给 crypto 会持续产出明文箱 */
+    if (base.pack.crypto == CRY_NONE && !base.pack.password.empty())
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+                                        "给了 password 但没选加密算法（crypto），"
+                                        "拒绝生成未加密的归档；请同时指定 crypto 或去掉 password", 400);
 
     std::string prefix = jsonStr(body, "prefix", "");
     if (prefix.empty()) prefix = Path::fileName(Path::normalize(src));

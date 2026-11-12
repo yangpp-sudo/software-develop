@@ -114,6 +114,16 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     std::unique_ptr<IDataCodec> crypto(
         makeCrypto(opt.crypto, opt.password, salt, kdfRounds, m_errorText));
     if (!crypto && opt.crypto != CRY_NONE) { LOG_ERR(m_errorText); return E_INVALID_PARAMETER; }
+    /* F5（反向检查）：给了口令却没要加密算法 —— 口令会被整个丢弃，产出的是
+       明文归档，用户却以为加密了。宁可失败，不做"假加密"。
+       注意只拦打包：解包/校验/比对拿到 -p 却不带算法是正常用法（算法记在
+       归档头里），不能在这里拒绝。 */
+    if (opt.crypto == CRY_NONE && !opt.password.empty()) {
+        m_errorText = "password given but no crypto algorithm (-c): refusing to write an "
+                      "unencrypted archive. Use -c aes256|chacha20|3des, or drop the password.";
+        LOG_ERR(m_errorText);
+        return E_INVALID_PARAMETER;
+    }
 
     /* 1. 先序枚举（含根目录自身 "."）。
        F9：归档目标（含 .tmp）若落在源目录内，必须从扫描中排除——否则下一轮
@@ -131,6 +141,15 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     std::vector<EnumeratedEntry> entries;
     ErrCode e = enumerator.enumerateFiles(sourceDir, opt.filter, entries);
     if (DBKP_IS_ERR(e)) return e;
+
+    /* F8：一条都没扫到还"成功"，是最难查的假象。入口已拦语法（CLI 非零退出、
+       API 400），这里再兜一层：结果为空且用户没给 exclude 过滤时明确警告，
+       说明源目录本身是空的（或全被过滤规则挡掉了），别把它当成正常备份。 */
+    if (entries.empty() && opt.filter.excludePaths.empty() &&
+        opt.filter.nameRejects.empty()) {
+        LOG_WARN("no entries matched under source dir: " + sourceDir +
+                 " (source is empty or every entry was filtered out)");
+    }
 
     /* 进度上报：枚举完成后就能算出总字节，前端立刻得到可信的百分比 */
     uint64_t planBytes = 0;

@@ -41,6 +41,8 @@ public:
         int         ioTimeoutMs = 30000;  /* 单连接的读写等待上限 */
         int         maxClients = 32;      /* 同时存活的连接线程数 */
         bool        serveStatic = true;
+        std::string corsOrigin;           /* F12：--cors-origin 显式放行值；
+                                             空 = 按 Origin 白名单自动判定 */
     };
 
     CHttpServer();

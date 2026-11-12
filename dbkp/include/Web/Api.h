@@ -70,6 +70,15 @@ std::string issueToken(const ApiContext& ctx, long long expireSec);
 bool        verifyToken(const ApiContext& ctx, const std::string& token, std::string& why);
 bool        pathWithinRoot(const std::string& root, const std::string& path, std::string& resolved);
 
+/* F12：登录失败限速（按来源 IP 计数，见 Api.cpp 的说明）。
+   hLogin 在比对口令【之前】调用 Allow：返回 false 表示该来源仍在退避
+   锁定期内，retryAfterSec 带出建议等待秒数（调用方据此发 Retry-After）。
+   口令比对的结果再用 Record 回报：success=true 立刻清零，false 累计一次
+   失败并按指数退避上锁。Reset 只给单测复位状态用。 */
+bool loginThrottleAllow(const std::string& ip, long long& retryAfterSec);
+void loginThrottleRecord(const std::string& ip, bool success);
+void resetLoginThrottleForTest();
+
 } /* namespace DBKP */
 
 #endif /* DBKP_WEB_API_H */

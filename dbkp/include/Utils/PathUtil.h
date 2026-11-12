@@ -33,6 +33,11 @@ std::string parentDir(const std::string& p);
 std::string extension(const std::string& p);
 /** child 相对 parent 的相对路径；parent 不是前缀时返回空串 */
 std::string relative(const std::string& parent, const std::string& child);
+/** F6：parent 是否"包含"child —— 相等也算包含（自喂的极端情况）。
+    规则：两侧先解析真实路径（防 junction/symlink 绕过），再归一化；
+    Windows 下大小写不敏感；只在分隔符边界上判子树（c:/a 不含 c:/ab）。
+    任何一侧无法规范化时按词法绝对化处理，宁可放行也不误杀。 */
+bool   isSubPath(const std::string& parent, const std::string& child);
 bool   isPathTraversalSafe(const std::string& archivePath);
 /** 简易 glob：支持 * ? []，用于 -name 过滤 */
 bool   matchGlob(const std::string& pattern, const std::string& text);

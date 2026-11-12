@@ -3,6 +3,8 @@
  * ==========================================================================*/
 #include "Utils/PathUtil.h"
 
+#include "Platform/FS.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -138,6 +140,37 @@ std::string relative(const std::string& parent, const std::string& child) {
         return r;
     }
     return "";
+}
+
+bool isSubPath(const std::string& parent, const std::string& child) {
+    /* F6：三处（watch CLI、watch API、引擎重叠守卫）共用的"包含"判定。
+       顺序很关键，都是批次 4 踩过的坑：
+       1) 先解析真实路径 —— junction/symlink 指向内部时必须被看见；
+          解析失败（不存在/无权限）退回词法绝对化，不因此放行风险路径。
+       2) 再判相等。Path::relative 对"相等"返回空串，和"不是前缀"撞车，
+          所以绝不能只靠 relative 判包含。
+       3) 判子树时只认分隔符边界：c:/a 与 c:/ab 词法是前缀但不是父子。
+       Windows 路径大小写不敏感，比较前统一转小写。 */
+    std::string p, c;
+    if (DBKP_IS_ERR(Platform::canonicalPath(parent, p)) || p.empty()) p = parent;
+    if (DBKP_IS_ERR(Platform::canonicalPath(child, c)) || c.empty()) c = child;
+    p = normalize(p);
+    c = normalize(c);
+    if (p.empty() || c.empty()) return false;
+#if defined(DBKP_OS_WINDOWS)
+    std::string pl = p, cl = c;
+    for (size_t i = 0; i < pl.size(); ++i) pl[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(pl[i])));
+    for (size_t i = 0; i < cl.size(); ++i) cl[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(cl[i])));
+    if (pl == cl) return true;                     /* 相等也算包含：自喂的极端情况 */
+    if (cl.size() <= pl.size()) return false;
+    if (cl.compare(0, pl.size(), pl) != 0) return false;
+    return pl[pl.size() - 1] == '/' ? true : cl[pl.size()] == '/';
+#else
+    if (p == c) return true;
+    if (c.size() <= p.size()) return false;
+    if (c.compare(0, p.size(), p) != 0) return false;
+    return p[p.size() - 1] == '/' ? true : c[p.size()] == '/';
+#endif
 }
 
 bool isPathTraversalSafe(const std::string& archivePath) {

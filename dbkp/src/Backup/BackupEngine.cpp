@@ -97,8 +97,9 @@ ErrCode checkSourceDestOverlap(const std::string& source, const std::string& des
         return E_INVALID_PARAMETER;
     }
     if (mode == MODE_COPY) {
-        /* relative() 在"不是前缀"和"完全相等"时都返回空串，相等已在上面判过 */
-        if (!Path::relative(src, dst).empty()) {
+        /* F6：包含判定与 watch 入口共用 Path::isSubPath。相等已在上面判过，
+           走到这里若为真就是"严格嵌在里面"。 */
+        if (Path::isSubPath(src, dst)) {
             why = "destination is inside source (" + dst + " under " + src +
                   ") in copy mode; copying onto yourself destroys the source";
             return E_INVALID_PARAMETER;

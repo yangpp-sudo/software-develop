@@ -25,6 +25,7 @@
 #include "Platform/FS.h"
 #include "Utils/Logger.h"
 #include "Utils/SimpleFile.h"
+#include "Web/Http.h"        /* F12：resolveCorsOrigin */
 
 #include <cerrno>
 #include <cstring>
@@ -325,6 +326,12 @@ void CHttpServer::serveConnection(CbkSocket sock, std::string peerIp, unsigned s
         if (st != RS_CLOSED && !res.streaming) {
             /* streaming：handler（/api/events）已经把头和事件写完，这里再写一遍
                就会让前端看到重复报文，必须跳过 */
+            /* F12：serialize() 是 const 且拿不到请求，所以在这里按请求 Origin
+               与配置算出 CORS 放行结论，再作为字段带给响应。报文解析失败
+               （RS_BAD/RS_TOO_LARGE/RS_TIMEOUT）时 Origin 未知，不发 CORS 头。 */
+            if (st == RS_OK)
+                res.corsAllowOrigin = resolveCorsOrigin(m_opt.corsOrigin,
+                                                        req.header("origin"));
             const std::string out = res.serialize();
             if (!sendAll(sock, out.data(), out.size()))
                 LOG_DEBUG("写响应失败（客户端可能已关闭页面）: " + req.path);

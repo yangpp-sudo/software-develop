@@ -93,6 +93,11 @@ public:
                                         服务器不得再 serialize/发送一遍 */
     std::map<std::string, std::string> extraHeaders;
 
+    /* F12：本响应允许的回显 Origin（由服务器按请求 Origin + 配置算好后填入，
+       空串 = 不发任何 CORS 头）。serialize() 拿不到请求，所以放行结论
+       必须作为字段带进来，而不是在 serialize 里再去猜。 */
+    std::string corsAllowOrigin;
+
     /* ---- JSON 统一模板：{"code":int,"msg":string,"data":...} ----
      * 约定：code==0 表示成功，非 0 为内核错误码（见 Defs.h），
      * HTTP 状态另按语义给（401/403/404/400/409/500），前端两处都能用。 */
@@ -134,9 +139,22 @@ const char* mimeTypeOf(const std::string& path);
 /** 去掉 ".."，防止 URL 穿越到 web 根目录之外。返回 false 表示越界。 */
 bool normalizeStaticPath(const std::string& urlPath, std::string& relPath);
 
+/* ------------------------------------------------------------ CORS（F12） */
+/** 决定本响应允许的回显 Origin。返回空串表示"不发任何 CORS 头"。
+ *  规则（configured = --cors-origin 显式配置值，requestOrigin = 请求头原值）：
+ *   1. configured 非空 -> 直接按配置值发（本地开发可显式放行 "*"）；
+ *   2. 无 Origin（同源、命令行、PowerShell 脚本）-> 不发；
+ *   3. Origin 为 "null"（file:// 双击打开前端）-> 回 "null"，必须保留；
+ *   4. Origin 为 http://localhost:<port> 或 http://127.0.0.1:<port> -> 回原值；
+ *   5. 其他（如 http://evil.example）-> 不发。
+ *  单独成函数是为了能脱离 socket 做单元测试。 */
+std::string resolveCorsOrigin(const std::string& configured,
+                              const std::string& requestOrigin);
+
 /* ------------------------------------------------------------ SSE 片段 */
-/** text/event-stream 的响应头（无 Content-Length：流式） */
-std::string sseHead();
+/** text/event-stream 的响应头（无 Content-Length：流式）。
+ *  origin 为 resolveCorsOrigin 的结论，空串表示不发 CORS 头。 */
+std::string sseHead(const std::string& origin);
 /** 一条 SSE 事件："event: name\ndata: <json 或文本>\n\n" */
 std::string sseEvent(const std::string& name, const std::string& data);
 

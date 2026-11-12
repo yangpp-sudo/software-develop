@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <map>
 #include <mutex>
 #include <thread>
 
@@ -180,12 +181,12 @@ bool pathSameDir(const std::string& a, const std::string& b) {
     return lowerIfWin(a) == lowerIfWin(b);
 }
 
+/* F6：包含判定统一下沉到 Path::isSubPath（watch 的 CLI/API 入口与引擎
+   重叠守卫共用一套）。这里保留"相等不算内部"的旧语义，因为调用方
+   用 pathSameDir 单独区分"同一目录"和"嵌在里面"两种文案。 */
 bool pathInside(const std::string& parent, const std::string& child) {
-    const std::string p = lowerIfWin(parent);
-    const std::string c = lowerIfWin(child);
-    if (p == c) return false;
-    const std::string withSlash = p == "/" ? p : p + "/";
-    return c.compare(0, withSlash.size(), withSlash) == 0;
+    if (pathSameDir(parent, child)) return false;
+    return Path::isSubPath(parent, child);
 }
 
 void realOrLexical(const std::string& in, std::string& out) {
@@ -555,6 +556,17 @@ CHttpResponse hLogin(ApiContext& ctx, const CHttpRequest& req) {
     }
 
     bool ok = false;
+    /* F12：先看该来源是否还在退避锁定期内——口令对不对都不再校验，
+       否则限速就等于没做（正确口令还能照常登进去）。 */
+    long long retryAfter = 0;
+    if (!loginThrottleAllow(req.clientIp(), retryAfter)) {
+        LOG_WARN("登录被限速拦下，来源 " + req.clientIp() +
+                 "，还需 " + std::to_string(retryAfter) + " 秒");
+        CHttpResponse r = CHttpResponse::jsonError(
+            E_BUSY, "登录失败次数过多，请 " + std::to_string(retryAfter) + " 秒后重试", 429);
+        r.setHeader("Retry-After", std::to_string(retryAfter));
+        return r;
+    }
     if (ctx.password.size() == 64) {
         /* 配置里给的是 sha256 十六进制摘要时，比对摘要，明文不落盘 */
         uint8_t digest[CSha256::kDigestSize];
@@ -564,9 +576,11 @@ CHttpResponse hLogin(ApiContext& ctx, const CHttpRequest& req) {
         ok = constTimeEqual(given, ctx.password);
     }
     if (!ok) {
+        loginThrottleRecord(req.clientIp(), false);
         LOG_WARN("登录失败，来源 " + req.clientIp());
         return CHttpResponse::jsonError(401, "密码不正确", 401);
     }
+    loginThrottleRecord(req.clientIp(), true);       /* 成功即清零该 IP 计数 */
     const long long ttl = (ctx.tokenTtlHours > 0 ? ctx.tokenTtlHours : 12) * 3600;
     const long long exp = nowSec() + ttl;
     CJsonValue d = CJsonValue::makeObject();
@@ -944,7 +958,11 @@ CHttpResponse hEvents(ApiContext& ctx, const CHttpRequest& req) {
     CHttpResponse r;
     if (sock == kCbkInvalidSocket)
         return CHttpResponse::jsonError(E_INTERNAL, "该连接不支持流式输出", 500);
-    if (!srv->writeRaw(sock, sseHead())) { r.streaming = true; return r; }
+    /* F12：SSE 头由本 handler 直接写 socket，CORS 结论同样要按 Origin 算。 */
+    if (!srv->writeRaw(sock, sseHead(resolveCorsOrigin(srv->options().corsOrigin,
+                                                       req.header("origin"))))) {
+        r.streaming = true; return r;
+    }
 
     CJsonValue hello = CJsonValue::makeObject();
     hello["event"] = CJsonValue::makeString("hello");
@@ -1235,6 +1253,16 @@ CHttpResponse hWatchStart(ApiContext& ctx, const CHttpRequest& req) {
     if (Platform::exists(src) != E_OK)
         return CHttpResponse::jsonError(E_SOURCE_NOT_FOUND, "源目录不存在：" + src, 400);
 
+    /* F6：与 CLI watch 同口径 —— 归档目录落在源目录内部（或与之相等）时，
+       每生成一个箱都会被自己再触发一次，必须当场拒绝，不进监听循环。 */
+    if (Path::isSubPath(src, dst)) {
+        LOG_WARN("启动实时备份被拒（F6 自喂循环）：destination 在 source 内部 "
+                 + dst + " under " + src);
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+            "destination 位于 source 内部（或与 source 相同），实时备份会把自己"
+            "生成的归档当成源变化反复备份，拒绝启动", 400);
+    }
+
     bool okDebounce = false;
     const int debounce = CScheduler::parseInterval(jsonStr(body, "debounce", "2s"), &okDebounce);
     if (!okDebounce || debounce < 0)
@@ -1370,6 +1398,88 @@ bool pathWithinRoot(const std::string& root, const std::string& path, std::strin
     if (a == b) return true;
     const std::string withSlash = a == "/" ? a : a + "/";
     return b.compare(0, withSlash.size(), withSlash) == 0;
+}
+
+/* ---------------------------------------------------- F12：登录失败限速 */
+/* 按来源 IP 记失败次数：连续 5 次失败上锁，之后指数退避 1s→2s→4s→…封顶
+   300s；口令正确立刻清零该 IP 计数。到期自动放开，不做人工干预。
+   时钟用 steady_clock——墙钟回拨会把锁定期拉满或提前放行，这里只关心
+   "过了多久"，不关心"现在是几点"。
+   表防爆破者伪造海量 IP 撑爆内存：上限 kMaxEntries，满了先清已解锁的
+   旧条目，仍满再整表复位（最坏情况只是提前放开，不会锁死正常用户）。 */
+namespace {
+
+constexpr int       kFailLimit      = 5;    /* 连续失败到达此数即上锁 */
+constexpr long long kBaseBackoffSec = 1;    /* 第 6 次尝试前的锁时长 */
+constexpr long long kMaxBackoffSec  = 300;  /* 封顶 */
+constexpr std::size_t kMaxEntries   = 4096; /* 计数表上限 */
+
+struct SLoginThrottle {
+    /* 单调时钟秒。entry 只在 Allow/Record 里访问，二者各自持锁 */
+    long long now() const {
+        return std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    struct Entry { int fails = 0; long long unlockAt = 0; };
+    std::mutex mtx;
+    std::map<std::string, Entry> byIp;
+
+    /* 表满时先清掉已过锁定期（且无待观察意义）的旧条目；仍满就整表复位。
+       最坏情况只是提前放开限速，也绝不让计数表无限吃内存。 */
+    void makeRoomLocked(long long now) {
+        if (byIp.size() < kMaxEntries) return;
+        for (std::map<std::string, Entry>::iterator it = byIp.begin(); it != byIp.end();) {
+            if (it->second.unlockAt <= now) {
+                byIp.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+        if (byIp.size() >= kMaxEntries) byIp.clear();
+    }
+};
+SLoginThrottle g_loginThrottle;
+
+/* 指数退避：第 kFailLimit 次失败后锁 base 秒，往后每次翻倍，封顶 kMaxBackoffSec。
+   移位超过 40 位直接取封顶值，避免 long long 溢出。 */
+long long backoffSecFor(int fails) {
+    const int exp = fails - kFailLimit;
+    if (exp <= 0) return kBaseBackoffSec;
+    if (exp >= 40) return kMaxBackoffSec;
+    const long long raw = kBaseBackoffSec << exp;
+    return (raw > kMaxBackoffSec) ? kMaxBackoffSec : raw;
+}
+
+} /* anonymous namespace */
+
+bool loginThrottleAllow(const std::string& ip, long long& retryAfterSec) {
+    retryAfterSec = 0;
+    std::lock_guard<std::mutex> lk(g_loginThrottle.mtx);
+    std::map<std::string, SLoginThrottle::Entry>::const_iterator it =
+        g_loginThrottle.byIp.find(ip);
+    if (it == g_loginThrottle.byIp.end()) return true;
+    const long long now = g_loginThrottle.now();
+    if (it->second.unlockAt <= now) return true;      /* 到期自动放开 */
+    retryAfterSec = it->second.unlockAt - now;
+    return false;
+}
+
+void loginThrottleRecord(const std::string& ip, bool success) {
+    std::lock_guard<std::mutex> lk(g_loginThrottle.mtx);
+    const long long now = g_loginThrottle.now();
+    if (success) {
+        g_loginThrottle.byIp.erase(ip);               /* 一次成功登录清零 */
+        return;
+    }
+    g_loginThrottle.makeRoomLocked(now);
+    SLoginThrottle::Entry& e = g_loginThrottle.byIp[ip];
+    ++e.fails;
+    if (e.fails >= kFailLimit) e.unlockAt = now + backoffSecFor(e.fails);
+}
+
+void resetLoginThrottleForTest() {
+    std::lock_guard<std::mutex> lk(g_loginThrottle.mtx);
+    g_loginThrottle.byIp.clear();
 }
 
 /* ------------------------------------------------------------ 路由注册 */

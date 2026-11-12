@@ -368,6 +368,16 @@ int cmdWatch(int argc, char** argv) {
                 "（-c aes256|chacha20|3des），否则拒绝生成未加密的归档");
         return 2;
     }
+    /* F6：归档目录落在源目录内部（或与之相等）时，watch 会把刚生成的箱
+       当成源变化再备一次，一次触发能炸出十几个箱。这是配置错误，
+       必须在启动前拒绝，而不是靠"把归档目录加进排除列表"糊过去。 */
+    if (Path::isSubPath(pos[0], pos[1])) {
+        LOG_ERR("archive dir 位于 source 内部（或与 source 相同），"
+                "watch 会把生成的归档再备份一次形成自喂循环，拒绝启动");
+        LOG_ERR("  source      : " + Path::normalize(pos[0]));
+        LOG_ERR("  archive dir : " + Path::normalize(pos[1]));
+        return 2;
+    }
     bopt.source      = pos[0];
     bopt.destination = pos[1];
     bopt.mode        = MODE_ARCHIVE;

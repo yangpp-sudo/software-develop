@@ -348,13 +348,20 @@ std::string CHttpResponse::serialize() const {
     out += "Content-Length: " + std::to_string(status == 304 ? 0u : body.size()) + "\r\n";
     out += "Connection: close\r\n";
 
-    /* 同源部署时这些头无害；开发期直接用 file:// 或另开前端端口时才必要。
-     * 不做 Origin 白名单是有意为之：本机单人实验工具，README 已提示
-     * 若暴露到不可信网络应加 token 校验（我们本来也加了）。 */
-    out += "Access-Control-Allow-Origin: *\r\n";
-    out += "Access-Control-Allow-Headers: Content-Type, Authorization\r\n";
-    out += "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
-    out += "Access-Control-Max-Age: 86400\r\n";
+    /* F12：CORS 收敛。历史上这里对所有响应无条件发
+     * Access-Control-Allow-Origin: *，且允许 Authorization 头 —— 任意恶意
+     * 网页都能读取本机 API 的响应。本批推翻那个决定：默认不再发 *，
+     * 改由服务器按请求 Origin + --cors-origin 配置算出结论（见
+     * resolveCorsOrigin），通过 corsAllowOrigin 字段透传进来。字段为空
+     * 表示本响应不发任何 CORS 头（同源、命令行、非白名单来源）。 */
+    if (!corsAllowOrigin.empty()) {
+        out += "Access-Control-Allow-Origin: " + corsAllowOrigin + "\r\n";
+        out += "Access-Control-Allow-Headers: Content-Type, Authorization\r\n";
+        out += "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
+        out += "Access-Control-Max-Age: 86400\r\n";
+        /* 结论随请求 Origin 变化，必须声明 Vary，否则共享缓存会串味。 */
+        out += "Vary: Origin\r\n";
+    }
     out += "Cache-Control: no-store\r\n";
 
     for (std::map<std::string, std::string>::const_iterator it = extraHeaders.begin();
@@ -452,15 +459,71 @@ bool parseHttpRequest(const std::string& raw, CHttpRequest& req,
     return true;
 }
 
+/* ---------------------------------------------------------------- CORS */
+/* Origin 白名单判定：只放行 http://localhost[:port] 与
+   http://127.0.0.1[:port]（大小写不敏感，端口任意且必须是数字）。
+   刻意不放行 https、不放行 0.0.0.0/局域网地址：本机工具的前端只可能
+   从这两处加载。 */
+static std::string lowerAscii(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        out += static_cast<char>((c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c);
+    }
+    return out;
+}
+
+static bool isLoopbackOrigin(const std::string& o) {
+    const std::string s = lowerAscii(o);
+    static const char kLp4[] = "http://127.0.0.1";
+    static const char kLp6[] = "http://localhost";
+    const char* host = nullptr;
+    std::size_t hlen = 0;
+    if (s.compare(0, sizeof(kLp4) - 1, kLp4) == 0) {
+        host = s.c_str() + (sizeof(kLp4) - 1);
+        hlen = s.size() - (sizeof(kLp4) - 1);
+    } else if (s.compare(0, sizeof(kLp6) - 1, kLp6) == 0) {
+        host = s.c_str() + (sizeof(kLp6) - 1);
+        hlen = s.size() - (sizeof(kLp6) - 1);
+    } else {
+        return false;
+    }
+    if (hlen == 0) return true;                       /* 不带端口 */
+    if (host[0] != ':') return false;                 /* 如 http://localhost.evil */
+    if (hlen == 1) return false;                      /* 只剩一个冒号 */
+    for (std::size_t i = 1; i < hlen; ++i)            /* 端口必须全是数字 */
+        if (host[i] < '0' || host[i] > '9') return false;
+    return true;
+}
+
+std::string resolveCorsOrigin(const std::string& configured,
+                              const std::string& requestOrigin) {
+    /* 1. 显式配置优先：--cors-origin 配了啥就发啥（含 "*"，供本地开发放行）。 */
+    if (!configured.empty()) return configured;
+    /* 2. 没有 Origin 头：同源 / 命令行 / PowerShell 脚本，不发 CORS 头。 */
+    if (requestOrigin.empty()) return std::string();
+    /* 3. Origin: null —— file:// 双击打开前端。必须保留，否则该用法报废。 */
+    if (lowerAscii(requestOrigin) == "null") return "null";
+    /* 4. 回环地址：回请求原值（不是 *），并配 Vary: Origin。 */
+    if (isLoopbackOrigin(requestOrigin)) return requestOrigin;
+    /* 5. 其他来源：不发 CORS 头，浏览器会拦下跨域读取。 */
+    return std::string();
+}
+
 /* ---------------------------------------------------------------- SSE */
-std::string sseHead() {
+std::string sseHead(const std::string& origin) {
     std::string out;
     out += "HTTP/1.1 200 OK\r\n";
     out += "Content-Type: text/event-stream; charset=utf-8\r\n";
     out += "Cache-Control: no-cache\r\n";
     out += "Connection: close\r\n";
     out += "X-Accel-Buffering: no\r\n";     /* 经 nginx 反代时禁用缓冲 */
-    out += "Access-Control-Allow-Origin: *\r\n";
+    /* F12：与 serialize() 同样收敛，不再无条件发 *。 */
+    if (!origin.empty()) {
+        out += "Access-Control-Allow-Origin: " + origin + "\r\n";
+        out += "Vary: Origin\r\n";
+    }
     out += "\r\n";
     return out;
 }

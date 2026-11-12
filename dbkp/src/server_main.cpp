@@ -79,6 +79,9 @@ void printUsage() {
         "  --max-body MB        请求体上限（MB），默认 64\n"
         "  --workers N          并发任务数，默认 2（限制 1~8）\n"
         "  --secret STR         令牌签名密钥，默认每次启动随机\n"
+        "  --cors-origin VAL    CORS 放行来源，默认按请求 Origin 自动判定\n"
+        "                       （仅 null / http://localhost:N / http://127.0.0.1:N）；\n"
+        "                       显式配置后一律按 VAL 发，本地开发可用 *\n"
         "  --no-static          只提供 API，不发静态页\n"
         "  --log-level L        quiet|error|warn|info|debug\n"
         "  -h, --help           显示本帮助\n");
@@ -172,6 +175,7 @@ int main(int argc, char** argv) {
         workers = static_cast<size_t>(cfgInt(conf, "workers", 2));
         maxBodyMb = static_cast<int>(cfgInt(conf, "maxBodyMb", 64));
         opt.serveStatic = cfgInt(conf, "serveStatic", 1) != 0;
+        opt.corsOrigin = cfgStr(conf, "corsOrigin", opt.corsOrigin);
         Logger::instance().setLevelFromText(cfgStr(conf, "logLevel", "info"));
     }
 
@@ -190,6 +194,7 @@ int main(int argc, char** argv) {
         else if (a == "--max-body") { if (!nextValue(argc, argv, i, v)) return 2; maxBodyMb = std::atoi(v.c_str()); }
         else if (a == "--workers") { if (!nextValue(argc, argv, i, v)) return 2; workers = static_cast<size_t>(std::atoi(v.c_str())); }
         else if (a == "--secret") { if (!nextValue(argc, argv, i, v)) return 2; ctx.secret = v; }
+        else if (a == "--cors-origin") { if (!nextValue(argc, argv, i, v)) return 2; opt.corsOrigin = v; }
         else if (a == "--default-source") { if (!nextValue(argc, argv, i, v)) return 2; ctx.defaultSource = v; }
         else if (a == "--default-destination") { if (!nextValue(argc, argv, i, v)) return 2; ctx.defaultDestination = v; }
         else if (a == "--no-static") { opt.serveStatic = false; }
@@ -230,6 +235,8 @@ int main(int argc, char** argv) {
     std::printf("  数据根   : %s\n", ctx.dataRoot.empty() ? "(未限制，任意路径)" : ctx.dataRoot.c_str());
     std::printf("  登录鉴权 : %s\n", ctx.password.empty() ? "关闭（仅建议本机调试）" : "开启");
     std::printf("  并发任务 : %zu    请求体上限 : %dMB\n", workers, maxBodyMb);
+    std::printf("  CORS 放行: %s\n", opt.corsOrigin.empty()
+                ? "自动（null / localhost / 127.0.0.1）" : opt.corsOrigin.c_str());
     std::fflush(stdout);
 
     /* 主循环等三件事：Ctrl+C 信号、服务自己停止、/api/shutdown 置的标志。

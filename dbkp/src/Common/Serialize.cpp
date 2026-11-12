@@ -68,9 +68,14 @@ void zeroBlock(uint8_t* block) { std::memset(block, 0, BLOCK_SIZE); }
 /* ------------------------------------------------------ 归档卷标 */
 ErrCode encodeArchiveHeader(const ArchiveHeader& hdr, std::vector<uint8_t>& out512) {
     /* sha256 归档带第二块（存整卷摘要）；其余模式维持旧布局 512B，
-       新旧归档在 payloadOffset / headerSize 两个字段里自描述，读取端不需要版本判断。 */
+       新旧归档在 payloadOffset / headerSize 两个字段里自描述，读取端不需要版本判断。
+       F10：加密归档再追加第三块（头部 HMAC），块位是否预留只看 headerHmac 是否为空
+       —— 不能按 cryptoAlg 判，否则非加密箱与既有单测的 512B/1024B 断言全会变。 */
     const bool withDigest = hdr.checksum == CHK_SHA256;
-    const size_t total = withDigest ? ARCHIVE_HEADER_EXT : BLOCK_SIZE;
+    const bool withHmac   = !hdr.headerHmac.empty();
+    const size_t total = BLOCK_SIZE
+                       + (withDigest ? BLOCK_SIZE : 0)
+                       + (withHmac   ? BLOCK_SIZE : 0);
     out512.assign(total, 0);
     uint8_t* p = out512.data();
     BlockWriter w{p};
@@ -107,6 +112,19 @@ ErrCode encodeArchiveHeader(const ArchiveHeader& hdr, std::vector<uint8_t>& out5
                        ? hdr.payloadDigest.size() : ARCHIVE_DIGEST_SIZE;
         if (n) std::memcpy(e + 4, hdr.payloadDigest.data(), n);
     }
+    if (withHmac) {
+        /* F10 头部 HMAC 块：布局仿摘要块 —— 前 4 字节幻数回显，紧接 32 字节
+           HMAC-SHA256，块内其余字节保持零。该块自身不在 HMAC 覆盖范围内，
+           所以调用方算 HMAC 时传的是"还没追加本块"的头部图像。 */
+        uint8_t* e = p + (withDigest ? ARCHIVE_HEADER_EXT : BLOCK_SIZE);
+        e[0] = static_cast<uint8_t>(ARCHIVE_HEADER_HMAC_TAG & 0xFF);
+        e[1] = static_cast<uint8_t>((ARCHIVE_HEADER_HMAC_TAG >> 8) & 0xFF);
+        e[2] = static_cast<uint8_t>((ARCHIVE_HEADER_HMAC_TAG >> 16) & 0xFF);
+        e[3] = static_cast<uint8_t>((ARCHIVE_HEADER_HMAC_TAG >> 24) & 0xFF);
+        const size_t n = hdr.headerHmac.size() < ARCHIVE_HEADER_HMAC_SIZE
+                       ? hdr.headerHmac.size() : ARCHIVE_HEADER_HMAC_SIZE;
+        if (n) std::memcpy(e + 4, hdr.headerHmac.data(), n);
+    }
     return E_OK;
 }
 
@@ -134,10 +152,23 @@ ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr, const uint
     hdr.sourcePath.assign(reinterpret_cast<const char*>(in512 + 90), srcLen);
     hdr.comment.assign(reinterpret_cast<const char*>(in512 + 346), comLen);
     hdr.payloadDigest.clear();
-    if (hdr.checksum == CHK_SHA256) {
-        if (!ext512) return E_INVALID_HEADER_RECORD;   /* 声明了 sha256 却没给扩展块：卷标不完整 */
+    hdr.headerHmac.clear();
+    const bool withDigest = hdr.checksum == CHK_SHA256;
+    /* F10：扩展区长度由 headerSize 自描述（512 的整数倍），摘要块在前、HMAC 块在后。 */
+    if (hdr.headerSize < BLOCK_SIZE || (hdr.headerSize % BLOCK_SIZE) != 0)
+        return E_INVALID_HEADER_RECORD;
+    const size_t extLen  = hdr.headerSize - BLOCK_SIZE;
+    const size_t hmacOff = withDigest ? BLOCK_SIZE : 0;
+    if (extLen > 0 && !ext512) return E_INVALID_HEADER_RECORD; /* 声明了扩展块却没给：卷标不完整 */
+    if (withDigest) {
+        if (extLen < BLOCK_SIZE) return E_INVALID_HEADER_RECORD;
         if (readLE32(ext512) != ARCHIVE_MAGIC) return E_INVALID_HEADER_RECORD; /* 幻数回显，防把数据块当摘要块 */
         hdr.payloadDigest.assign(ext512 + 4, ext512 + 4 + ARCHIVE_DIGEST_SIZE);
+    }
+    if (extLen >= hmacOff + BLOCK_SIZE) {
+        const uint8_t* h = ext512 + hmacOff;
+        if (readLE32(h) != ARCHIVE_HEADER_HMAC_TAG) return E_INVALID_HEADER_RECORD;
+        hdr.headerHmac.assign(h + 4, h + 4 + ARCHIVE_HEADER_HMAC_SIZE);
     }
     return E_OK;
 }

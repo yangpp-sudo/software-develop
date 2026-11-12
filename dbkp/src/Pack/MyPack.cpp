@@ -217,12 +217,22 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     hdr.createTime = static_cast<uint64_t>(std::time(nullptr));
     hdr.sourcePath = absSource;
     hdr.comment    = opt.comment;
-    /* sha256 卷标多占一个 512B 扩展块放摘要，载荷起点随之后移 */
-    hdr.payloadOffset = (opt.checksum == CHK_SHA256) ? ARCHIVE_HEADER_EXT : BLOCK_SIZE;
+    /* 卷标扩展块逐个追加，载荷起点随之后移：
+       sha256 多占一个 512B 摘要块；F10 加密箱再多占一个 512B 头部 HMAC 块。
+       这里必须一次性算出终值 —— 占位写与 finalize 重写都用同一个长度，
+       载荷才不会错位。 */
+    hdr.payloadOffset = BLOCK_SIZE
+                      + (opt.checksum == CHK_SHA256 ? BLOCK_SIZE : 0)
+                      + (opt.crypto   != CRY_NONE   ? BLOCK_SIZE : 0);
     hdr.kdfRounds = static_cast<uint16_t>(kdfRounds);
     std::memcpy(hdr.salt, salt, 16);
 
     std::vector<uint8_t> block;
+    if (opt.crypto != CRY_NONE) {
+        /* F10：占位写就要把 HMAC 块的位置撑开（否则载荷起点与实写长度错位），
+           先填 32 个零，finalize 阶段再补真值。 */
+        hdr.headerHmac.assign(ARCHIVE_HEADER_HMAC_SIZE, 0);
+    }
     encodeArchiveHeader(hdr, block);
     e = out.writeN(block.data(), static_cast<int64_t>(block.size()));
     if (DBKP_IS_ERR(e)) {
@@ -329,6 +339,23 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
     hdr.rawSize     = rawTotal;
     hdr.recordCount = recordCount;
     hdr.fileCount   = fileCount;
+    /* F10：头部 HMAC。此刻头部各字段（含 payloadCrc / 摘要 / 条目数）都已是终值。
+       覆盖范围 = 头部前 headerSize 字节中"除 HMAC 块自身外"的全部内容，也就是
+       基础头 + 摘要块（若有）这段前缀；将来 F28 的 kdfRounds 扩展块也必须排在
+       HMAC 块之前落进这段前缀，否则它不受保护。
+       做法：先按"HMAC 块存在但内容为零"编出终局长度的头部图像（headerSize 字段
+       已是终值，前缀与真值版逐字节一致），用 macKey 对它的前 headerSize-512 字节
+       做 HMAC-SHA256，再填回真值重编一次整头。 */
+    if (opt.crypto != CRY_NONE) {
+        uint8_t encKey[32], macKey[32];
+        deriveCipherKeys(opt.password, hdr.salt, kdfRounds, encKey, macKey);
+        hdr.headerHmac.assign(ARCHIVE_HEADER_HMAC_SIZE, 0);
+        encodeArchiveHeader(hdr, block);
+        const size_t covered = block.size() - BLOCK_SIZE;
+        uint8_t digest[CSha256::kDigestSize];
+        CSha256::hmac(macKey, sizeof(macKey), block.data(), covered, digest);
+        hdr.headerHmac.assign(digest, digest + ARCHIVE_HEADER_HMAC_SIZE);
+    }
     encodeArchiveHeader(hdr, block);
     out.seekTo(0);
     e = out.writeN(block.data(), static_cast<int64_t>(block.size()));
@@ -652,15 +679,19 @@ ErrCode CMyPack::readHeaderAt(CSimpleFile& in, ArchiveHeader& hdr) {
     if (DBKP_IS_ERR(in.seekTo(0))) return E_TRUNCATED_ARCHIVE;
     ErrCode e = in.readN(block.data(), BLOCK_SIZE);
     if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
-    /* checksum=sha256 的归档卷标后面跟一个摘要扩展块，一并读进来。
+    /* 卷标之后的扩展区按 headerSize 逐块读进来：
+       第二块 = sha256 整卷摘要块，第三块 = F10 头部 HMAC 块。
        必须先确认第一块魔数正常再决定读扩展块：否则遇到非归档文件时，
        第 6 字节的 headerSize 会读成随机大值（例如 'zz' = 31354），于是
        去读第二块并在 EOF 处失败，把“这不是归档”误报成 E_TRUNCATED_ARCHIVE。 */
     std::vector<uint8_t> ext;
-    if (readLE32(block.data()) == ARCHIVE_MAGIC &&
-        readLE16(block.data() + 6) >= ARCHIVE_HEADER_EXT) {
-        ext.resize(BLOCK_SIZE);
-        if (DBKP_IS_ERR(in.readN(ext.data(), BLOCK_SIZE))) return E_TRUNCATED_ARCHIVE;
+    if (readLE32(block.data()) == ARCHIVE_MAGIC) {
+        const uint16_t hs = readLE16(block.data() + 6);
+        if (hs > BLOCK_SIZE && (hs % BLOCK_SIZE) == 0 && hs <= 64 * 1024) {
+            ext.resize(static_cast<size_t>(hs) - BLOCK_SIZE);
+            if (DBKP_IS_ERR(in.readN(ext.data(), static_cast<int64_t>(ext.size()))))
+                return E_TRUNCATED_ARCHIVE;
+        }
     }
     return decodeArchiveHeader(block.data(), hdr, ext.empty() ? nullptr : ext.data());
 }
@@ -730,6 +761,71 @@ ErrCode CMyPack::checkWholePayload(const std::string& archivePath, const Archive
         }
         LOG_DEBUG("payload crc64 verified: " + CRC64::toString(crc.value()));
     }
+    return E_OK;
+}
+
+/* ---------------------------------------------- F10：卷标头部 HMAC 校验 */
+ErrCode CMyPack::checkHeaderHmac(const std::string& archivePath, const ArchiveHeader& hdr,
+                                 const std::string& password, int& badCount) {
+    /* 非加密箱没有共享密钥可推，按清单口径维持现状：不写不验，行为逐字节不变。 */
+    if (hdr.cryptoAlg == CRY_NONE) return E_OK;
+    if (hdr.headerHmac.empty()) {
+        /* 旧格式加密箱（本批之前产出的），头部没有任何 HMAC 保护 —— 只提示，不判失败，
+           否则老箱一夜之间全部 verify 不过，用户会被吓到。 */
+        LOG_WARN("旧格式归档，头部无 HMAC 保护");
+        return E_OK;
+    }
+    CSimpleFile in;
+    ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
+    if (DBKP_IS_ERR(e)) return e;
+    const size_t headerSize = hdr.headerSize;
+    if (headerSize < BLOCK_SIZE || (headerSize % BLOCK_SIZE) != 0) {
+        LOG_ERR("归档头部校验失败，可能被篡改（headerSize 非法）");
+        ++badCount;
+        return E_HEADER_TAMPERED;
+    }
+    std::vector<uint8_t> head;
+    head.resize(headerSize);
+    if (DBKP_IS_ERR(in.seekTo(0)) ||
+        DBKP_IS_ERR(in.readN(head.data(), static_cast<int64_t>(headerSize)))) {
+        LOG_ERR("archive truncated during header hmac pass");
+        return E_TRUNCATED_ARCHIVE;
+    }
+    in.close();
+
+    /* HMAC 块的位置：基础头之后，若带 sha256 摘要块则再往后一块。 */
+    const size_t hmacOff = BLOCK_SIZE + (hdr.checksum == CHK_SHA256 ? BLOCK_SIZE : 0);
+    if (headerSize < hmacOff + BLOCK_SIZE) {
+        LOG_ERR("归档头部校验失败，可能被篡改（HMAC 块越界）");
+        ++badCount;
+        return E_HEADER_TAMPERED;
+    }
+    /* 块自身只有"幻数 + 32B HMAC"有意义，其余 476B 必须全零。
+       填充区被改写同样算篡改（否则改这些字节能躲过所有校验）。 */
+    if (readLE32(head.data() + hmacOff) != ARCHIVE_HEADER_HMAC_TAG) {
+        LOG_ERR("归档头部校验失败，可能被篡改（HMAC 块幻数不符）");
+        ++badCount;
+        return E_HEADER_TAMPERED;
+    }
+    for (size_t i = hmacOff + 4 + ARCHIVE_HEADER_HMAC_SIZE; i < hmacOff + BLOCK_SIZE; ++i) {
+        if (head[i] != 0) {
+            LOG_ERR("归档头部校验失败，可能被篡改（HMAC 块填充区被改写）");
+            ++badCount;
+            return E_HEADER_TAMPERED;
+        }
+    }
+    /* 覆盖范围 = 头部前 headerSize 字节中除 HMAC 块自身外的全部内容。
+       HMAC 块恒为最后一块，所以"块之前的前缀"正是这一段，与打包端逐字节一致。 */
+    uint8_t encKey[32], macKey[32];
+    deriveCipherKeys(password, hdr.salt, hdr.kdfRounds ? hdr.kdfRounds : 4096, encKey, macKey);
+    uint8_t digest[CSha256::kDigestSize];
+    CSha256::hmac(macKey, sizeof(macKey), head.data(), hmacOff, digest);
+    if (std::memcmp(digest, hdr.headerHmac.data(), ARCHIVE_HEADER_HMAC_SIZE) != 0) {
+        LOG_ERR("归档头部校验失败，可能被篡改");
+        ++badCount;
+        return E_HEADER_TAMPERED;
+    }
+    LOG_DEBUG("archive header hmac verified");
     return E_OK;
 }
 
@@ -957,7 +1053,13 @@ ErrCode CMyPack::verify(const std::string& archivePath, const std::string& passw
     opt.verifyOnly = true;
     opt.restoreMeta = false;
     opt.password = password;
-    return unpack(archivePath, ".", opt);
+    ErrCode ue = unpack(archivePath, ".", opt);
+    if (DBKP_IS_ERR(ue)) { ++badCount; return ue; }
+
+    /* 3) F10：头部 HMAC。必须排在 1)/2) 之后 —— 口令错则 macKey 错，
+       头部 HMAC 必然不匹配，若先验头就会把"口令不对"误报成"卷标被篡改"。
+       走到这里说明载荷校验已通过，此时的不匹配才真的是离线改过头部。 */
+    return checkHeaderHmac(archivePath, hdr, password, badCount);
 }
 
 /* ---------------------------------------------- 归档 vs 原始目录 差异对比 */

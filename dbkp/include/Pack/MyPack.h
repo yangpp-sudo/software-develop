@@ -89,6 +89,11 @@ private:
     /** 整卷校验（CRC64 或 SHA-256，按卷标里的 checksum 字段选择）：
         verify 的第一步与 restore 落盘前的前置检查共用，不再各写一遍 */
     ErrCode checkWholePayload(const std::string& archivePath, const ArchiveHeader& hdr);
+    /** F10：加密箱的卷标头部 HMAC 校验。非加密箱直接放行（无共享密钥，维持现状）；
+        旧格式加密箱（无 HMAC 块）只 WARN 不判失败；块内填充区被改写同样判篡改。
+        只在整卷载荷校验通过之后调用，口令错才不会误报成"头部被篡改"。 */
+    ErrCode checkHeaderHmac(const std::string& archivePath, const ArchiveHeader& hdr,
+                            const std::string& password, int& badCount);
     ErrCode writeFileData(CSimpleFile& out, const std::string& absPath, FileRecord& rec,
                           IDataCodec* comp, IDataCodec* crypto, const PackOptions& opt);
     ErrCode readDataBlocks(CSimpleFile& in, const FileRecord& rec,

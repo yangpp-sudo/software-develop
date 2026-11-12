@@ -22,9 +22,18 @@ uint32_t readLE32(const uint8_t* p);
 uint64_t readLE64(const uint8_t* p);
 
 /* ------------------------------------------------------- 归档卷标 */
-/** 编码卷标：checksum==CHK_SHA256 时输出 1024B（第二块前 32B 为整卷摘要），否则 512B */
+/**
+ * 编码卷标。扩展块按内容逐个追加，输出长度 = 512 + 摘要块(sha256 时 512)
+ * + 头部 HMAC 块(headerHmac 非空时 512)。
+ * 即：非加密箱 512B（与历史逐字节一致）、sha256 箱 1024B、
+ * 加密箱 1024B、sha256+加密箱 1536B（F10）。
+ */
 ErrCode encodeArchiveHeader(const ArchiveHeader& hdr, std::vector<uint8_t>& out512);
-/** 解码卷标。checksum==sha256 的归档必须跟进 ext512（第二块），否则报 E_INVALID_HEADER_RECORD */
+/**
+ * 解码卷标。ext512 指向第一块之后的扩展区，长度由 headerSize 自描述
+ * （= headerSize - 512）。声明了摘要/HMAC 块却没给 ext512、或块首幻数不符，
+ * 一律 E_INVALID_HEADER_RECORD。
+ */
 ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr, const uint8_t* ext512 = nullptr);
 
 /* ------------------------------------------------------- 文件记录 */

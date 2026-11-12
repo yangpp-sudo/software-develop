@@ -44,6 +44,20 @@ static const std::size_t REC_EXTEND_PAYLOAD =
    解码时按 headerSize 判长，完全向后兼容。 */
 static const std::size_t ARCHIVE_HEADER_EXT    = 1024;
 static const std::size_t ARCHIVE_DIGEST_SIZE   = 32;
+/* F10：加密归档（cryptoAlg != NONE）在最后一个扩展块之后再追加一个"头部 HMAC"
+   扩展块（512B：块首 4 字节 tag 回显 + 32 字节 HMAC-SHA256，其余留 0），使 512B
+   卷标头不再游离于校验之外（此前篡改 off=159 的 sourcePath、off=358 的 kdfRounds
+   附近，verify 仍返回 0）。
+     - headerSize / payloadOffset：普通加密箱 512+512=1024；sha256 加密箱
+       512+512+512=1536。解码按 headerSize 判长，旧格式（无该块）照常解析。
+     - HMAC 覆盖范围 = 头部前 headerSize 字节中【除 HMAC 块自身以外】的全部内容，
+       即含 sha256 摘要块在内。因此将来 F28 新增的 kdfRounds 扩展块必须放在
+       HMAC 块之前（落在覆盖范围内），否则等于没保护。
+     - 密钥 = deriveCipherKeys(password, salt, kdfRounds) 的 macKey（EtM 复用同一
+       派生，不改 Aes.cpp）。非加密箱没有共享密钥，不写不验，字节级维持现状。 */
+static const std::size_t ARCHIVE_HEADER_EXT_HMAC  = 1536;  /* 基础头+摘要块+HMAC 块 */
+static const std::size_t ARCHIVE_HEADER_HMAC_SIZE = 32;    /* 落盘的 HMAC 长度 */
+static const uint32_t ARCHIVE_HEADER_HMAC_TAG     = ARCHIVE_MAGIC; /* 块首 tag，同摘要块的回显模式 */
 static const char* const DEFAULT_ARCHIVE_SUFFIX = ".dbkp";
 
 /* ------------------------------------------------------------ 文件类型 */
@@ -134,6 +148,7 @@ enum ErrCode : int {
     E_CANCELED              = 22,  /* 用户/服务端主动取消（Web 任务取消） */
     E_BUSY                  = 23,  /* F4：目标正被另一进程写入（跨进程文件锁占用中） */
     E_INCOMPLETE            = 24,  /* F6b：目标旁残留 .tmp，上次备份未完成 */
+    E_HEADER_TAMPERED       = 25,  /* F10：加密箱头部 HMAC 不匹配，卷标被离线篡改 */
     E_UNKNOWN               = 127,
 };
 
@@ -210,6 +225,10 @@ struct ArchiveHeader {
        此前 sha256 只是个头标志字节，摘要从未落盘（整卷校验事实上只有
        CRC64 一条腿），现在补齐；空 vector = 归档里没有摘要。 */
     std::vector<uint8_t> payloadDigest;
+    /* F10：卷标头部 HMAC（HMAC-SHA256，32B）。仅 cryptoAlg != NONE 且打包时写入；
+       覆盖"头部前 headerSize 字节中除 HMAC 块自身以外"的全部内容。
+       空 vector = 归档里没有该块（非加密箱，或旧格式加密箱）。 */
+    std::vector<uint8_t> headerHmac;
 
     ArchiveHeader() { for (int i = 0; i < 16; ++i) salt[i] = 0; }
 };

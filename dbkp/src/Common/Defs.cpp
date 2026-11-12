@@ -32,6 +32,7 @@ const char* errCodeToString(ErrCode code) {
     case E_CANCELED:                return "operation canceled";
     case E_BUSY:                    return "target is locked by another backup process";
     case E_INCOMPLETE:              return "previous backup incomplete (temp file left behind)";
+    case E_HEADER_TAMPERED:         return "归档头部校验失败，可能被篡改";
     default:                        return "unknown error";
     }
 }

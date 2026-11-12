@@ -245,6 +245,26 @@ bool applyFilterJson(const CJsonValue& f, FilterOptions& out, std::string& why) 
     readStringArray(f.at("excludePaths"), out.excludePaths);
     readStringArray(f.at("nameGlobs"), out.nameGlobs);
     readStringArray(f.at("nameRejects"), out.nameRejects);
+    /* 6 个维度里的“拥有者”：CLI 有 --owner/--uid，Web 表单原先没映射，
+       导致界面上的“排除用户（组）”页无从落地（发了也被静默忽略）。 */
+    readStringArray(f.at("ownerNames"), out.ownerNames);
+    const CJsonValue& uids = f.at("uids");
+    if (uids.isArray()) {
+        for (std::size_t i = 0; i < uids.items().size(); ++i) {
+            const CJsonValue& v = uids.items()[i];
+            long long id = -1;
+            if (v.isInt()) id = v.asInt();
+            else if (v.isString()) {
+                const std::string s = v.asString();
+                bool digits = !s.empty() && s.size() <= 10;
+                for (std::size_t k = 0; digits && k < s.size(); ++k)
+                    if (!std::isdigit(static_cast<unsigned char>(s[k]))) digits = false;
+                if (digits) id = std::strtoll(s.c_str(), nullptr, 10);
+            }
+            if (id >= 0 && id <= 0xFFFFFFFFll)
+                out.uids.push_back(static_cast<uint32_t>(id));
+        }
+    }
 
     /* F8：坏 glob 语法（如 "["）会恒不匹配，最后产出 0 条目的"成功"空箱。
        与 CLI 同口径，在入口逐条校验，非法就当场 400。 */
@@ -330,11 +350,16 @@ struct Spec {
         if (source.empty()) { why = "source 不能为空"; return false; }
         if (type != "verify" && destination.empty()) { why = "destination 不能为空"; return false; }
 
-        /* uid/owner 过滤在 Windows 上没有真实语义，以前是静默丢弃：现在当场说清，
-           免得用户以为过滤生效了。POSIX 侧要支持的话应走 CLI 的 --uid/--owner。 */
+        /* uid/owner 过滤：平台能解析属主时才受理。POSIX 上 --uid/--owner 是真实
+           生效的维度；Windows 上 uidToName 恒失败，FilterOptions 会降级为
+           “不按名过滤”——那正是用户最容易误解的“设了不生效”，所以在入口
+           当场拒绝并说清原因（前端按 /api/info 的 capabilities.owner 置灰该页）。 */
         const CJsonValue& fl = body.at("filter");
-        if (fl.isObject() && (fl.at("uids").isArray() || fl.at("ownerNames").isArray())) {
-            why = "uids/ownerNames 过滤目前仅命令行支持（--uid/--owner），Web 接口暂不受理";
+        if (fl.isObject() && !Platform::supportsOwner() &&
+            ((fl.at("uids").isArray() && !fl.at("uids").items().empty()) ||
+             (fl.at("ownerNames").isArray() && !fl.at("ownerNames").items().empty()))) {
+            why = "当前平台（" + Platform::osName() +
+                  "）不支持属主过滤（--uid/--owner），请清空“排除用户（组）”条件";
             return false;
         }
 
@@ -638,8 +663,8 @@ CHttpResponse hConfig(ApiContext& ctx, const CHttpRequest& req) {
 
     d["filterFields"] = CJsonValue::makeString(
         "includePaths,excludePaths,nameGlobs,nameRejects,typeAllow,typeDeny,"
-        "mtimeAfter,mtimeBefore,minSize,maxSize,maxDepth,followSymlinks,noCrossDevice,"
-        "skipSpecials,includeDirs");
+        "mtimeAfter,mtimeBefore,minSize,maxSize,ownerNames,uids,maxDepth,"
+        "followSymlinks,noCrossDevice,skipSpecials,includeDirs");
     return CHttpResponse::jsonOk(d);
 }
 

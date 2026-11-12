@@ -4,885 +4,2089 @@
      只依赖 bkd 暴露的 /api/*。打开 http://127.0.0.1:8080/ 即可使用。
    ==========================================================================-->
 <html lang="zh-CN">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dbkp 备份控制台</title>
-<style>
-  :root { --bg:#0f1720; --card:#18222e; --line:#26374a; --fg:#e6edf3;
-          --dim:#8ba0b6; --ok:#2ecc71; --err:#ff6b6b; --run:#3fa7ff; --warn:#f0b429; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg);
-         font:14px/1.55 "Segoe UI","Microsoft YaHei",sans-serif; }
-  header { padding:14px 20px; border-bottom:1px solid var(--line);
-           display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
-  header h1 { font-size:17px; margin:0; letter-spacing:.5px; }
-  header .sp { flex:1; }
-  main { padding:18px 20px 40px; display:grid; gap:18px;
-         grid-template-columns: minmax(320px,430px) minmax(0,1fr); }
-  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
-  .card h2 { margin:0 0 12px; font-size:15px; color:var(--dim); font-weight:600; }
-  label { display:block; margin:8px 0 3px; font-size:12px; color:var(--dim); }
-  input, select { width:100%; padding:7px 9px; border-radius:6px;
-         border:1px solid var(--line); background:#101922; color:var(--fg); font:inherit; }
-  input:focus, select:focus { outline:none; border-color:var(--run); }
-  /* 校验不通过的字段：即时标红，配合下方 #formHint 文案，出错当场就能看到 */
-  input.fielderr, select.fielderr { border-color:var(--err); box-shadow:0 0 0 1px var(--err) inset; }
-  #formHint { min-height:16px; font-size:12px; color:var(--err); margin:6px 0 0; }
-  #formHint.ok { color:var(--ok); }
-  #watchHint { min-height:16px; font-size:12px; color:var(--err); margin:6px 0 0; }
-  #watchStatus { margin-top:8px; }
-  #watchDetail { margin-top:6px; }
-  .row { display:flex; gap:10px; } .row > div { flex:1; }
-  button { background:var(--run); color:#04121f; border:0; border-radius:6px;
-           padding:8px 14px; font-weight:600; cursor:pointer; font:inherit; }
-  button.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
-  button:disabled { opacity:.45; cursor:not-allowed; }
-  button:hover:not(:disabled) { filter:brightness(1.12); }
-  .bar { height:8px; background:#0c1420; border-radius:5px; overflow:hidden; margin-top:8px; }
-  .bar i { display:block; height:100%; width:0; background:var(--run); transition:width .35s; }
-  .job { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:10px; }
-  .job .t { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .tag { font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid var(--line); color:var(--dim); }
-  .s-running { color:var(--run); } .s-succeeded { color:var(--ok); }
-  .s-failed { color:var(--err); } .s-canceled { color:var(--warn); } .s-queued { color:var(--dim); }
-  .meta { color:var(--dim); font-size:12px; margin-top:4px; word-break:break-all; }
-  pre.log { background:#0a121b; border:1px solid var(--line); border-radius:6px; padding:8px;
-            max-height:190px; overflow:auto; font-size:12px; white-space:pre-wrap; margin:8px 0 0; }
-  /* hide 是全局 utility，必须盖过任何自带 display 的组件类。曾写成
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>dbkp 备份控制台</title>
+  <style>
+    :root {
+      --bg: #0f1720;
+      --card: #18222e;
+      --line: #26374a;
+      --fg: #e6edf3;
+      --dim: #8ba0b6;
+      --ok: #2ecc71;
+      --err: #ff6b6b;
+      --run: #3fa7ff;
+      --warn: #f0b429;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.55 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    header h1 {
+      font-size: 17px;
+      margin: 0;
+      letter-spacing: .5px;
+    }
+
+    header .sp {
+      flex: 1;
+    }
+
+    main {
+      padding: 18px 20px 40px;
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      color: var(--dim);
+      font-weight: 600;
+    }
+
+    label {
+      display: block;
+      margin: 8px 0 3px;
+      font-size: 12px;
+      color: var(--dim);
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 7px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #101922;
+      color: var(--fg);
+      font: inherit;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--run);
+    }
+
+    /* 校验不通过的字段：即时标红，配合下方 #formHint 文案，出错当场就能看到 */
+    input.fielderr,
+    select.fielderr {
+      border-color: var(--err);
+      box-shadow: 0 0 0 1px var(--err) inset;
+    }
+
+    #formHint {
+      min-height: 16px;
+      font-size: 12px;
+      color: var(--err);
+      margin: 6px 0 0;
+    }
+
+    #formHint.ok {
+      color: var(--ok);
+    }
+
+    #watchHint,
+    #schHint {
+      min-height: 16px;
+      font-size: 12px;
+      color: var(--err);
+      margin: 6px 0 0;
+    }
+
+    #watchStatus,
+    #schStatus {
+      margin-top: 8px;
+    }
+
+    #watchDetail,
+    #schDetail {
+      margin-top: 6px;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .row>div {
+      flex: 1;
+    }
+
+    button {
+      background: var(--run);
+      color: #04121f;
+      border: 0;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    button.ghost {
+      background: transparent;
+      color: var(--dim);
+      border: 1px solid var(--line);
+    }
+
+    button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    button:hover:not(:disabled) {
+      filter: brightness(1.12);
+    }
+
+    .bar {
+      height: 8px;
+      background: #0c1420;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .bar i {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--run);
+      transition: width .35s;
+    }
+
+    .job {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+
+    .job .t {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      color: var(--dim);
+    }
+
+    .s-running {
+      color: var(--run);
+    }
+
+    .s-succeeded {
+      color: var(--ok);
+    }
+
+    .s-failed {
+      color: var(--err);
+    }
+
+    .s-canceled {
+      color: var(--warn);
+    }
+
+    .s-queued {
+      color: var(--dim);
+    }
+
+    .meta {
+      color: var(--dim);
+      font-size: 12px;
+      margin-top: 4px;
+      word-break: break-all;
+    }
+
+    pre.log {
+      background: #0a121b;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      max-height: 190px;
+      overflow: auto;
+      font-size: 12px;
+      white-space: pre-wrap;
+      margin: 8px 0 0;
+    }
+
+    /* hide 是全局 utility，必须盖过任何自带 display 的组件类。曾写成
      `.hide { display:none; }`：后面的 `.mask { display:flex }` 与它特异性相同
      （都是单个 class）却赢在声明顺序上，于是 `class="mask hide"` 的浏览弹窗
      一加载就挡在页面上、点“取消”加了 hide 也关不掉。故用 !important。 */
-  .hide { display:none !important; }
-  /* 目录浏览弹窗：复用卡片配色，遮罩铺满视口 */
-  .mask { position:fixed; inset:0; background:rgba(4,10,16,.66); display:flex;
-          align-items:center; justify-content:center; z-index:30; padding:16px; }
-  .dlg { width:min(640px,94vw); max-height:84vh; display:flex; flex-direction:column; }
-  .blist { border:1px solid var(--line); border-radius:6px; background:#0a121b;
-           overflow:auto; flex:1; min-height:120px; margin:10px 0; }
-  .blist .it { padding:6px 10px; border-bottom:1px solid #12202c; cursor:pointer;
-               display:flex; gap:8px; align-items:center; }
-  .blist .it:hover { background:#12202e; }
-  .blist .it.sel { background:#16324c; }
-  .blist .it .sz { margin-left:auto; color:var(--dim); font-size:12px; }
-  .dlg .foot { display:flex; gap:8px; align-items:center; margin-top:12px; }
-  .dlg .foot .sp { flex:1; }
-  input[type=checkbox] { width:auto; display:inline-block; margin-right:6px; }
-  #toast { position:fixed; right:16px; bottom:16px; background:#0c1420; border:1px solid var(--line);
-           border-left:3px solid var(--run); padding:10px 14px; border-radius:6px; opacity:0;
-           transition:opacity .25s; max-width:430px;
-           pointer-events:none; }   /* 提示浮层不能吞点击：实测“允许覆盖”复选框被它盖住点不动 */
-  #toast.show { opacity:1; } #toast.err { border-left-color:var(--err); }
-  .etab { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
-  .etab th, .etab td { border:1px solid var(--line); padding:3px 6px; text-align:left;
-                       white-space:nowrap; }
-  .etab td.path { white-space:normal; word-break:break-all; }
-  .etab th { color:var(--dim); font-weight:600; }
-  .etab tbody tr:nth-child(even) { background:#0e1822; }
-</style>
+    .hide {
+      display: none !important;
+    }
+
+    /* 目录浏览弹窗：复用卡片配色，遮罩铺满视口 */
+    .mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 10, 16, .66);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+      padding: 16px;
+    }
+
+    .dlg {
+      width: min(640px, 94vw);
+      max-height: 84vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .blist {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0a121b;
+      overflow: auto;
+      flex: 1;
+      min-height: 120px;
+      margin: 10px 0;
+    }
+
+    .blist .it {
+      padding: 6px 10px;
+      border-bottom: 1px solid #12202c;
+      cursor: pointer;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .blist .it:hover {
+      background: #12202e;
+    }
+
+    .blist .it.sel {
+      background: #16324c;
+    }
+
+    .blist .it .sz {
+      margin-left: auto;
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .dlg .foot {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .dlg .foot .sp {
+      flex: 1;
+    }
+
+    input[type=checkbox] {
+      width: auto;
+      display: inline-block;
+      margin-right: 6px;
+    }
+
+    #toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: #0c1420;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--run);
+      padding: 10px 14px;
+      border-radius: 6px;
+      opacity: 0;
+      transition: opacity .25s;
+      max-width: 430px;
+      pointer-events: none;
+    }
+
+    /* 提示浮层不能吞点击：实测“允许覆盖”复选框被它盖住点不动 */
+    #toast.show {
+      opacity: 1;
+    }
+
+    #toast.err {
+      border-left-color: var(--err);
+    }
+
+    .etab {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .etab th,
+    .etab td {
+      border: 1px solid var(--line);
+      padding: 3px 6px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .etab td.path {
+      white-space: normal;
+      word-break: break-all;
+    }
+
+    .etab th {
+      color: var(--dim);
+      font-weight: 600;
+    }
+
+    .etab tbody tr:nth-child(even) {
+      background: #0e1822;
+    }
+
+    /* ---------------- 备份筛选面板（对照实验指导 5.pdf 的“备份设置”页） -------- */
+    .flt {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0d1620;
+      padding: 10px;
+      margin-top: 12px;
+    }
+
+    .flt .ttl {
+      color: var(--fg);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .flt .ttl span {
+      color: var(--dim);
+      font-weight: 400;
+      font-size: 11px;
+      margin-left: 6px;
+    }
+
+    .ftabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 8px;
+    }
+
+    .ftab {
+      position: relative;
+      background: transparent;
+      color: var(--dim);
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 4px 11px;
+      font-size: 12px;
+      font-weight: 400;
+      cursor: pointer;
+    }
+
+    .ftab.active {
+      background: var(--run);
+      color: #04121f;
+      border-color: var(--run);
+      font-weight: 600;
+    }
+
+    .ftab .dot {
+      display: none;
+      position: absolute;
+      top: 1px;
+      right: 1px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--warn);
+    }
+
+    .ftab.on .dot {
+      display: block;
+    }
+
+    .fpane {
+      display: none;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #101a25;
+      padding: 10px;
+      min-height: 150px;
+    }
+
+    .fpane.active {
+      display: block;
+    }
+
+    .fgrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 10px;
+      border: 0;
+      margin: 0;
+      padding: 0;
+    }
+
+    .fgrid[disabled] {
+      opacity: .5;
+    }
+
+    .fgrid label {
+      margin: 0;
+      font-size: 13px;
+      color: var(--fg);
+    }
+
+    .frow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .frow label {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .frow input[type=datetime-local] {
+      width: auto;
+      flex: 1;
+      min-width: 150px;
+    }
+
+    .frow input[type=text],
+    .frow input:not([type]) {
+      width: auto;
+    }
+
+    .dash {
+      color: var(--dim);
+    }
+
+    .fhint {
+      color: var(--dim);
+      font-size: 11px;
+      line-height: 1.55;
+      margin-top: 8px;
+    }
+
+    .fhint b {
+      color: var(--warn);
+      font-weight: 600;
+    }
+
+    .fsub {
+      color: var(--fg);
+      font-size: 12px;
+      margin: 9px 0 5px;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 30px;
+      align-items: center;
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      padding: 5px 7px;
+      background: #0a121b;
+      margin-bottom: 6px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #16324c;
+      border: 1px solid #1f4666;
+      border-radius: 12px;
+      padding: 2px 9px;
+      font-size: 12px;
+    }
+
+    .chip b {
+      cursor: pointer;
+      color: var(--dim);
+      font-weight: 400;
+    }
+
+    .chip b:hover {
+      color: var(--err);
+    }
+
+    .addrow {
+      display: flex;
+      gap: 6px;
+    }
+
+    .addrow input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .addrow button {
+      flex: 0 0 auto;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .fquick {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .fquick button {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    .fopts {
+      margin-top: 10px;
+    }
+
+    .fopts summary {
+      cursor: pointer;
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .ffoot {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ffoot .sum {
+      flex: 1;
+      font-size: 12px;
+      color: var(--dim);
+      min-width: 150px;
+    }
+
+    .ffoot .sum.on {
+      color: var(--ok);
+    }
+
+    .ffoot button {
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+
+    .fnote {
+      color: var(--dim);
+      font-size: 11px;
+      margin-top: 5px;
+    }
+
+    .fnote a {
+      color: var(--run);
+      cursor: pointer;
+      margin: 0 3px;
+    }
+  </style>
 </head>
+
 <body>
-<header>
-  <h1>dbkp 备份控制台</h1>
-  <span class="meta" id="status">连接中…</span>
-  <span class="sp"></span>
-  <span class="meta" id="cap"></span>
-  <span class="meta" id="rootHint"></span>
-  <button class="ghost" id="btnRefresh">刷新任务</button>
-  <button class="ghost" id="btnLogout">退出</button>
-</header>
+  <header>
+    <h1>dbkp 备份控制台</h1>
+    <span class="meta" id="status">连接中…</span>
+    <span class="sp"></span>
+    <span class="meta" id="cap"></span>
+    <span class="meta" id="rootHint"></span>
+    <button class="ghost" id="btnRefresh">刷新任务</button>
+    <button class="ghost" id="btnShutdown">关闭服务</button>
+    <button class="ghost" id="btnLogout">退出</button>
+  </header>
 
-<main>
-  <!-- 拿到 token 之前，服务端只放行 /api/info 与 /api/login -->
-  <section class="card" id="loginCard">
-    <h2>登录</h2>
-    <label>服务口令（服务端未配置口令时可直接进入）</label>
-    <input type="password" id="password" placeholder="••••••">
-    <div style="margin-top:12px"><button id="btnLogin">登录</button></div>
-  </section>
+  <main>
+    <!-- 拿到 token 之前，服务端只放行 /api/info 与 /api/login -->
+    <section class="card" id="loginCard">
+      <h2>登录</h2>
+      <label>服务口令（服务端未配置口令时可直接进入）</label>
+      <input type="password" id="password" placeholder="••••••">
+      <div style="margin-top:12px"><button id="btnLogin">登录</button></div>
+    </section>
 
-  <section class="card hide" id="taskCard">
-    <h2>新建任务</h2>
-    <div class="row">
-      <div><label>类型</label>
-        <select id="type">
-          <option value="backup">备份 backup</option>
-          <option value="restore">还原 restore</option>
-          <option value="verify">校验 verify</option>
-          <option value="compare">对比 compare（归档 vs 源目录）</option>
-        </select></div>
-      <div><label>形态（备份时有效）</label>
-        <select id="mode">
-          <option value="auto">auto 自动判断</option>
-          <option value="archive">archive 单文件归档</option>
-          <option value="copy">copy 逐文件复制</option>
-        </select></div>
-    </div>
-    <label>来源 source（备份=源目录；还原/校验=归档或备份目录；相对路径按数据根解析）</label>
-    <div class="row">
-      <div><input id="source" placeholder="webview 或 D:/data/docs"></div>
-      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
-        <button class="ghost" id="btnBrowseSrc">浏览…</button>
-      </div>
-    </div>
-    <label>目标 destination（以 .dbkp 结尾=归档；否则=目标目录）</label>
-    <div class="row">
-      <div><input id="destination" placeholder="out/docs.dbkp"></div>
-      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
-        <button class="ghost" id="btnBrowseDst">浏览…</button>
-      </div>
-    </div>
-    <div class="row">
-      <div><label>压缩算法</label><select id="algorithm"></select></div>
-      <div><label>加密算法</label>
-        <select id="crypto"><option value="none">none 不加密</option>
-          <option value="aes256">AES-256-CBC</option><option value="des-ede">DES-EDE-CBC(3DES)</option><option value="chacha20">ChaCha20</option></select></div>
-      <div><label>校验和</label><select id="checksum">
-          <option value="crc64">CRC64</option><option value="sha256">SHA-256</option>
-          <option value="none">none</option></select></div>
-    </div>
-    <label>密码（加密算法非 none 时必填）</label>
-    <input type="password" id="jobPassword">
-    <label>排除模式（逗号分隔 glob，等价于命令行 --exclude）</label>
-    <input id="exclude" placeholder="*.tmp, cache/*">
-    <details id="advBox" style="margin-top:10px">
-      <summary style="cursor:pointer;color:var(--dim);font-size:12px">高级过滤（与后端 /api/jobs 的 filter 字段一一对应）</summary>
-      <label>包含路径 includePaths（逗号分隔 glob）</label>
-      <input id="includePaths" placeholder="docs/*, src/**/*.cpp">
+    <section class="card hide" id="taskCard">
+      <h2>新建任务</h2>
       <div class="row">
-        <div><label>名称白名单 nameGlobs</label><input id="nameGlobs" placeholder="*.cpp,*.h"></div>
-        <div><label>名称黑名单 nameRejects</label><input id="nameRejects" placeholder="*.log"></div>
+        <div><label>类型</label>
+          <select id="type">
+            <option value="backup">备份 backup</option>
+            <option value="restore">还原 restore</option>
+            <option value="verify">校验 verify</option>
+            <option value="compare">对比 compare（归档 vs 源目录）</option>
+          </select>
+        </div>
+        <div><label>形态（备份时有效）</label>
+          <select id="mode">
+            <option value="auto">auto 自动判断</option>
+            <option value="archive">archive 单文件归档</option>
+            <option value="copy">copy 逐文件复制</option>
+          </select>
+        </div>
+      </div>
+      <label>来源 source（备份=源目录；还原/校验=归档或备份目录；相对路径按数据根解析）</label>
+      <div class="row">
+        <div><input id="source" placeholder="webview 或 D:/data/docs"></div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseSrc">浏览…</button>
+        </div>
+      </div>
+      <label>目标 destination（以 .dbkp 结尾=归档；否则=目标目录）</label>
+      <div class="row">
+        <div><input id="destination" placeholder="out/docs.dbkp"></div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseDst">浏览…</button>
+        </div>
       </div>
       <div class="row">
-        <div><label>类型白名单 typeAllow</label><input id="typeAllow" placeholder="regular,dir 或 rD"></div>
-        <div><label>类型黑名单 typeDeny</label><input id="typeDeny" placeholder="l 或 symlink"></div>
+        <div><label>压缩算法</label><select id="algorithm"></select></div>
+        <div><label>加密算法</label>
+          <select id="crypto">
+            <option value="none">none 不加密</option>
+            <option value="aes256">AES-256-CBC</option>
+            <option value="des-ede">DES-EDE-CBC(3DES)</option>
+            <option value="chacha20">ChaCha20</option>
+          </select>
+        </div>
+        <div><label>校验和</label><select id="checksum">
+            <option value="crc64">CRC64</option>
+            <option value="sha256">SHA-256</option>
+            <option value="none">none</option>
+          </select></div>
+      </div>
+      <label>密码（加密算法非 none 时必填）</label>
+      <input type="password" id="jobPassword">
+      <!-- 备份筛选：对照实验指导 5.pdf《参考界面·备份设置》的六页筛选逻辑。
+         文件类型 / 时间 / 文件大小 / 排除用户（组）/ 排除文件名称 / 排除目录
+         全部映射到 /api/jobs 的 filter 字段（与 CLI 同名参数同语义）。 -->
+      <div class="flt" id="fltBox">
+        <div class="ttl">备份筛选<span>自定义备份：仅 backup 任务生效</span></div>
+        <label>数据路径（筛选作用的备份源目录）</label>
+        <div class="row">
+          <div><input id="filterRoot" placeholder="webview 或 D:/data/docs"></div>
+          <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+            <button class="ghost" id="btnBrowseFilterRoot">选择路径</button>
+          </div>
+        </div>
+        <div class="ftabs" id="fltTabs">
+          <button type="button" class="ftab active" data-pane="paneType">文件类型<span class="dot"></span></button>
+          <button type="button" class="ftab" data-pane="paneTime">时间<span class="dot"></span></button>
+          <button type="button" class="ftab" data-pane="paneSize">文件大小<span class="dot"></span></button>
+          <button type="button" class="ftab" data-pane="paneOwner">排除用户（组）<span class="dot"></span></button>
+          <button type="button" class="ftab" data-pane="paneName">排除文件名称<span class="dot"></span></button>
+          <button type="button" class="ftab" data-pane="paneDir">排除目录<span class="dot"></span></button>
+        </div>
+        <!-- 1. 文件类型：白名单 checkbox 组 -->
+        <div class="fpane active" id="paneType">
+          <label><input type="checkbox" id="ftAll" checked> all 全部类型文件</label>
+          <fieldset class="fgrid" id="typeOthers" style="margin-top:8px">
+            <label><input type="checkbox" id="ftRegular" checked> - 普通文件</label>
+            <label><input type="checkbox" id="ftDir" checked> d 目录文件</label>
+            <label><input type="checkbox" id="ftSymlink" checked> l 符号连接</label>
+            <label><input type="checkbox" id="ftChar" checked> c 字符设备</label>
+            <label><input type="checkbox" id="ftBlock" checked> b 块设备</label>
+            <label><input type="checkbox" id="ftSocket" checked> s 套接字文件</label>
+            <label><input type="checkbox" id="ftFifo" checked> p 命名管道文件</label>
+          </fieldset>
+          <div class="fhint">白名单逻辑：只备份勾选的类型。勾选“all”或全选具体类型（默认）= 不限制类型；全部取消也按“不限制”处理（否则备份必为空）。</div>
+        </div>
+        <!-- 2. 时间：修改时间区间 -->
+        <div class="fpane" id="paneTime">
+          <div class="frow" style="margin-top:6px">
+            <label><input type="checkbox" id="mtimeOn"> 修改时间</label>
+            <input type="datetime-local" id="mtimeAfter" step="60">
+            <span class="dash">–</span>
+            <input type="datetime-local" id="mtimeBefore" step="60">
+          </div>
+          <div class="fquick">
+            <button type="button" class="ghost" data-days="7">最近 7 天</button>
+            <button type="button" class="ghost" data-days="30">最近 30 天</button>
+            <button type="button" class="ghost" data-days="365">最近一年</button>
+          </div>
+          <div class="fhint">区间含义：修改时间 ≥ 起始 且 ≤ 结束，留空一侧表示不限；勾选后才生效（等同 CLI --newer-than / --older-than）。<br>
+            参考界面里的“创建时间”本系统未采集，故只提供修改时间筛选。</div>
+        </div>
+        <!-- 3. 文件大小：起止区间 + 单位 -->
+        <div class="fpane" id="paneSize">
+          <div class="frow" style="margin-top:6px">
+            <label>尺寸</label>
+            <input id="minSize" placeholder="0" style="width:96px">
+            <select id="minSizeUnit" style="width:auto">
+              <option value="bytes">bytes</option>
+              <option value="KB">KB</option>
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+            </select>
+            <span class="dash">–</span>
+            <input id="maxSize" placeholder="不限" style="width:96px">
+            <select id="maxSizeUnit" style="width:auto">
+              <option value="bytes">bytes</option>
+              <option value="KB">KB</option>
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+            </select>
+          </div>
+          <div class="fhint">留空或 0 表示不限；仅对普通文件生效（等同 --min-size / --max-size）。</div>
+        </div>
+        <!-- 4. 排除用户（组）：列表 + 添加（后端目前只有属主名/uid） -->
+        <div class="fpane" id="paneOwner">
+          <div class="fsub">排除用户（属主名 ownerNames）</div>
+          <div class="chips" id="ownerList"></div>
+          <div class="addrow">
+            <input id="ownerInput" placeholder="如 root 或 zhanwenhan">
+            <button type="button" class="ghost" id="btnAddOwner">添加用户</button>
+          </div>
+          <div class="fhint" id="ownerPlatWarn" style="color:var(--warn)"></div>
+          <div class="fhint">按属主名排除等同 CLI --owner，仅在支持属主解析的平台（POSIX）生效；
+            Windows 上本页会置灰，避免“设了不生效”。用户组（gid）过滤后端暂未提供，故本页只做“用户”。</div>
+        </div>
+        <!-- 5. 排除文件名称：白名单 + 黑名单 -->
+        <div class="fpane" id="paneName">
+          <div class="fsub">名称白名单 nameGlobs（只备份匹配的文件名）</div>
+          <div class="chips" id="nameGlobList"></div>
+          <div class="addrow">
+            <input id="nameGlobInput" placeholder="如 *.cpp 或 *.doc?">
+            <button type="button" class="ghost" id="btnAddNameGlob">添加</button>
+          </div>
+          <div class="fsub">名称黑名单 nameRejects（排除匹配的文件名）</div>
+          <div class="chips" id="nameRejectList"></div>
+          <div class="addrow">
+            <input id="nameRejectInput" placeholder="如 *.log 或 ~$*">
+            <button type="button" class="ghost" id="btnAddNameReject">添加</button>
+          </div>
+          <div class="fhint">glob 语法：<code>* ? [abc]</code>，只匹配文件名本身（等同 --name / --no-name）。
+            参考界面用正则，本系统与命令行统一用 glob。</div>
+        </div>
+        <!-- 6. 排除目录：相对路径 glob 列表 -->
+        <div class="fpane" id="paneDir">
+          <div class="fsub">排除目录 / 路径 excludePaths（匹配相对路径的 glob）</div>
+          <div class="chips" id="excludePathList"></div>
+          <div class="addrow">
+            <input id="excludePathInput" placeholder="如 build/* 或 docs/old/*">
+            <button type="button" class="ghost" id="btnAddExcludePath">添加</button>
+            <button type="button" class="ghost" id="btnAddExcludeDir">添加目录…</button>
+          </div>
+          <div class="fsub">包含路径 includePaths（只备份匹配的路径，父目录自动放行）</div>
+          <div class="chips" id="includePathList"></div>
+          <div class="addrow">
+            <input id="includePathInput" placeholder="如 docs/* 或 src/*.cpp">
+            <button type="button" class="ghost" id="btnAddIncludePath">添加</button>
+          </div>
+          <div class="fhint">路径相对“数据路径”（/ 分隔）；用“添加目录…”选择时会自动换算成相对路径。</div>
+        </div>
+        <!-- 遍历选项：保留原来的高级开关，不再单独占一块界面 -->
+        <details class="fopts">
+          <summary>遍历选项（深度 / 链接 / 跨设备）</summary>
+          <div class="row" style="flex-wrap:wrap;margin-top:6px">
+            <div><label><input type="checkbox" id="followSymlinks"> 跟随符号链接</label></div>
+            <div><label><input type="checkbox" id="noCrossDevice"> 不跨设备</label></div>
+            <div><label><input type="checkbox" id="skipSpecials"> 跳过特殊文件</label></div>
+            <div><label><input type="checkbox" id="includeDirs" checked> 目录入档</label></div>
+          </div>
+          <label>最大深度 maxDepth（空=不限）</label>
+          <input id="maxDepth" placeholder="空=不限">
+        </details>
+        <div class="fnote" id="filterHint">提示：所有条件都是“白名单/区间”语义，AND 组合；不填即不限制。</div>
+        <div class="ffoot">
+          <span class="sum" id="filterSummary">未启用筛选：备份全部文件</span>
+          <button type="button" class="ghost" id="btnFilterReset">清空筛选</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label><input type="checkbox" id="preserveMeta" checked> 保留元数据</label></div>
+        <div><label><input type="checkbox" id="verifyAfter" checked> 备份后校验</label></div>
+        <div><label><input type="checkbox" id="overwrite"> 允许覆盖</label></div>
       </div>
       <div class="row">
-        <div><label>最小尺寸 minSize</label><input id="minSize" placeholder="1KB"></div>
-        <div><label>最大尺寸 maxSize</label><input id="maxSize" placeholder="100MB"></div>
-        <div><label>最大深度 maxDepth</label><input id="maxDepth" placeholder="空=不限"></div>
+        <div><label><input type="checkbox" id="hardlinkDedupe" checked> 硬链接去重</label></div>
+        <div><label><input type="checkbox" id="skipPayloadVerify"> 还原时跳过整卷校验</label></div>
+      </div>
+      <label>备注 comment（写进归档卷标，留空则用默认值）</label>
+      <input id="comment" placeholder="毕业季备份">
+      <label>任务名（留空则自动用 类型:来源）</label>
+      <input id="label">
+      <div id="formHint"></div>
+      <div style="margin-top:8px"><button id="btnSubmit">提交任务</button></div>
+    </section>
+
+    <section class="card">
+      <h2>任务列表 <span class="meta" id="jobHint">（SSE 实时进度）</span></h2>
+      <div id="jobs">
+        <div class="meta">还没有任务。</div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>查看已有归档（.dbkp 路径）</label>
+          <input id="statPath" placeholder="D:/backup/docs.dbkp">
+        </div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseStat">浏览…</button>
+          <button class="ghost" id="btnStat">读卷标</button>
+        </div>
+      </div>
+      <pre class="log hide" id="statOut"></pre>
+      <div id="statEntries"></div>
+      <!-- 归档 vs 源目录逐条比对：GET /api/compare 同步接口，不用建任务、不掉历史 -->
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>与源目录逐条比对 origin（归档 vs 目录）</label>
+          <input id="cmpOrigin" placeholder="D:/data/docs">
+        </div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseCmpOrigin">浏览…</button>
+          <button class="ghost" id="btnCompare">开始比对</button>
+        </div>
+      </div>
+      <label>归档密码 password（加密箱才需要）</label>
+      <input type="password" id="cmpPassword" placeholder="留空 = 未加密">
+      <pre class="log hide" id="cmpOut"></pre>
+    </section>
+
+    <!-- 定时备份：与“实时备份”同一套卡片样式；后端 /api/schedule 支持启动/状态/停止 -->
+    <section class="card">
+      <h2>定时备份 <span class="meta">（按间隔自动备份·bk schedule 的 Web 入口）</span></h2>
+      <div class="meta" style="margin-bottom:8px">每隔一个间隔生成一份带时间戳的 .dbkp，跑满指定轮次后自动停止；保留份数 &gt; 0 时每轮滚动删除最旧的归档。</div>
+      <label>源目录（备份对象）</label>
+      <div class="row">
+        <div><input id="schSource" placeholder="webview 或 D:/data/docs"></div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseSchSrc">浏览…</button>
+        </div>
+      </div>
+      <label>归档输出目录（时间戳文件名由服务端生成）</label>
+      <div class="row">
+        <div><input id="schDest" placeholder="out/sched"></div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseSchDst">浏览…</button>
+        </div>
+      </div>
+      <label>文件名前缀 prefix（留空 = 源目录名）</label>
+      <input id="schPrefix" placeholder="留空自动">
+      <div class="row">
+        <div><label>间隔 interval</label><input id="schInterval" value="5m" placeholder="90s / 5m / 2h / 1d"></div>
+        <div><label>轮次 times</label><input id="schTimes" value="3" placeholder=">=1"></div>
+        <div><label>保留份数 keep</label><input id="schKeep" value="0" placeholder="0=不限"></div>
       </div>
       <div class="row">
-        <div><label>修改时间晚于 mtimeAfter</label><input id="mtimeAfter" placeholder="2026-01-01 或 7d"></div>
-        <div><label>修改时间早于 mtimeBefore</label><input id="mtimeBefore" placeholder="2026-06-01"></div>
+        <div><label>压缩算法</label><select id="schAlgo"></select></div>
+        <div><label>加密算法</label>
+          <select id="schCrypto">
+            <option value="none">none 不加密</option>
+            <option value="aes256">AES-256-CBC</option>
+            <option value="des-ede">DES-EDE-CBC(3DES)</option>
+            <option value="chacha20">ChaCha20</option>
+          </select>
+        </div>
       </div>
-      <div class="row" style="flex-wrap:wrap">
-        <div><label><input type="checkbox" id="followSymlinks"> 跟随符号链接</label></div>
-        <div><label><input type="checkbox" id="noCrossDevice"> 不跨设备</label></div>
-        <div><label><input type="checkbox" id="skipSpecials"> 跳过特殊文件</label></div>
-        <div><label><input type="checkbox" id="includeDirs" checked> 目录入档</label></div>
+      <label>密码（加密算法非 none 时必填）</label>
+      <input type="password" id="schPassword">
+      <div id="schHint"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnSchStart">启动定时备份</button>
+        <button class="ghost" id="btnSchStop" disabled>停止</button>
       </div>
-    </details>
-    <div class="row" style="margin-top:10px">
-      <div><label><input type="checkbox" id="preserveMeta" checked> 保留元数据</label></div>
-      <div><label><input type="checkbox" id="verifyAfter" checked> 备份后校验</label></div>
-      <div><label><input type="checkbox" id="overwrite"> 允许覆盖</label></div>
-    </div>
-    <div class="row">
-      <div><label><input type="checkbox" id="hardlinkDedupe" checked> 硬链接去重</label></div>
-      <div><label><input type="checkbox" id="skipPayloadVerify"> 还原时跳过整卷校验</label></div>
-    </div>
-    <label>备注 comment（写进归档卷标，留空则用默认值）</label>
-    <input id="comment" placeholder="毕业季备份">
-    <label>任务名（留空则自动用 类型:来源）</label>
-    <input id="label">
-    <div id="formHint"></div>
-    <div style="margin-top:8px"><button id="btnSubmit">提交任务</button></div>
-  </section>
+      <div class="meta" id="schStatus">当前没有定时任务。</div>
+      <pre class="log hide" id="schDetail"></pre>
+    </section>
 
-  <section class="card">
-    <h2>任务列表 <span class="meta" id="jobHint">（SSE 实时进度）</span></h2>
-    <div id="jobs"><div class="meta">还没有任务。</div></div>
-    <div class="row" style="margin-top:10px">
-      <div>
-        <label>查看已有归档（.dbkp 路径）</label>
-        <input id="statPath" placeholder="D:/backup/docs.dbkp">
+    <section class="card">
+      <h2>实时备份 <span class="meta">（自动感知文件变化·bk watch 的 Web 入口）</span></h2>
+      <div class="meta" style="margin-bottom:8px">开启后后台常驻监听源目录，一旦有新增/修改/删除，去抖一段时间自动生成一份 .dbkp 归档。</div>
+      <label>源目录（被监听）</label>
+      <div class="row">
+        <div><input id="watchSource" placeholder="webview 或 D:/data/docs"></div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseWatchSrc">浏览…</button>
+        </div>
       </div>
-      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
-        <button class="ghost" id="btnBrowseStat">浏览…</button>
-        <button class="ghost" id="btnStat">读卷标</button>
+      <label>归档输出目录（须为源以外/非其父目录）</label>
+      <div class="row">
+        <div><input id="watchDest" placeholder="out/watch"></div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="ghost" id="btnBrowseWatchDst">浏览…</button>
+        </div>
       </div>
-    </div>
-    <pre class="log hide" id="statOut"></pre>
-    <div id="statEntries"></div>
-  </section>
+      <div class="row">
+        <div><label>去抖 debounce</label><input id="watchDebounce" value="2s" placeholder="2s / 1m"></div>
+        <div><label>保留份数 keep</label><input id="watchKeep" value="0" placeholder="0=不限"></div>
+        <div><label>压缩算法</label><select id="watchAlgo"></select></div>
+        <div><label>加密算法</label>
+          <select id="watchCrypto">
+            <option value="none">none 不加密</option>
+            <option value="aes256">AES-256-CBC</option>
+            <option value="des-ede">DES-EDE-CBC(3DES)</option>
+            <option value="chacha20">ChaCha20</option>
+          </select>
+        </div>
+      </div>
+      <label>密码（加密算法非 none 时必填）</label>
+      <input type="password" id="watchPassword">
+      <div id="watchHint"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnWatchStart">开始监听</button>
+        <button class="ghost" id="btnWatchStop" disabled>停止监听</button>
+      </div>
+      <div class="meta" id="watchStatus">当前未在监听。</div>
+      <pre class="log hide" id="watchDetail"></pre>
+    </section>
 
-  <section class="card">
-    <h2>实时备份 <span class="meta">（自动感知文件变化·bk watch 的 Web 入口）</span></h2>
-    <div class="meta" style="margin-bottom:8px">开启后后台常驻监听源目录，一旦有新增/修改/删除，去抖一段时间自动生成一份 .dbkp 归档。</div>
-    <label>源目录（被监听）</label>
-    <div class="row">
-      <div><input id="watchSource" placeholder="webview 或 D:/data/docs"></div>
-      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
-        <button class="ghost" id="btnBrowseWatchSrc">浏览…</button>
+  </main>
+  <!-- 目录浏览：接服务端 /api/browse，选完把路径回填到触发它的输入框 -->
+  <div id="browseMask" class="mask hide">
+    <div class="card dlg">
+      <h2>选择目录 / 归档文件</h2>
+      <div class="meta" id="browsePath">…</div>
+      <div class="blist" id="browseList"></div>
+      <div class="meta" id="browseHint"></div>
+      <div class="foot">
+        <button class="ghost" id="bRoot">数据根</button>
+        <button class="ghost" id="bUp">上一级</button>
+        <span class="sp"></span>
+        <button class="ghost" id="bCancel">取消</button>
+        <button id="bOk">用这个路径</button>
       </div>
-    </div>
-    <label>归档输出目录（须为源以外/非其父目录）</label>
-    <div class="row">
-      <div><input id="watchDest" placeholder="out/watch"></div>
-      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
-        <button class="ghost" id="btnBrowseWatchDst">浏览…</button>
-      </div>
-    </div>
-    <div class="row">
-      <div><label>去抖 debounce</label><input id="watchDebounce" value="2s" placeholder="2s / 1m"></div>
-      <div><label>保留份数 keep</label><input id="watchKeep" value="0" placeholder="0=不限"></div>
-      <div><label>压缩算法</label><select id="watchAlgo"></select></div>
-      <div><label>加密算法</label>
-        <select id="watchCrypto"><option value="none">none 不加密</option>
-          <option value="aes256">AES-256-CBC</option><option value="des-ede">DES-EDE-CBC(3DES)</option><option value="chacha20">ChaCha20</option></select></div>
-    </div>
-    <label>密码（加密算法非 none 时必填）</label>
-    <input type="password" id="watchPassword">
-    <div id="watchHint"></div>
-    <div class="row" style="margin-top:8px">
-      <button id="btnWatchStart">开始监听</button>
-      <button class="ghost" id="btnWatchStop" disabled>停止监听</button>
-    </div>
-    <div class="meta" id="watchStatus">当前未在监听。</div>
-    <pre class="log hide" id="watchDetail"></pre>
-  </section>
-
-</main>
-<!-- 目录浏览：接服务端 /api/browse，选完把路径回填到触发它的输入框 -->
-<div id="browseMask" class="mask hide">
-  <div class="card dlg">
-    <h2>选择目录 / 归档文件</h2>
-    <div class="meta" id="browsePath">…</div>
-    <div class="blist" id="browseList"></div>
-    <div class="meta" id="browseHint"></div>
-    <div class="foot">
-      <button class="ghost" id="bRoot">数据根</button>
-      <button class="ghost" id="bUp">上一级</button>
-      <span class="sp"></span>
-      <button class="ghost" id="bCancel">取消</button>
-      <button id="bOk">用这个路径</button>
     </div>
   </div>
-</div>
-<div id="toast"></div>
-<script>
-'use strict';
-/* ------------------------------------------------------------------ 基础设施 */
-const $ = (id) => document.getElementById(id);
-let TOKEN = sessionStorage.getItem('dbkp.token') || '';
-let ES = null;                       // EventSource
-let LAST_REVISION = 0;
+  <div id="toast"></div>
+  <script>
+    'use strict';
+    /* ------------------------------------------------------------------ 基础设施 */
+    const $ = (id) => document.getElementById(id);
+    const escapeHtml = (s) => String(s || '').replace(/[&<>"]/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let TOKEN = sessionStorage.getItem('dbkp.token') || '';
+    let ES = null;                       // EventSource
+    let LAST_REVISION = 0;
 
-function toast(text, isErr) {
-  const t = $('toast');
-  t.textContent = text;
-  t.className = 'show' + (isErr ? ' err' : '');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => { t.className = ''; }, 4200);
-}
-
-async function api(path, opts) {
-  const o = Object.assign({ headers: {} }, opts || {});
-  if (TOKEN) o.headers['Authorization'] = 'Bearer ' + TOKEN;
-  if (o.body && !o.headers['Content-Type']) o.headers['Content-Type'] = 'application/json';
-  const resp = await fetch(path, o);
-  const text = await resp.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch (e) { /* 静态页/404 不是 JSON */ }
-  if (resp.status === 401) { TOKEN = ''; sessionStorage.removeItem('dbkp.token'); showLogin('登录已过期，请重新登录'); }
-  if (!resp.ok || (json && json.code !== 0 && resp.status !== 200)) {
-    const msg = (json && json.msg) ? json.msg : ('HTTP ' + resp.status + ' ' + text.slice(0, 120));
-    throw new Error(msg);
-  }
-  return json;
-}
-
-function showLogin(msg) {
-  $('loginCard').classList.remove('hide');
-  $('taskCard').classList.add('hide');
-  $('status').textContent = msg || '未登录';
-  if (ES) { ES.close(); ES = null; }
-}
-
-function showApp(info) {
-  $('loginCard').classList.add('hide');
-  $('taskCard').classList.remove('hide');
-  $('status').textContent = '已连接 ' + (info.app || 'dbkp') + ' api ' + (info.apiVersion || '?')
-    + ' / ' + (info.capabilities ? info.capabilities.os : '');
-  $('cap').textContent = info.capabilities
-    ? ('软链 ' + yn(info.capabilities.symlink) + ' · 硬链 ' + yn(info.capabilities.hardlink)
-       + ' · 属主 ' + yn(info.capabilities.owner)) : '';
-}
-const yn = (b) => b ? '✓' : '✗';
-
-/* ------------------------------------------------------------------- 启动 */
-async function boot() {
-  /* 双击打开 index.html（file://）时 fetch 打不到服务，表现就是"点什么都没反应"，
-     与其卡在登录卡片，不如把话说清楚。 */
-  if (window.location.protocol === 'file:') {
-    showLogin('请用 http://127.0.0.1:8080/ 打开（现在是 file://，接口调不通）');
-    return;
-  }
-  let info;
-  try { info = (await api('/api/info')).data; }
-  catch (e) { showLogin('无法连接服务：' + e.message); return; }
-  if (TOKEN) {
-    try { const cfg = (await api('/api/config')).data; showApp(info); applyConfig(cfg); refreshJobs(); return; }
-    catch (e) { /* token 失效，走登录 */ }
-  }
-  if (!info.authRequired) {
-    const r = await api('/api/login', { method: 'POST', body: JSON.stringify({ password: '' }) });
-    TOKEN = r.data.token; sessionStorage.setItem('dbkp.token', TOKEN);
-    showApp(info); applyConfig((await api('/api/config')).data); refreshJobs();
-  } else {
-    showLogin(info.authRequired ? '需要登录' : '未登录');
-  }
-}
-
-async function doLogin() {
-  try {
-    const r = await api('/api/login', {
-      method: 'POST', body: JSON.stringify({ password: $('password').value })
-    });
-    TOKEN = r.data.token;
-    sessionStorage.setItem('dbkp.token', TOKEN);
-    const info = (await api('/api/info')).data;
-    showApp(info);
-    applyConfig((await api('/api/config')).data);
-    refreshJobs();
-    toast('登录成功，令牌有效期 ' + Math.round((r.data.expiresIn || 0) / 3600) + ' 小时');
-  } catch (e) { toast('登录失败：' + e.message, true); }
-}
-
-function applyConfig(cfg) {
-  const sel = $('algorithm');
-  sel.innerHTML = '';
-  (cfg.algorithms || []).forEach((a) => {
-    const op = document.createElement('option');
-    op.value = a; op.textContent = a;
-    if (a === cfg.defaultAlgorithm) op.selected = true;
-    sel.appendChild(op);
-  });
-  /* 实时备份面板的压缩算法下拉：与主表单同源，默认选中 defaultAlgorithm */
-  const wsel = $('watchAlgo');
-  if (wsel) {
-    wsel.innerHTML = '';
-    (cfg.algorithms || []).forEach((a) => {
-      const op = document.createElement('option');
-      op.value = a; op.textContent = a;
-      if (a === cfg.defaultAlgorithm) op.selected = true;
-      wsel.appendChild(op);
-    });
-  }
-  if (cfg.defaultSource && !$('source').value) $('source').value = cfg.defaultSource;
-  if (cfg.defaultDestination && !$('destination').value) $('destination').value = cfg.defaultDestination;
-  window.CFG = cfg;
-  $('rootHint').textContent = cfg.dataRoot
-    ? '数据根：' + cfg.dataRoot
-    : '数据根：未限制（可浏览进程能访问的所有路径）';
-  paintValidation(false);   /* 拿到 dataRoot 后重算，越界判断才准 */
-}
-
-$('btnLogin').onclick = doLogin;
-$('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
-$('btnLogout').onclick = () => { TOKEN = ''; sessionStorage.removeItem('dbkp.token'); showLogin('已退出'); };
-$('btnRefresh').onclick = refreshJobs;
-
-/* ------------------------------------------------------------------ 提交任务 */
-/* 逗号分隔输入 -> 去空去空白的字符串数组 */
-const csv = (id) => $(id).value.split(',').map(s => s.trim()).filter(Boolean);
-
-function buildBody() {
-  const type = $('type').value;
-  const body = {
-    type, label: $('label').value,
-    source: $('source').value.trim(),
-    destination: $('destination').value.trim(),
-    password: $('jobPassword').value,
-    preserveMeta: $('preserveMeta').checked,
-    verifyAfter: $('verifyAfter').checked,
-    overwrite: $('overwrite').checked,
-    hardlinkDedupe: $('hardlinkDedupe').checked,
-    skipPayloadVerify: $('skipPayloadVerify').checked
-  };
-  const cm = $('comment').value.trim();
-  if (cm) body.comment = cm;
-  /* 归档参数只对 backup 有意义；compare/verify/restore 用不到 pack，
-     少送就走后端默认值，避免界面上无关的下拉影响提交结果。 */
-  if (type === 'backup') {
-    body.mode = $('mode').value;
-    body.algorithm = $('algorithm').value;
-    body.crypto = $('crypto').value;
-    body.checksum = $('checksum').value;
-    const f = {};   /* 高级过滤：字段名与后端 applyFilterJson 一一对应 */
-    [['excludePaths', 'exclude'], ['includePaths', 'includePaths'],
-     ['nameGlobs', 'nameGlobs'], ['nameRejects', 'nameRejects']]
-      .forEach(([k, id]) => { const v = csv(id); if (v.length) f[k] = v; });
-    if ($('typeAllow').value.trim())   f.typeAllow   = $('typeAllow').value.trim();
-    if ($('typeDeny').value.trim())    f.typeDeny    = $('typeDeny').value.trim();
-    if ($('minSize').value.trim())     f.minSize     = $('minSize').value.trim();
-    if ($('maxSize').value.trim())     f.maxSize     = $('maxSize').value.trim();
-    if ($('mtimeAfter').value.trim())  f.mtimeAfter  = $('mtimeAfter').value.trim();
-    if ($('mtimeBefore').value.trim()) f.mtimeBefore = $('mtimeBefore').value.trim();
-    const md = $('maxDepth').value.trim();
-    if (md !== '' && !Number.isNaN(parseInt(md, 10))) f.maxDepth = parseInt(md, 10);
-    /* 只送与默认相反的值：布尔开关后端按“缺省即默认”处理，省得噪音。 */
-    if ($('followSymlinks').checked)  f.followSymlinks = true;
-    if ($('noCrossDevice').checked)   f.noCrossDevice  = true;
-    if ($('skipSpecials').checked)    f.skipSpecials   = true;
-    if (!$('includeDirs').checked)    f.includeDirs    = false;
-    if (Object.keys(f).length) body.filter = f;
-  }
-  return body;
-}
-
-/* ------- 提交前 + 实时联动校验：出错标红 + 明确提示 + 禁用提交（不允许进入下一步） ------- */
-let touchedForm = false;
-function looksAbsPath(p) { p = normSep(p); return p[0] === '/' || /^[A-Za-z]:/.test(p); }
-
-/* 规则和后端 Spec.parse / hCreateJob 的拒绝条件一一对齐，前端能提前挡的先挡。 */
-function currentFails() {
-  const type = $('type').value;
-  const src = $('source').value.trim();
-  const dst = $('destination').value.trim();
-  const out = [];
-  const add = (ids, msg) => out.push({ ids, msg });
-  if (!src) add(['source'], '来源路径不能为空（可用“浏览…”选择）');
-  if (type !== 'verify' && !dst) add(['destination'], '目标路径不能为空');
-  if (type === 'backup') {
-    const crypto = $('crypto').value;
-    if (crypto !== 'none' && !$('jobPassword').value)
-      add(['crypto', 'jobPassword'], '已选加密算法 ' + crypto + '，必须填写密码');
-    const mode = $('mode').value;
-    if (dst) {
-      const isArc = /\.dbkp$/i.test(dst);
-      if (mode === 'archive' && !isArc) add(['destination'], '归档模式(archive) 目标文件名必须以 .dbkp 结尾');
-      if (mode === 'copy' && isArc) add(['destination'], '复制模式(copy) 目标应是目录，不要以 .dbkp 结尾');
+    function toast(text, isErr) {
+      const t = $('toast');
+      t.textContent = text;
+      t.className = 'show' + (isErr ? ' err' : '');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => { t.className = ''; }, 4200);
     }
-    /* 目标路径包含源路径时校验失败（归档写进源旁边会导致验证不一致） */
-    if (src && dst) {
+
+    async function api(path, opts) {
+      const o = Object.assign({ headers: {} }, opts || {});
+      if (TOKEN) o.headers['Authorization'] = 'Bearer ' + TOKEN;
+      if (o.body && !o.headers['Content-Type']) o.headers['Content-Type'] = 'application/json';
+      const resp = await fetch(path, o);
+      const text = await resp.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (e) { /* 静态页/404 不是 JSON */ }
+      if (resp.status === 401) { TOKEN = ''; sessionStorage.removeItem('dbkp.token'); showLogin('登录已过期，请重新登录'); }
+      if (!resp.ok || (json && json.code !== 0 && resp.status !== 200)) {
+        const msg = (json && json.msg) ? json.msg : ('HTTP ' + resp.status + ' ' + text.slice(0, 120));
+        throw new Error(msg);
+      }
+      return json;
+    }
+
+    function showLogin(msg) {
+      $('loginCard').classList.remove('hide');
+      $('taskCard').classList.add('hide');
+      $('status').textContent = msg || '未登录';
+      if (ES) { ES.close(); ES = null; }
+    }
+
+    function showApp(info) {
+      $('loginCard').classList.add('hide');
+      $('taskCard').classList.remove('hide');
+      $('status').textContent = '已连接 ' + (info.app || 'dbkp') + ' api ' + (info.apiVersion || '?')
+        + ' / ' + (info.capabilities ? info.capabilities.os : '');
+      $('cap').textContent = info.capabilities
+        ? ('软链 ' + yn(info.capabilities.symlink) + ' · 硬链 ' + yn(info.capabilities.hardlink)
+          + ' · 属主 ' + yn(info.capabilities.owner)) : '';
+      window.CAPS = info.capabilities || null;
+      initOwnerCapability();   /* 平台不支持属主时置灰“排除用户（组）”页 */
+      pollSchedule();          /* 后台可能有在跑的定时任务，登录后立即回显 */
+    }
+    const yn = (b) => b ? '✓' : '✗';
+
+    /* ------------------------------------------------------------------- 启动 */
+    async function boot() {
+      /* 双击打开 index.html（file://）时 fetch 打不到服务，表现就是"点什么都没反应"，
+         与其卡在登录卡片，不如把话说清楚。 */
+      if (window.location.protocol === 'file:') {
+        showLogin('请用 http://127.0.0.1:8080/ 打开（现在是 file://，接口调不通）');
+        return;
+      }
+      let info;
+      try { info = (await api('/api/info')).data; }
+      catch (e) { showLogin('无法连接服务：' + e.message); return; }
+      if (TOKEN) {
+        try { const cfg = (await api('/api/config')).data; showApp(info); applyConfig(cfg); refreshJobs(); return; }
+        catch (e) { /* token 失效，走登录 */ }
+      }
+      if (!info.authRequired) {
+        const r = await api('/api/login', { method: 'POST', body: JSON.stringify({ password: '' }) });
+        TOKEN = r.data.token; sessionStorage.setItem('dbkp.token', TOKEN);
+        showApp(info); applyConfig((await api('/api/config')).data); refreshJobs();
+      } else {
+        showLogin(info.authRequired ? '需要登录' : '未登录');
+      }
+    }
+
+    async function doLogin() {
+      try {
+        const r = await api('/api/login', {
+          method: 'POST', body: JSON.stringify({ password: $('password').value })
+        });
+        TOKEN = r.data.token;
+        sessionStorage.setItem('dbkp.token', TOKEN);
+        const info = (await api('/api/info')).data;
+        showApp(info);
+        applyConfig((await api('/api/config')).data);
+        refreshJobs();
+        toast('登录成功，令牌有效期 ' + Math.round((r.data.expiresIn || 0) / 3600) + ' 小时');
+      } catch (e) { toast('登录失败：' + e.message, true); }
+    }
+
+    function applyConfig(cfg) {
+      const sel = $('algorithm');
+      sel.innerHTML = '';
+      (cfg.algorithms || []).forEach((a) => {
+        const op = document.createElement('option');
+        op.value = a; op.textContent = a;
+        if (a === cfg.defaultAlgorithm) op.selected = true;
+        sel.appendChild(op);
+      });
+      /* 实时备份 / 定时备份面板的压缩算法下拉：与主表单同源，默认选中 defaultAlgorithm */
+      ['watchAlgo', 'schAlgo'].forEach((id) => {
+        const wsel = $(id);
+        if (!wsel) return;
+        wsel.innerHTML = '';
+        (cfg.algorithms || []).forEach((a) => {
+          const op = document.createElement('option');
+          op.value = a; op.textContent = a;
+          if (a === cfg.defaultAlgorithm) op.selected = true;
+          wsel.appendChild(op);
+        });
+      });
+      if (cfg.defaultSource && !$('source').value) $('source').value = cfg.defaultSource;
+      if (cfg.defaultDestination && !$('destination').value) $('destination').value = cfg.defaultDestination;
+      window.CFG = cfg;
+      $('rootHint').textContent = cfg.dataRoot
+        ? '数据根：' + cfg.dataRoot
+        : '数据根：未限制（可浏览进程能访问的所有路径）';
+      paintValidation(false);   /* 拿到 dataRoot 后重算，越界判断才准 */
+    }
+
+    $('btnLogin').onclick = doLogin;
+    $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+    $('btnLogout').onclick = () => { TOKEN = ''; sessionStorage.removeItem('dbkp.token'); showLogin('已退出'); };
+    $('btnRefresh').onclick = refreshJobs;
+
+    /* ------------------------------------------------------------------ 提交任务 */
+    /* --------------------------------------------------------- 备份筛选（六维） */
+    /* 对照 5.pdf《参考界面·备份设置》的六页布局：文件类型 / 时间 / 文件大小 /
+       排除用户（组）/ 排除文件名称 / 排除目录。列表型维度统一“输入 + 添加”，
+       点条目上的 × 删除；类型是白名单 checkbox；时间/大小是起止区间。
+       最终收集成 /api/jobs 的 filter 对象，字段名与后端 applyFilterJson 一一对应。 */
+    const FILTER = { includePaths: [], excludePaths: [], nameGlobs: [], nameRejects: [], ownerNames: [] };
+    const FILTER_LISTS = [
+      ['excludePaths', 'excludePathList', 'excludePathInput', 'btnAddExcludePath'],
+      ['includePaths', 'includePathList', 'includePathInput', 'btnAddIncludePath'],
+      ['nameGlobs', 'nameGlobList', 'nameGlobInput', 'btnAddNameGlob'],
+      ['nameRejects', 'nameRejectList', 'nameRejectInput', 'btnAddNameReject'],
+      ['ownerNames', 'ownerList', 'ownerInput', 'btnAddOwner'],
+    ];
+    const TYPE_IDS = [
+      ['ftRegular', 'regular'], ['ftDir', 'dir'], ['ftSymlink', 'symlink'],
+      ['ftChar', 'char'], ['ftBlock', 'block'], ['ftSocket', 'socket'], ['ftFifo', 'fifo'],
+    ];
+
+    /* glob 语法轻校验：字符类必须闭合（与后端 Path::validateGlob 的核心口径一致）。
+       后端遇到坏 glob 会 400，前端先挡住才能当场标红，而不是提交后才发现。 */
+    function globProblem(g) {
+      let depth = 0;
+      for (let i = 0; i < g.length; i++) {
+        if (g[i] === '[') depth++;
+        else if (g[i] === ']') { if (!depth) return '多了一个 ]'; depth--; }
+      }
+      return depth ? '[ 没有闭合' : '';
+    }
+
+    function renderChips(key) {
+      const def = FILTER_LISTS.find((x) => x[0] === key);
+      const box = def && $(def[1]);
+      if (!box) return;
+      box.innerHTML = '';
+      if (!FILTER[key].length) { box.innerHTML = '<span class="meta">（空）</span>'; return; }
+      FILTER[key].forEach((v, i) => {
+        const el = document.createElement('span');
+        el.className = 'chip';
+        el.innerHTML = '<span>' + escapeHtml(v) + '</span><b title="移除">×</b>';
+        const b = el.querySelector ? el.querySelector('b') : null;
+        if (b) b.onclick = () => { FILTER[key].splice(i, 1); renderChips(key); filterChanged(); };
+        box.appendChild(el);
+      });
+    }
+
+    function addChip(key, inputId) {
+      const el = $(inputId);
+      const v = el.value.trim();
+      if (!v) { toast('先填写要添加的内容', true); return false; }
+      const why = globProblem(v);
+      if (why) { toast('模式非法：' + why + '（' + v + '）', true); return false; }
+      if (FILTER[key].indexOf(v) < 0) FILTER[key].push(v);
+      el.value = '';
+      renderChips(key);
+      filterChanged();
+      return true;
+    }
+
+    /* all 勾选 = 不限类型：锁住具体类型多选框；取消 all 后恢复可编辑 */
+    function syncTypeAll() {
+      const all = $('ftAll').checked;
+      const box = $('typeOthers');
+      if (box) box.disabled = all;
+      TYPE_IDS.forEach(([id]) => { const el = $(id); if (el && all) el.checked = true; });
+    }
+
+    function typeAllowSpec() {
+      if ($('ftAll').checked) return '';
+      const picked = TYPE_IDS.filter(([id]) => $(id).checked).map(([, name]) => name);
+      /* 空 = 后端不限制类型。全不选时发空串会“看似排除全部、实为不限制”，
+         与其造一个必空的备份，不如与“全部类型”同义。 */
+      if (!picked.length || picked.length === TYPE_IDS.length) return '';
+      return picked.join(',');
+    }
+
+    const sizeNum = (id) => { const s = $(id).value.trim(); return s === '' ? NaN : Number(s); };
+    function sizeValue(id, unitId) {
+      const raw = $(id).value.trim();
+      if (!raw) return '';
+      const unit = $(unitId).value;
+      return unit === 'bytes' ? raw : raw + unit;
+    }
+
+    /* 面板 -> filter 对象。只送有值的字段；布尔开关只送与默认相反的值。 */
+    function collectFilter() {
+      const f = {};
+      FILTER_LISTS.forEach(([key]) => { if (FILTER[key].length) f[key] = FILTER[key].slice(); });
+      const t = typeAllowSpec();
+      if (t) f.typeAllow = t;
+      const min = sizeNum('minSize'), max = sizeNum('maxSize');
+      if (min > 0) f.minSize = sizeValue('minSize', 'minSizeUnit');
+      if (max > 0) f.maxSize = sizeValue('maxSize', 'maxSizeUnit');
+      if ($('mtimeOn').checked) {
+        if ($('mtimeAfter').value) f.mtimeAfter = $('mtimeAfter').value;   /* "YYYY-MM-DDTHH:MM" 后端直接解析 */
+        if ($('mtimeBefore').value) f.mtimeBefore = $('mtimeBefore').value;
+      }
+      if ($('followSymlinks').checked) f.followSymlinks = true;
+      if ($('noCrossDevice').checked) f.noCrossDevice = true;
+      if ($('skipSpecials').checked) f.skipSpecials = true;
+      if (!$('includeDirs').checked) f.includeDirs = false;
+      const md = $('maxDepth').value.trim();
+      if (md !== '' && !Number.isNaN(parseInt(md, 10))) f.maxDepth = parseInt(md, 10);
+      return f;
+    }
+
+    /* 摘要 + tab 小圆点：哪个维度已生效一眼可见 */
+    function refreshFilterSummary() {
+      const on = {
+        paneType: !!typeAllowSpec(),
+        paneTime: $('mtimeOn').checked && !!($('mtimeAfter').value || $('mtimeBefore').value),
+        paneSize: sizeNum('minSize') > 0 || sizeNum('maxSize') > 0,
+        paneOwner: FILTER.ownerNames.length > 0,
+        paneName: FILTER.nameGlobs.length + FILTER.nameRejects.length > 0,
+        paneDir: FILTER.includePaths.length + FILTER.excludePaths.length > 0,
+      };
+      const tabs = $('fltTabs') ? $('fltTabs').querySelectorAll('.ftab') : [];
+      for (let i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', !!on[tabs[i].dataset.pane]);
+      const parts = [];
+      if (on.paneType) parts.push('类型 ' + typeAllowSpec().split(',').length + ' 项');
+      if (on.paneTime) parts.push('时间区间');
+      if (on.paneSize) parts.push('尺寸区间');
+      if (on.paneOwner) parts.push('排除用户 ' + FILTER.ownerNames.length);
+      if (on.paneName) parts.push('名称 ' + (FILTER.nameGlobs.length + FILTER.nameRejects.length));
+      if (on.paneDir) parts.push('路径 ' + (FILTER.includePaths.length + FILTER.excludePaths.length));
+      const sum = $('filterSummary');
+      if (!sum) return;
+      sum.textContent = parts.length ? ('已启用筛选：' + parts.join(' · ')) : '未启用筛选：备份全部文件';
+      sum.classList.toggle('on', parts.length > 0);
+    }
+
+    function filterChanged() { refreshFilterSummary(); onFieldInteract(); }
+
+    function selectFilterTab(paneId) {
+      const tabs = $('fltTabs') ? $('fltTabs').querySelectorAll('.ftab') : [];
+      for (let i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].dataset.pane === paneId);
+      ['paneType', 'paneTime', 'paneSize', 'paneOwner', 'paneName', 'paneDir'].forEach((id) => {
+        const p = $(id); if (p) p.classList.toggle('active', id === paneId);
+      });
+    }
+
+    function syncMtimeEnabled() {
+      const on = $('mtimeOn').checked;
+      $('mtimeAfter').disabled = !on;
+      $('mtimeBefore').disabled = !on;
+      if (!on) { $('mtimeAfter').value = ''; $('mtimeBefore').value = ''; }
+    }
+
+    /* 浏览回来的绝对目录 -> 源目录内的相对 glob（不在源内返回 null） */
+    function relFromSource(abs) {
+      const root = trimSep($('filterRoot').value || $('source').value || '');
+      const a = normSep(trimSep(abs));
+      const r = normSep(root);
+      if (!r || a === '.') return null;
+      if (a === r) return '';                       /* 选中的就是源本身 */
+      if (a.indexOf(r + '/') !== 0) return null;
+      return a.slice(r.length + 1) + '/*';
+    }
+
+    const pad2 = (n) => (n < 10 ? '0' : '') + n;
+    function toLocalInput(d) {
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+        'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+
+    /* Windows 上属主名无法解析，后端会拒绝 ownerNames/uids；这里按 /api/info 的
+       capabilities.owner 置灰本页，避免“设置看起来生效、提交时被 400”。 */
+    function initOwnerCapability() {
+      const cap = window.CAPS || {};
+      const ok = cap.owner !== false;         /* 不知道（桩环境/老服务端）时不拦 */
+      const warn = $('ownerPlatWarn');
+      if (warn) warn.textContent = ok ? '' :
+        '当前平台（' + (cap.os || 'Windows') + '）不支持属主过滤：本页置灰，条件不会提交。';
+      ['ownerInput', 'btnAddOwner'].forEach((id) => { const el = $(id); if (el) el.disabled = !ok; });
+      if (!ok && FILTER.ownerNames.length) { FILTER.ownerNames.length = 0; renderChips('ownerNames'); }
+    }
+
+    function initFilterUi() {
+      const tabs = $('fltTabs') ? $('fltTabs').querySelectorAll('.ftab') : [];
+      for (let i = 0; i < tabs.length; i++) tabs[i].onclick = () => selectFilterTab(tabs[i].dataset.pane);
+
+      FILTER_LISTS.forEach(([key, , inputId, btnId]) => {
+        renderChips(key);
+        $(btnId).onclick = () => addChip(key, inputId);
+        $(inputId).addEventListener('keydown', (e) => { if (e.key === 'Enter') addChip(key, inputId); });
+      });
+
+      $('ftAll').onchange = () => { syncTypeAll(); filterChanged(); };
+      TYPE_IDS.forEach(([id]) => { $(id).addEventListener('change', filterChanged); });
+      syncTypeAll();
+
+      $('mtimeOn').onchange = () => { syncMtimeEnabled(); filterChanged(); };
+      ['mtimeAfter', 'mtimeBefore', 'minSize', 'maxSize', 'maxDepth'].forEach((id) =>
+        $(id).addEventListener('input', filterChanged));
+      ['minSizeUnit', 'maxSizeUnit'].forEach((id) => $(id).addEventListener('change', filterChanged));
+      ['followSymlinks', 'noCrossDevice', 'skipSpecials', 'includeDirs'].forEach((id) =>
+        $(id).addEventListener('change', filterChanged));
+
+      const quicks = document.querySelectorAll('#paneTime .fquick button');
+      for (let i = 0; i < quicks.length; i++) {
+        quicks[i].onclick = () => {
+          const days = parseInt(quicks[i].dataset.days, 10) || 7;
+          $('mtimeOn').checked = true;
+          syncMtimeEnabled();
+          $('mtimeAfter').value = toLocalInput(new Date(Date.now() - days * 86400000));
+          $('mtimeBefore').value = '';
+          filterChanged();
+        };
+      }
+
+      /* “添加目录…”：借目录浏览弹窗选一个目录，提交时换算成相对 glob */
+      $('btnAddExcludeDir').onclick = () => openBrowse('excludePathInput', (abs) => {
+        const rel = relFromSource(abs);
+        if (rel === null) { toast('该目录不在“数据路径”内，无法换算成相对路径', true); return; }
+        if (rel === '') { toast('不能把整个数据路径都排除掉', true); return; }
+        if (FILTER.excludePaths.indexOf(rel) < 0) FILTER.excludePaths.push(rel);
+        $('excludePathInput').value = '';
+        renderChips('excludePaths');
+        filterChanged();
+      });
+
+      /* 参考界面的“数据路径”和表单的来源是同一个值，双向镜像 */
+      $('filterRoot').addEventListener('input', () => { $('source').value = $('filterRoot').value; onFieldInteract(); });
+      $('source').addEventListener('input', () => { $('filterRoot').value = $('source').value; });
+      $('btnBrowseFilterRoot').onclick = () => openBrowse('filterRoot', (v) => {
+        $('source').value = v; onFieldInteract();
+      });
+
+      $('btnFilterReset').onclick = () => {
+        FILTER_LISTS.forEach(([key]) => { FILTER[key].length = 0; renderChips(key); });
+        TYPE_IDS.forEach(([id]) => { $(id).checked = true; });
+        $('ftAll').checked = true; syncTypeAll();
+        $('mtimeOn').checked = false; syncMtimeEnabled();
+        $('minSize').value = ''; $('maxSize').value = '';
+        $('minSizeUnit').value = 'bytes'; $('maxSizeUnit').value = 'bytes';
+        $('maxDepth').value = '';
+        $('followSymlinks').checked = false; $('noCrossDevice').checked = false;
+        $('skipSpecials').checked = false; $('includeDirs').checked = true;
+        filterChanged();
+        toast('筛选条件已清空');
+      };
+
+      syncMtimeEnabled();
+      initOwnerCapability();
+      refreshFilterSummary();
+    }
+
+    initFilterUi();
+
+    function buildBody() {
+      const type = $('type').value;
+      const body = {
+        type, label: $('label').value,
+        source: $('source').value.trim(),
+        destination: $('destination').value.trim(),
+        password: $('jobPassword').value,
+        preserveMeta: $('preserveMeta').checked,
+        verifyAfter: $('verifyAfter').checked,
+        overwrite: $('overwrite').checked,
+        hardlinkDedupe: $('hardlinkDedupe').checked,
+        skipPayloadVerify: $('skipPayloadVerify').checked
+      };
+      const cm = $('comment').value.trim();
+      if (cm) body.comment = cm;
+      /* 归档参数只对 backup 有意义；compare/verify/restore 用不到 pack，
+         少送就走后端默认值，避免界面上无关的下拉影响提交结果。 */
+      if (type === 'backup') {
+        body.mode = $('mode').value;
+        body.algorithm = $('algorithm').value;
+        body.crypto = $('crypto').value;
+        body.checksum = $('checksum').value;
+        const f = collectFilter();   /* 六维筛选：字段名与后端 applyFilterJson 一一对应 */
+        if (Object.keys(f).length) body.filter = f;
+      }
+      return body;
+    }
+
+    /* ------- 提交前 + 实时联动校验：出错标红 + 明确提示 + 禁用提交（不允许进入下一步） ------- */
+    let touchedForm = false;
+    function looksAbsPath(p) { p = normSep(p); return p[0] === '/' || /^[A-Za-z]:/.test(p); }
+
+    /* 规则和后端 Spec.parse / hCreateJob 的拒绝条件一一对齐，前端能提前挡的先挡。 */
+    function currentFails() {
+      const type = $('type').value;
+      const src = $('source').value.trim();
+      const dst = $('destination').value.trim();
+      const out = [];
+      const add = (ids, msg) => out.push({ ids, msg });
+      if (!src) add(['source'], '来源路径不能为空（可用“浏览…”选择）');
+      if (type !== 'verify' && !dst) add(['destination'], '目标路径不能为空');
+      if (type === 'backup') {
+        const crypto = $('crypto').value;
+        if (crypto !== 'none' && !$('jobPassword').value)
+          add(['crypto', 'jobPassword'], '已选加密算法 ' + crypto + '，必须填写密码');
+        const mode = $('mode').value;
+        if (dst) {
+          const isArc = /\.dbkp$/i.test(dst);
+          if (mode === 'archive' && !isArc) add(['destination'], '归档模式(archive) 目标文件名必须以 .dbkp 结尾');
+          if (mode === 'copy' && isArc) add(['destination'], '复制模式(copy) 目标应是目录，不要以 .dbkp 结尾');
+        }
+        /* 目标与源的重叠校验：与后端 hCreateJob 的口径对齐。
+           归档是“一个文件”，写在源的父目录（甚至源内部）都是合法布局（F9 会把
+           源内的归档目标排除在枚举外），不能把文件名剥掉当目录比——那样
+           “src 在 _t/ 下 + 归档 _t/x.dbkp”会被误判成“目标是源的父目录”。 */
+        if (src && dst) {
+          const norm = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+          const srcN = norm(src);
+          const dstN = norm(dst);
+          if (/\.dbkp$/i.test(dst)) {
+            if (dstN === srcN) add(['destination'], '归档文件不能就是源目录本身');
+          } else {
+            if (dstN === srcN) add(['destination'], 'copy 模式下目标目录不能是源目录本身');
+            else if (dstN.indexOf(srcN + '/') === 0)
+              add(['destination'], 'copy 模式下目标目录不能嵌在源目录里（会边读边写）');
+            else if (srcN.indexOf(dstN + '/') === 0)
+              add(['destination'], '目标目录不能是源的父目录，否则备份会把输出卷进源');
+          }
+        }
+      }
+      if (window.CFG && CFG.dataRoot) {
+        if (src && looksAbsPath(src) && !withinRoot(src)) add(['source'], '来源超出数据根，不允许访问：' + CFG.dataRoot);
+        if (dst && looksAbsPath(dst) && !withinRoot(dst)) add(['destination'], '目标超出数据根，不允许访问：' + CFG.dataRoot);
+      }
+      const md = $('maxDepth').value.trim();
+      if (md !== '' && (Number.isNaN(parseInt(md, 10)) || parseInt(md, 10) < 0)) add(['maxDepth'], '最大深度必须是不小于 0 的整数');
+      /* ---- 筛选面板：非法尺寸/时间后端是“静默忽略”的，必须在前端挡住 ---- */
+      if (type === 'backup') {
+        const minRaw = $('minSize').value.trim(), maxRaw = $('maxSize').value.trim();
+        const numRe = /^\d+(\.\d+)?$/;
+        if (minRaw !== '' && !numRe.test(minRaw)) add(['minSize'], '最小尺寸只能填非负数字（单位在下拉里选）');
+        if (maxRaw !== '' && !numRe.test(maxRaw)) add(['maxSize'], '最大尺寸只能填非负数字（单位在下拉里选）');
+        const mul = { bytes: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+        if (numRe.test(minRaw) && numRe.test(maxRaw) && parseFloat(minRaw) > 0 && parseFloat(maxRaw) > 0) {
+          const a = parseFloat(minRaw) * (mul[$('minSizeUnit').value] || 1);
+          const b = parseFloat(maxRaw) * (mul[$('maxSizeUnit').value] || 1);
+          if (a > b) add(['minSize', 'maxSize'], '最小尺寸不能大于最大尺寸');
+        }
+        if ($('mtimeOn').checked && $('mtimeAfter').value && $('mtimeBefore').value &&
+          $('mtimeAfter').value > $('mtimeBefore').value)
+          add(['mtimeAfter', 'mtimeBefore'], '“修改时间”的起始不能晚于结束');
+        /* 输入框里有内容却没点“添加”：提醒一下，避免以为已生效 */
+        const pending = [['excludePathInput', '排除目录'], ['includePathInput', '包含路径'],
+        ['nameGlobInput', '名称白名单'], ['nameRejectInput', '名称黑名单'],
+        ['ownerInput', '排除用户']].filter(([id]) => $(id).value.trim());
+        if (pending.length) add([pending[0][0]], '筛选里有未添加的条目（' + pending[0][1] + '），点“添加”或清空');
+        if (FILTER.ownerNames.length && window.CAPS && window.CAPS.owner === false)
+          add(['ownerInput'], '当前平台不支持属主过滤，请先清空“排除用户（组）”');
+      }
+      return out;
+    }
+
+    function paintValidation(reveal) {
+      const fails = currentFails();
+      const bad = new Set();
+      fails.forEach((f) => f.ids.forEach((id) => bad.add(id)));
+      ['source', 'destination', 'crypto', 'jobPassword', 'maxDepth', 'minSize', 'maxSize',
+        'mtimeAfter', 'mtimeBefore', 'excludePathInput', 'includePathInput',
+        'nameGlobInput', 'nameRejectInput', 'ownerInput'].forEach((id) => {
+          const el = $(id); if (!el) return;
+          el.classList.toggle('fielderr', (reveal || touchedForm) && bad.has(id));
+        });
+      const hint = $('formHint');
+      if (fails.length) {
+        if (hint) { hint.textContent = '⚠ 无法提交：' + fails[0].msg; hint.classList.remove('ok'); }
+        $('btnSubmit').disabled = true;
+      } else {
+        if (hint) { hint.textContent = (reveal || touchedForm) ? '✓ 参数就绪，可提交' : ''; hint.classList.add('ok'); }
+        $('btnSubmit').disabled = false;
+      }
+      return fails;
+    }
+
+    function onFieldInteract() { touchedForm = true; paintValidation(false); }
+
+    async function submitJob() {
+      const fails = paintValidation(true);
+      if (fails.length) { toast('请先修正：' + fails[0].msg, true); return; }
+      $('btnSubmit').disabled = true;
+      try {
+        const r = await api('/api/jobs', { method: 'POST', body: JSON.stringify(buildBody()) });
+        toast('任务 #' + r.data.id + ' 已受理（' + r.data.mode + '）');
+        watchJob(r.data.id); refreshJobs();
+      } catch (e) { toast('提交失败：' + e.message, true); }
+      paintValidation(false);   /* 按钮可用态重新交给校验结果决定 */
+    }
+
+    /* ------------------------------------------------------------------ 列表与进度 */
+    const fmtBytes = (n) => {
+      if (!n) return '0 B';
+      const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let i = 0, v = n;
+      while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+      return v.toFixed(v >= 100 ? 0 : 1) + ' ' + u[i];
+    };
+
+    function renderJobs(list) {
+      const box = $('jobs');
+      if (!list || !list.length) { box.innerHTML = '<div class="meta">还没有任务。</div>'; return; }
+      box.innerHTML = '';
+      list.forEach((j) => box.appendChild(renderJob(j)));
+      restoreOpenLogs();   /* 5 秒兜底重绘不能把用户展开着的日志收掉 */
+    }
+
+    function renderJob(j) {
+      const d = document.createElement('div');
+      d.className = 'job';
+      d.dataset.id = j.id;
+      const pct = Math.round((j.ratio || 0) * 100);
+      const done = j.state === 'succeeded' || j.state === 'failed' || j.state === 'canceled';
+      d.innerHTML =
+        '<div class="t"><b class="s-' + j.state + '">' + j.state + '</b>' +
+        '<span class="tag">' + j.type + '</span>' +
+        '<span class="tag">#' + j.id + '</span>' +
+        '<span style="flex:1"></span>' +
+        (done ? '' : '<button class="ghost" data-act="cancel">取消</button> ') +
+        '<button class="ghost" data-act="' + (j.state === 'running' ? 'watch' : 'log') + '">' +
+        (j.state === 'running' ? '实时进度' : '日志') + '</button>' +
+        '</div><div class="meta">' + escapeHtml(j.label || '') + '</div>' +
+        '<div class="meta">' + escapeHtml(j.source) + ' → ' + escapeHtml(j.target) + '</div>' +
+        '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="meta">' + (j.entriesDone || 0) + '/' + (j.totalEntries || '?') + ' 条 · ' +
+        fmtBytes(j.bytesDone) + ' / ' + fmtBytes(j.totalBytes) + ' · ' + pct + '% · ' +
+        escapeHtml(j.message || '') + '</div>' +
+        '<pre class="log hide jlog"></pre>';
+      bindJobButtons(d, j);
+      return d;
+    }
+
+    async function refreshJobs() {
+      if (!TOKEN) return;
+      try {
+        const r = await api('/api/jobs?limit=20');
+        renderJobs(r.data.jobs);
+      } catch (e) { /* 401 已在 api() 里处理 */ }
+    }
+
+    async function cancelJob(id) {
+      try { const r = await api('/api/jobs/' + id + '/cancel', { method: 'POST', body: '{}' }); toast(r.msg); }
+      catch (e) { toast('取消失败：' + e.message, true); }
+    }
+
+    /* --------------------------------------------------------------- SSE 进度流 */
+    function watchJob(id) {
+      if (ES) ES.close();
+      const url = '/api/events?token=' + encodeURIComponent(TOKEN) + '&job=' + id;
+      ES = new EventSource(url);
+      $('jobHint').textContent = '（正在跟踪任务 #' + id + '）';
+      ES.addEventListener('tick', (ev) => {
+        const p = JSON.parse(ev.data);
+        if (p.job) applyJob(p.job);
+      });
+      ES.addEventListener('done', (ev) => {
+        const p = JSON.parse(ev.data);
+        if (p.job) {
+          applyJob(p.job);
+          const isBad = p.job.state === 'failed' || p.job.state === 'canceled';
+          toast('任务 #' + p.job.id + ' ' + p.job.state + '：' + (p.job.message || ''), isBad);
+        }
+        ES.close(); ES = null; $('jobHint').textContent = '（SSE 已结束）';
+        refreshJobs();
+      });
+      ES.onerror = () => { ES.close(); ES = null; $('jobHint').textContent = '（SSE 断开，可用“刷新任务”）'; };
+    }
+
+    /* 就地更新单个任务卡片：整块列表重绘会让滚动位置跳掉 */
+    function applyJob(job) {
+      const box = $('jobs');
+      let card = box.querySelector('.job[data-id="' + job.id + '"]');
+      if (!card) return refreshJobs();
+      const tmp = renderJob(job);
+      card.innerHTML = tmp.innerHTML;
+      bindJobButtons(card, job);
+      restoreOpenLogs();
+    }
+
+    /* 展开着的日志：记下任务 id，列表重绘后自动重新拉取并展开 */
+    const LOG_OPEN = new Set();
+
+    /* 任务卡上的按钮：取消 / 实时进度(SSE) / 历史日志(REST)。
+       已完成的任务用 SSE 拿不到以前打过的日志（事件流只推变化），走 ?log=1 读
+       JobManager 的环形缓冲才看得到全部记录。 */
+    function bindJobButtons(scope, j) {
+      scope.querySelectorAll('button').forEach((b) => {
+        b.onclick = () => {
+          const act = b.dataset.act;
+          if (act === 'cancel') cancelJob(j.id);
+          else if (act === 'log') toggleJobLog(j.id, b);
+          else watchJob(j.id);
+        };
+      });
+    }
+
+    async function toggleJobLog(id, btn) {
+      const card = $('jobs').querySelector('.job[data-id="' + id + '"]');
+      if (!card) return;
+      const pre = card.querySelector('pre.jlog');
+      if (!pre) return;
+      if (!pre.classList.contains('hide')) {
+        pre.classList.add('hide');
+        btn.textContent = '日志';
+        LOG_OPEN.delete(id);
+        return;
+      }
+      if (await loadJobLog(id, pre, btn)) LOG_OPEN.add(id);
+    }
+
+    async function loadJobLog(id, pre, btn) {
+      try {
+        const r = await api('/api/jobs/' + id + '?log=1');
+        const lines = r.data.log || [];
+        pre.textContent = lines.length ? lines.join('\n') : '(该任务没有日志)';
+        pre.classList.remove('hide');
+        if (btn) btn.textContent = '收起日志';
+        return true;
+      } catch (e) { toast('取日志失败：' + e.message, true); return false; }
+    }
+
+    function restoreOpenLogs() {
+      LOG_OPEN.forEach((id) => {
+        const card = $('jobs').querySelector('.job[data-id="' + id + '"]');
+        if (!card) { LOG_OPEN.delete(id); return; }
+        const pre = card.querySelector('pre.jlog');
+        const btn = card.querySelector('button[data-act="log"]');
+        if (pre && pre.classList.contains('hide')) loadJobLog(id, pre, btn);
+      });
+    }
+
+    async function readStat() {
+      const path = $('statPath').value.trim();
+      if (!path) { toast('先填归档路径', true); return; }
+      try {
+        const r = await api('/api/stat?path=' + encodeURIComponent(path) + '&entries=1');
+        const d = r.data;
+        $('statOut').classList.remove('hide');
+        $('statOut').textContent =
+          '归档: ' + d.path + '\n算法: ' + d.algorithm + '   加密: ' + d.crypto +
+          '\n条目: ' + d.fileCount + ' (目录 ' + d.dirCount + ', 链接 ' + d.linkCount + ')' +
+          '\n原始: ' + fmtBytes(d.rawBytes) + ' → 存成: ' + fmtBytes(d.storedBytes) +
+          '   压缩比: ' + ((d.ratio || 1) * 100).toFixed(1) + '%' +
+          '\n校验: ' + (d.checksum || 'crc64') + '   头大小: ' + (d.headerSize || 512) + 'B' +
+          '\nCRC: ' + d.payloadCrc +
+          (d.payloadDigest ? ('\nSHA-256: ' + d.payloadDigest) : '') +
+          '   创建于: ' + new Date(d.createTime * 1000).toLocaleString() +
+          '\n源路径: ' + d.sourcePath + '\n备注: ' + d.comment;
+        renderEntries(d);
+      } catch (e) { toast('读取失败：' + e.message, true); }
+    }
+
+    /* 条目清单：元数据一直在归档里，这里把它摊开。带 link 的行在路径后补一句目标。 */
+    function renderEntries(d) {
+      const box = $('statEntries');
+      const list = d.entries || [];
+      if (!list.length) { box.innerHTML = ''; return; }
+      let html = '<div class="meta">条目（共 ' + (d.entriesTotal || list.length) +
+        ' 条，显示前 ' + list.length + '）：</div>' +
+        '<table class="etab"><thead><tr><th>路径</th><th>类</th><th>原始</th>' +
+        '<th>存成</th><th>算法</th><th>CRC64</th></tr></thead><tbody>';
+      list.forEach((e) => {
+        html += '<tr><td class="path">' + escapeHtml(e.path) +
+          (e.link ? ' <span class="meta">→ ' + escapeHtml(e.link) + '</span>' : '') + '</td>' +
+          '<td>' + escapeHtml(e.type) + '</td>' +
+          '<td>' + fmtBytes(e.size || 0) + '</td>' +
+          '<td>' + fmtBytes(e.storedSize || 0) + '</td>' +
+          '<td>' + escapeHtml(e.algorithm || '') + '</td>' +
+          '<td>' + escapeHtml(e.crc64 || '') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      box.innerHTML = html;
+    }
+
+    /* 归档 vs 源目录逐条比对：/api/compare 是同步接口（逐条回源比），
+       比“建一个 compare 任务”反馈更快；大目录会慢，按钮先置灰防重复点。 */
+    async function readCompare() {
+      const arc = $('statPath').value.trim();
+      const origin = $('cmpOrigin').value.trim();
+      if (!arc) { toast('先在左边填归档路径', true); return; }
+      if (!origin) { toast('先填要比对的源目录', true); return; }
+      $('btnCompare').disabled = true;
+      try {
+        let url = '/api/compare?archive=' + encodeURIComponent(arc) +
+          '&origin=' + encodeURIComponent(origin);
+        const pw = $('cmpPassword').value;
+        if (pw) url += '&password=' + encodeURIComponent(pw);
+        const r = await api(url);
+        $('cmpOut').classList.remove('hide');
+        $('cmpOut').textContent = '归档：' + r.data.archive + '\n源目录：' + r.data.origin +
+          '\n差异：' + r.data.diffCount + ' 处　(' + (r.msg || '') + ')';
+        toast(r.msg || '比对完成', !!(r.data.diffCount));
+      } catch (e) { toast('比对失败：' + e.message, true); }
+      finally { $('btnCompare').disabled = false; }
+    }
+
+    /* --------------------------------------------------------------- 目录浏览 */
+    /* 一律用服务端回显的绝对路径继续下钻，不在前端猜拼接规则；越界时服务端会给
+       403 和原因，这里直接显出来，不额外兜圈子。 */
+    let BROWSE = { cur: '', ok: '', picked: '', target: 'source', after: null };   /* ok = 最后一个确认能列出来的目录 */
+
+    const normSep = (p) => String(p).replace(/\\/g, '/');
+    function trimSep(p) {
+      const s = normSep(p).replace(/\/+$/, '');
+      return s === '' ? '/' : s;            /* 盘根/POSIX 根别被削成空串 */
+    }
+    function joinOf(p, name) {
+      const s = trimSep(p);
+      if (s === '.' || s === '/') return s === '/' ? '/' + name : name;
+      return /^[A-Za-z]:$/.test(s) ? s + '/' + name : s + '/' + name;
+    }
+    function parentOf(p) {
+      const s = trimSep(p);
+      if (s === '.' || s === '/') return s;
+      if (/^[A-Za-z]:$/.test(s)) return s + '/';        /* 盘根保留斜杠，显示成 D:/ */
+      const i = s.lastIndexOf('/');
+      if (i < 0) return '.';
+      if (i === 0) return '/';
+      const head = s.slice(0, i);
+      return /^[A-Za-z]:$/.test(head) ? head + '/' : head;
+    }
+    function browseStart() { return (window.CFG && CFG.dataRoot) ? CFG.dataRoot : '.'; }
+    /* 输入框里已经是个文件名（末段带点）时，从它所在目录开始列，否则 /api/browse
+     * 会当成目录读并报错。目录被起成 "a.b" 这种名字时只是多退一级，无害。 */
+    function browseSeed(v) {
+      if (!v) return browseStart();
+      const seg = trimSep(v).split('/').pop();
+      return seg.indexOf('.') >= 0 ? parentOf(v) : v;
+    }
+
+    /* 数据根是服务端的硬边界。前端必须自己先挡住：一旦把 BROWSE.cur 换成根外的
+       路径，之后每次点击都会撞 403，弹窗就再也翻不动了（踩过）。 */
+    function withinRoot(p) {
+      if (!window.CFG || !CFG.dataRoot) return true;      /* 老服务端没回 dataRoot：不拦 */
+      const a = normSep(trimSep(p || ''));
+      const b = normSep(trimSep(CFG.dataRoot));
+      return a === b || a.indexOf(b + '/') === 0;
+    }
+    function syncUp() {
+      /* 父级出根（或本来就是 “.”）就把“上一级”整个按钮藏掉：留着一个点了必然
+         403 的按钮，只会让用户以为界面坏了。 */
+      const cur = BROWSE.cur || '';
+      const up = parentOf(cur);
+      $('bUp').classList.toggle('hide', !withinRoot(up) || up === cur);
+      $('bRoot').classList.toggle('hide', trimSep(cur) === trimSep(browseStart()));
+    }
+
+    /* 服务端 browse 条目历史上叫 isDir，文档/前端用的是 dir，还有 type='D'。
+       三个都认，字段名单方面改动就不会再出现"目录被渲染成文件、点不进下一层"。 */
+    const isDirEntry = (x) => !!x && (x.isDir === true || x.dir === true || x.type === 'D');
+    function mkRow(name, e, act) {
+      const dir = isDirEntry(e);
+      const el = document.createElement('div');
+      el.className = 'it';
+      el.innerHTML = '<span class="tag">' + (dir ? '目录' : '文件') + '</span><span>' +
+        escapeHtml(name) + '</span>' +
+        (dir ? '' : '<span class="sz">' + fmtBytes(e.size || 0) + '</span>');
+      el.onclick = () => act(el);
+      return el;
+    }
+
+    async function loadBrowse() {
+      const box = $('browseList');
+      $('browsePath').textContent = BROWSE.cur;
+      $('browseHint').textContent = BROWSE.picked
+        ? '已选中文件：' + BROWSE.picked
+        : '点目录进入；点文件选中它；“用这个路径”取当前目录';
+      box.innerHTML = '<div class="it meta">读取中…</div>';
+      let d;
+      try { d = (await api('/api/browse?path=' + encodeURIComponent(BROWSE.cur))).data; }
+      catch (e) {
+        BROWSE.cur = BROWSE.ok || browseStart();    /* 别把游标留在列不出来的目录上，否则后面每点一次都是 403 */
+        $('browsePath').textContent = BROWSE.cur;
+        box.innerHTML = '<div class="it meta">读取失败：' + escapeHtml(e.message) + '</div>';
+        syncUp();
+        return;
+      }
+      BROWSE.cur = d.path;
+      BROWSE.ok = d.path;
+      syncUp();
+      $('browsePath').textContent = d.path + (d.truncated ? '（条目过多，只列出前 1000 项）' : '');
+      box.innerHTML = '';
+      /* 老服务端不给 parent，就本地退一级；两种情况都只在根内给入口。 */
+      const up = (typeof d.parent === 'string') ? d.parent : parentOf(d.path);
+      if (up && withinRoot(up)) box.appendChild(mkRow('..（上一级）', { dir: true }, () => loadInto(up)));
+      (d.entries || []).forEach((en) => {
+        const full = joinOf(d.path, en.name);
+        if (isDirEntry(en)) box.appendChild(mkRow(en.name, en, () => loadInto(full)));
+        else box.appendChild(mkRow(en.name, en, (el) => {
+          BROWSE.picked = full;
+          box.querySelectorAll('.it.sel').forEach((x) => x.classList.remove('sel'));
+          el.classList.add('sel');
+          $('browseHint').textContent = '已选中文件：' + full;
+        }));
+      });
+      if (!box.children.length) box.innerHTML = '<div class="it meta">空目录</div>';
+    }
+
+    function loadInto(p) {
+      if (p && !withinRoot(p)) { toast('已经到数据根边界，外面不给浏览', true); return; }
+      BROWSE.picked = ''; BROWSE.cur = p; loadBrowse();
+    }
+    function openBrowse(target, after) {
+      BROWSE.target = target;
+      BROWSE.after = after || null;    /* 选完后的回调（如“添加目录…”直接变成筛选条目） */
+      BROWSE.picked = '';
+      BROWSE.ok = '';
+      const v = $(target).value.trim();
+      BROWSE.cur = browseSeed(v);
+      if (!withinRoot(BROWSE.cur)) BROWSE.cur = browseStart();   /* 输入框里填的是根外路径时别一开就报错 */
+      $('browseMask').classList.remove('hide');
+      syncUp();
+      loadBrowse();
+    }
+    function closeBrowse() { $('browseMask').classList.add('hide'); }
+    function commitBrowse() {
+      const v = BROWSE.picked || trimSep(BROWSE.cur);
+      $(BROWSE.target).value = v;
+      const after = BROWSE.after;
+      BROWSE.after = null;
+      closeBrowse();
+      toast('已填入：' + v);
+      onFieldInteract();   /* 浏览回填不会自动触发 input/change，手动刷一次校验 */
+      if (after) after(v);
+    }
+
+    $('btnBrowseSrc').onclick = () => openBrowse('source');
+    $('btnBrowseDst').onclick = () => openBrowse('destination');
+    $('btnBrowseStat').onclick = () => openBrowse('statPath');
+    $('btnBrowseWatchSrc').onclick = () => openBrowse('watchSource');
+    $('btnBrowseWatchDst').onclick = () => openBrowse('watchDest');
+    $('btnBrowseSchSrc').onclick = () => openBrowse('schSource');
+    $('btnBrowseSchDst').onclick = () => openBrowse('schDest');
+    $('btnBrowseCmpOrigin').onclick = () => openBrowse('cmpOrigin');
+    $('bRoot').onclick = () => loadInto(browseStart());
+    $('bUp').onclick = () => { const p = parentOf(BROWSE.cur); if (p !== BROWSE.cur) loadInto(p); };
+    $('bCancel').onclick = closeBrowse;
+    $('bOk').onclick = commitBrowse;
+    $('browseMask').onclick = (e) => { if (e.target === $('browseMask')) closeBrowse(); };
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('browseMask').classList.contains('hide')) closeBrowse();
+    });
+
+    $('btnSubmit').onclick = submitJob;
+    $('btnStat').onclick = readStat;
+    $('btnCompare').onclick = readCompare;
+    /* 实时联动：任一关键输入变动就重算校验，标红 + 提示 + 按需禁用提交按钮 */
+    ['type', 'source', 'destination', 'crypto', 'jobPassword', 'mode', 'checksum', 'maxDepth'].forEach((id) => {
+      const el = $(id); if (!el) return;
+      el.addEventListener('input', onFieldInteract);
+      el.addEventListener('change', onFieldInteract);
+    });
+    /* 每 5 秒兜底刷新一次：SSE 只有 25 秒生命周期，浏览器会自动重连，
+       但列表页还是要有个稳定节奏，避免事件丢失后数字长期不动。 */
+    setInterval(() => { if (TOKEN) refreshJobs(); }, 5000);
+
+    /* --------------------------------------------------------------- 定时备份面板 */
+    /* 与实时备份同一套交互：启动后每 2 秒拉一次状态，停下就收掉定时器。
+       times 跑满后线程自己结束（running=false），轮询会自然发现。 */
+    function fmtInterval(sec) {
+      if (!sec) return '?';
+      if (sec % 86400 === 0) return (sec / 86400) + 'd';
+      if (sec % 3600 === 0) return (sec / 3600) + 'h';
+      if (sec % 60 === 0) return (sec / 60) + 'm';
+      return sec + 's';
+    }
+
+    function paintScheduleStatus(d) {
+      const el = $('schStatus'), startBtn = $('btnSchStart'), stopBtn = $('btnSchStop');
+      if (!d) { el.textContent = '当前没有定时任务。'; startBtn.disabled = false; stopBtn.disabled = true; return; }
+      if (d.running) {
+        const age = d.startedAt ? Math.max(0, Math.round(Date.now() / 1000 - d.startedAt)) : 0;
+        const ageText = age >= 120 ? Math.floor(age / 60) + ' 分钟' : age + ' 秒';
+        el.innerHTML = '● 运行中：' + escapeHtml(d.source) + ' → ' + escapeHtml(d.archiveDir) +
+          ' · 每 ' + fmtInterval(d.intervalSeconds) + ' × ' + d.times + ' 次' +
+          ' · 保留 ' + (d.keep > 0 ? d.keep + ' 份' : '不限') +
+          (d.startedAt ? ' · 已运行 ' + ageText : '');
+        startBtn.disabled = true; stopBtn.disabled = false;
+      } else {
+        el.textContent = '已停止。' + (d.lastError ? ('最后错误：' + d.lastError) : '') +
+          (d.startedAt ? ('上次参数：每 ' + fmtInterval(d.intervalSeconds) + ' × ' + d.times +
+            ' 次，保留 ' + (d.keep > 0 ? d.keep + ' 份' : '不限')) : '');
+        startBtn.disabled = false; stopBtn.disabled = true;
+      }
+      const det = $('schDetail');
+      if (d.startedAt || d.lastError) {
+        det.classList.remove('hide');
+        det.textContent = '源：' + (d.source || '') + '\n输出：' + (d.archiveDir || '') +
+          '\n前缀：' + (d.prefix || '(自动)') + '\n间隔：' + fmtInterval(d.intervalSeconds) +
+          ' × ' + d.times + ' 次 · 保留：' + (d.keep > 0 ? d.keep + ' 份' : '不限') +
+          (d.lastError ? ('\n最后错误：' + d.lastError) : '');
+      } else det.classList.add('hide');
+    }
+
+    /* 与后端 hScheduleStart 的参数口径一致：interval 支持 90s/5m/2h/1d，
+       times>=1（常驻是 watch 的职责），keep>=0，加密必须带密码。 */
+    function schedulePreflight() {
+      const src = $('schSource').value.trim();
+      const dst = $('schDest').value.trim();
+      const itv = $('schInterval').value.trim();
+      const times = parseInt($('schTimes').value, 10);
+      const keep = parseInt($('schKeep').value, 10);
+      const crypto = $('schCrypto').value;
+      const hint = $('schHint');
+      const fail = (m) => { hint.textContent = '⚠ ' + m; return false; };
+      if (!src) return fail('源目录不能为空');
+      if (!dst) return fail('输出目录不能为空');
+      if (!/^\d+[smhd]?$/i.test(itv) || parseInt(itv, 10) <= 0)
+        return fail('间隔格式：90s / 5m / 2h / 1d 或纯秒数');
+      if (!Number.isFinite(times) || times < 1) return fail('轮次必须是 >= 1 的整数（常驻请用实时备份）');
+      if (!Number.isFinite(keep) || keep < 0) return fail('保留份数必须是 >= 0 的整数（0=不限）');
+      if (crypto !== 'none' && !$('schPassword').value) return fail('选了加密算法 ' + crypto + '，必须填密码');
+      hint.textContent = '';
+      return true;
+    }
+
+    async function scheduleStart() {
+      if (!schedulePreflight()) return;
+      $('btnSchStart').disabled = true;
+      const body = {
+        source: $('schSource').value.trim(),
+        destination: $('schDest').value.trim(),
+        interval: $('schInterval').value.trim(),
+        times: parseInt($('schTimes').value, 10),
+        keep: parseInt($('schKeep').value, 10) || 0,
+        prefix: $('schPrefix').value.trim(),
+        algorithm: $('schAlgo').value,
+        crypto: $('schCrypto').value,
+        password: $('schPassword').value,
+        checksum: 'crc64', verifyAfter: true
+      };
+      try {
+        const r = await api('/api/schedule', { method: 'POST', body: JSON.stringify(body) });
+        toast(r.msg || '定时备份已启动');
+        paintScheduleStatus(r.data); pollSchedule();
+      } catch (e) { toast('启动失败：' + e.message, true); $('btnSchStart').disabled = false; }
+    }
+
+    async function scheduleStop() {
+      $('btnSchStop').disabled = true;
+      try {
+        const r = await api('/api/schedule/stop', { method: 'POST', body: '{}' });
+        toast(r.msg || '已请求停止');
+        paintScheduleStatus(r.data); setTimeout(pollSchedule, 1500);
+      } catch (e) { toast('停止失败：' + e.message, true); $('btnSchStop').disabled = false; }
+    }
+
+    let SCHED_TIMER = null;
+    async function pollSchedule() {
+      if (!TOKEN) return;
+      try {
+        const r = await api('/api/schedule');
+        paintScheduleStatus(r.data);
+        if (r.data && r.data.running) {
+          if (!SCHED_TIMER) SCHED_TIMER = setInterval(pollSchedule, 2000);
+        } else if (SCHED_TIMER) { clearInterval(SCHED_TIMER); SCHED_TIMER = null; }
+      } catch (e) { /* 未登录/服务不可达时静默 */ }
+    }
+
+    /* --------------------------------------------------------------- 实时备份面板 */
+    function paintWatchStatus(d) {
+      const el = $('watchStatus');
+      const startBtn = $('btnWatchStart'), stopBtn = $('btnWatchStop');
+      if (!d) { el.textContent = '当前未在监听。'; startBtn.disabled = false; stopBtn.disabled = true; return; }
+      const mode = d.native ? '原生事件(ReadDirectoryChangesW)' : '轮询降级';
+      if (d.running) {
+        const st = d.stopping ? '（正在停止…）' : '';
+        el.innerHTML = '● 监听中' + st + '：' + escapeHtml(d.source) + ' → ' + escapeHtml(d.archiveDir)
+          + ' · ' + mode + ' · 已自动备份 <b>' + (d.backupCount || 0) + '</b> 次'
+          + (d.failCount ? ' · 失败 ' + d.failCount + ' 次' : '');
+        startBtn.disabled = true; stopBtn.disabled = d.stopping;
+      } else {
+        el.textContent = '当前未在监听。上次：备份 ' + (d.backupCount || 0) + ' 次'
+          + (d.lastError ? ('，最后错误：' + d.lastError) : '');
+        startBtn.disabled = false; stopBtn.disabled = true;
+      }
+      const det = $('watchDetail');
+      if (d.lastArchive || d.lastError) {
+        det.classList.remove('hide');
+        det.textContent = '最近归档：' + (d.lastArchive || '(无)') +
+          '\n去抖：' + (d.debounceSeconds || 0) + 's · 保留：' + (d.keep || '不限') +
+          (d.lastError ? ('\n最后错误：' + d.lastError) : '');
+      } else det.classList.add('hide');
+    }
+
+    /* 前端即时校验：与后端 watch 启动参数同口径 */
+    function watchPreflight() {
+      const src = $('watchSource').value.trim();
+      const dst = $('watchDest').value.trim();
+      const crypto = $('watchCrypto').value;
+      const pw = $('watchPassword').value;
+      const hint = $('watchHint');
+      const fail = (m) => { hint.textContent = '⚠ ' + m; hint.className = 'fielderr'; return false; };
+      if (!src) return fail('源目录不能为空');
+      if (!dst) return fail('输出目录不能为空');
+      if (crypto !== 'none' && !pw) return fail('选了加密算法 ' + crypto + '，必须填密码');
       const norm = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-      const dstDir = norm(/\.dbkp$/i.test(dst) ? dst.replace(/\/[^/]+$/, '') : dst);
-      const srcN = norm(src);
-      if (srcN === dstDir || srcN.startsWith(dstDir + '/'))
-        add(['destination'], '目标目录不能是源的本身或其父目录，否则备份验证会失败');
+      if (norm(src) === norm(dst) || norm(src).startsWith(norm(dst) + '/'))
+        return fail('输出目录不能是源的本身或其父目录，否则验证会失败');
+      hint.textContent = ''; hint.className = '';
+      return true;
     }
-  }
-  if (window.CFG && CFG.dataRoot) {
-    if (src && looksAbsPath(src) && !withinRoot(src)) add(['source'], '来源超出数据根，不允许访问：' + CFG.dataRoot);
-    if (dst && looksAbsPath(dst) && !withinRoot(dst)) add(['destination'], '目标超出数据根，不允许访问：' + CFG.dataRoot);
-  }
-  const md = $('maxDepth').value.trim();
-  if (md !== '' && (Number.isNaN(parseInt(md, 10)) || parseInt(md, 10) < 0)) add(['maxDepth'], '最大深度必须是不小于 0 的整数');
-  return out;
-}
 
-function paintValidation(reveal) {
-  const fails = currentFails();
-  const bad = new Set();
-  fails.forEach((f) => f.ids.forEach((id) => bad.add(id)));
-  ['source', 'destination', 'crypto', 'jobPassword', 'maxDepth'].forEach((id) => {
-    const el = $(id); if (!el) return;
-    el.classList.toggle('fielderr', (reveal || touchedForm) && bad.has(id));
-  });
-  const hint = $('formHint');
-  if (fails.length) {
-    if (hint) { hint.textContent = '⚠ 无法提交：' + fails[0].msg; hint.classList.remove('ok'); }
-    $('btnSubmit').disabled = true;
-  } else {
-    if (hint) { hint.textContent = (reveal || touchedForm) ? '✓ 参数就绪，可提交' : ''; hint.classList.add('ok'); }
-    $('btnSubmit').disabled = false;
-  }
-  return fails;
-}
-
-function onFieldInteract() { touchedForm = true; paintValidation(false); }
-
-async function submitJob() {
-  const fails = paintValidation(true);
-  if (fails.length) { toast('请先修正：' + fails[0].msg, true); return; }
-  $('btnSubmit').disabled = true;
-  try {
-    const r = await api('/api/jobs', { method: 'POST', body: JSON.stringify(buildBody()) });
-    toast('任务 #' + r.data.id + ' 已受理（' + r.data.mode + '）');
-    watchJob(r.data.id); refreshJobs();
-  } catch (e) { toast('提交失败：' + e.message, true); }
-  paintValidation(false);   /* 按钮可用态重新交给校验结果决定 */
-}
-
-/* ------------------------------------------------------------------ 列表与进度 */
-const fmtBytes = (n) => {
-  if (!n) return '0 B';
-  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0, v = n;
-  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-  return v.toFixed(v >= 100 ? 0 : 1) + ' ' + u[i];
-};
-
-function renderJobs(list) {
-  const box = $('jobs');
-  if (!list || !list.length) { box.innerHTML = '<div class="meta">还没有任务。</div>'; return; }
-  box.innerHTML = '';
-  list.forEach((j) => box.appendChild(renderJob(j)));
-}
-
-function renderJob(j) {
-  const d = document.createElement('div');
-  d.className = 'job';
-  d.dataset.id = j.id;
-  const pct = Math.round((j.ratio || 0) * 100);
-  const done = j.state === 'succeeded' || j.state === 'failed' || j.state === 'canceled';
-  d.innerHTML =
-    '<div class="t"><b class="s-' + j.state + '">' + j.state + '</b>' +
-    '<span class="tag">' + j.type + '</span>' +
-    '<span class="tag">#' + j.id + '</span>' +
-    '<span style="flex:1"></span>' +
-    (done ? '' : '<button class="ghost" data-act="cancel">取消</button> ') +
-    '<button class="ghost" data-act="watch">' + (j.state === 'running' ? '实时进度' : '日志') + '</button>' +
-    '</div><div class="meta">' + escapeHtml(j.label || '') + '</div>' +
-    '<div class="meta">' + escapeHtml(j.source) + ' → ' + escapeHtml(j.target) + '</div>' +
-    '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
-    '<div class="meta">' + (j.entriesDone || 0) + '/' + (j.totalEntries || '?') + ' 条 · ' +
-    fmtBytes(j.bytesDone) + ' / ' + fmtBytes(j.totalBytes) + ' · ' + pct + '% · ' +
-    escapeHtml(j.message || '') + '</div>';
-  d.querySelectorAll('button').forEach((b) => {
-    b.onclick = () => b.dataset.act === 'cancel' ? cancelJob(j.id) : watchJob(j.id);
-  });
-  return d;
-}
-const escapeHtml = (s) => String(s || '').replace(/[&<>"]/g, (c) =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-async function refreshJobs() {
-  if (!TOKEN) return;
-  try {
-    const r = await api('/api/jobs?limit=20');
-    renderJobs(r.data.jobs);
-  } catch (e) { /* 401 已在 api() 里处理 */ }
-}
-
-async function cancelJob(id) {
-  try { const r = await api('/api/jobs/' + id + '/cancel', { method: 'POST', body: '{}' }); toast(r.msg); }
-  catch (e) { toast('取消失败：' + e.message, true); }
-}
-
-/* --------------------------------------------------------------- SSE 进度流 */
-function watchJob(id) {
-  if (ES) ES.close();
-  const url = '/api/events?token=' + encodeURIComponent(TOKEN) + '&job=' + id;
-  ES = new EventSource(url);
-  $('jobHint').textContent = '（正在跟踪任务 #' + id + '）';
-  ES.addEventListener('tick', (ev) => {
-    const p = JSON.parse(ev.data);
-    if (p.job) applyJob(p.job);
-  });
-  ES.addEventListener('done', (ev) => {
-    const p = JSON.parse(ev.data);
-    if (p.job) {
-      applyJob(p.job);
-      const isBad = p.job.state === 'failed' || p.job.state === 'canceled';
-      toast('任务 #' + p.job.id + ' ' + p.job.state + '：' + (p.job.message || ''), isBad);
+    async function watchStart() {
+      if (!watchPreflight()) return;
+      $('btnWatchStart').disabled = true;
+      const body = {
+        source: $('watchSource').value.trim(),
+        destination: $('watchDest').value.trim(),
+        debounce: $('watchDebounce').value.trim() || '2s',
+        keep: parseInt($('watchKeep').value, 10) || 0,
+        algorithm: $('watchAlgo').value,
+        crypto: $('watchCrypto').value,
+        password: $('watchPassword').value,
+        checksum: 'crc64', verifyAfter: true
+      };
+      try {
+        const r = await api('/api/watch', { method: 'POST', body: JSON.stringify(body) });
+        toast('实时备份已启动（' + (r.data.native ? '原生' : '轮询') + '）');
+        paintWatchStatus(r.data); pollWatch();
+      } catch (e) { toast('启动失败：' + e.message, true); $('btnWatchStart').disabled = false; }
     }
-    ES.close(); ES = null; $('jobHint').textContent = '（SSE 已结束）';
-    refreshJobs();
-  });
-  ES.onerror = () => { ES.close(); ES = null; $('jobHint').textContent = '（SSE 断开，可用“刷新任务”）'; };
-}
 
-/* 就地更新单个任务卡片：整块列表重绘会让滚动位置跳掉 */
-function applyJob(job) {
-  const box = $('jobs');
-  let card = box.querySelector('.job[data-id="' + job.id + '"]');
-  if (!card) return refreshJobs();
-  const tmp = renderJob(job);
-  card.innerHTML = tmp.innerHTML;
-  card.querySelectorAll('button').forEach((b) => {
-    b.onclick = () => b.dataset.act === 'cancel' ? cancelJob(job.id) : watchJob(job.id);
-  });
-}
+    async function watchStop() {
+      $('btnWatchStop').disabled = true;
+      try {
+        const r = await api('/api/watch/stop', { method: 'POST', body: '{}' });
+        toast(r.msg || '已请求停止');
+        paintWatchStatus(r.data); setTimeout(pollWatch, 1200);
+      } catch (e) { toast('停止失败：' + e.message, true); $('btnWatchStop').disabled = false; }
+    }
 
-async function readStat() {
-  const path = $('statPath').value.trim();
-  if (!path) { toast('先填归档路径', true); return; }
-  try {
-    const r = await api('/api/stat?path=' + encodeURIComponent(path) + '&entries=1');
-    const d = r.data;
-    $('statOut').classList.remove('hide');
-    $('statOut').textContent =
-      '归档: ' + d.path + '\n算法: ' + d.algorithm + '   加密: ' + d.crypto +
-      '\n条目: ' + d.fileCount + ' (目录 ' + d.dirCount + ', 链接 ' + d.linkCount + ')' +
-      '\n原始: ' + fmtBytes(d.rawBytes) + ' → 存成: ' + fmtBytes(d.storedBytes) +
-      '   压缩比: ' + ((d.ratio || 1) * 100).toFixed(1) + '%' +
-      '\n校验: ' + (d.checksum || 'crc64') + '   头大小: ' + (d.headerSize || 512) + 'B' +
-      '\nCRC: ' + d.payloadCrc +
-      (d.payloadDigest ? ('\nSHA-256: ' + d.payloadDigest) : '') +
-      '   创建于: ' + new Date(d.createTime * 1000).toLocaleString() +
-      '\n源路径: ' + d.sourcePath + '\n备注: ' + d.comment;
-    renderEntries(d);
-  } catch (e) { toast('读取失败：' + e.message, true); }
-}
+    let WATCH_TIMER = null;
+    async function pollWatch() {
+      try {
+        const r = await api('/api/watch');
+        paintWatchStatus(r.data);
+        /* 监听中：每 2 秒刷新一次计数；停止后：关掉定时器 */
+        if (r.data && r.data.running) {
+          if (!WATCH_TIMER) WATCH_TIMER = setInterval(pollWatch, 2000);
+        } else if (WATCH_TIMER) { clearInterval(WATCH_TIMER); WATCH_TIMER = null; }
+      } catch (e) { /* 未登录/服务不可达时静默 */ }
+    }
 
-/* 条目清单：元数据一直在归档里，这里把它摊开。带 link 的行在路径后补一句目标。 */
-function renderEntries(d) {
-  const box = $('statEntries');
-  const list = d.entries || [];
-  if (!list.length) { box.innerHTML = ''; return; }
-  let html = '<div class="meta">条目（共 ' + (d.entriesTotal || list.length) +
-    ' 条，显示前 ' + list.length + '）：</div>' +
-    '<table class="etab"><thead><tr><th>路径</th><th>类</th><th>原始</th>' +
-    '<th>存成</th><th>算法</th><th>CRC64</th></tr></thead><tbody>';
-  list.forEach((e) => {
-    html += '<tr><td class="path">' + escapeHtml(e.path) +
-      (e.link ? ' <span class="meta">→ ' + escapeHtml(e.link) + '</span>' : '') + '</td>' +
-      '<td>' + escapeHtml(e.type) + '</td>' +
-      '<td>' + fmtBytes(e.size || 0) + '</td>' +
-      '<td>' + fmtBytes(e.storedSize || 0) + '</td>' +
-      '<td>' + escapeHtml(e.algorithm || '') + '</td>' +
-      '<td>' + escapeHtml(e.crc64 || '') + '</td></tr>';
-  });
-  html += '</tbody></table>';
-  box.innerHTML = html;
-}
+    $('btnWatchStart').onclick = watchStart;
+    $('btnWatchStop').onclick = watchStop;
+    $('btnSchStart').onclick = scheduleStart;
+    $('btnSchStop').onclick = scheduleStop;
 
-/* --------------------------------------------------------------- 目录浏览 */
-/* 一律用服务端回显的绝对路径继续下钻，不在前端猜拼接规则；越界时服务端会给
-   403 和原因，这里直接显出来，不额外兜圈子。 */
-let BROWSE = { cur: '', ok: '', picked: '', target: 'source' };   /* ok = 最后一个确认能列出来的目录 */
+    /* 优雅停机：/api/shutdown 只允许本机回环调用；后端把 stopRequested 置位，
+       响应发完之后 main 才真正停服。二次确认避免误点把服务关掉。 */
+    async function shutdownServer() {
+      if (!confirm('确定要关闭 bkd 服务吗？关闭后本页将无法继续使用，需要重新启动服务。')) return;
+      try {
+        const r = await api('/api/shutdown', { method: 'POST', body: '{}' });
+        toast(r.msg || '服务正在退出');
+        document.body.insertAdjacentHTML('beforeend',
+          '<div class="mask"><div class="card dlg"><h2>服务已关闭</h2>' +
+          '<div class="meta">bkd 已停止监听。可以关闭此页面；需要时重新运行 bkd 启动服务。</div></div></div>');
+      } catch (e) { toast('关闭失败：' + e.message, true); }
+    }
+    $('btnShutdown').onclick = shutdownServer;
 
-const normSep = (p) => String(p).replace(/\\/g, '/');
-function trimSep(p) {
-  const s = normSep(p).replace(/\/+$/, '');
-  return s === '' ? '/' : s;            /* 盘根/POSIX 根别被削成空串 */
-}
-function joinOf(p, name) {
-  const s = trimSep(p);
-  if (s === '.' || s === '/') return s === '/' ? '/' + name : name;
-  return /^[A-Za-z]:$/.test(s) ? s + '/' + name : s + '/' + name;
-}
-function parentOf(p) {
-  const s = trimSep(p);
-  if (s === '.' || s === '/') return s;
-  if (/^[A-Za-z]:$/.test(s)) return s + '/';        /* 盘根保留斜杠，显示成 D:/ */
-  const i = s.lastIndexOf('/');
-  if (i < 0) return '.';
-  if (i === 0) return '/';
-  const head = s.slice(0, i);
-  return /^[A-Za-z]:$/.test(head) ? head + '/' : head;
-}
-function browseStart() { return (window.CFG && CFG.dataRoot) ? CFG.dataRoot : '.'; }
-/* 输入框里已经是个文件名（末段带点）时，从它所在目录开始列，否则 /api/browse
- * 会当成目录读并报错。目录被起成 "a.b" 这种名字时只是多退一级，无害。 */
-function browseSeed(v) {
-  if (!v) return browseStart();
-  const seg = trimSep(v).split('/').pop();
-  return seg.indexOf('.') >= 0 ? parentOf(v) : v;
-}
+    boot();
 
-/* 数据根是服务端的硬边界。前端必须自己先挡住：一旦把 BROWSE.cur 换成根外的
-   路径，之后每次点击都会撞 403，弹窗就再也翻不动了（踩过）。 */
-function withinRoot(p) {
-  if (!window.CFG || !CFG.dataRoot) return true;      /* 老服务端没回 dataRoot：不拦 */
-  const a = normSep(trimSep(p || ''));
-  const b = normSep(trimSep(CFG.dataRoot));
-  return a === b || a.indexOf(b + '/') === 0;
-}
-function syncUp() {
-  /* 父级出根（或本来就是 “.”）就把“上一级”整个按钮藏掉：留着一个点了必然
-     403 的按钮，只会让用户以为界面坏了。 */
-  const cur = BROWSE.cur || '';
-  const up = parentOf(cur);
-  $('bUp').classList.toggle('hide', !withinRoot(up) || up === cur);
-  $('bRoot').classList.toggle('hide', trimSep(cur) === trimSep(browseStart()));
-}
-
-/* 服务端 browse 条目历史上叫 isDir，文档/前端用的是 dir，还有 type='D'。
-   三个都认，字段名单方面改动就不会再出现"目录被渲染成文件、点不进下一层"。 */
-const isDirEntry = (x) => !!x && (x.isDir === true || x.dir === true || x.type === 'D');
-function mkRow(name, e, act) {
-  const dir = isDirEntry(e);
-  const el = document.createElement('div');
-  el.className = 'it';
-  el.innerHTML = '<span class="tag">' + (dir ? '目录' : '文件') + '</span><span>' +
-    escapeHtml(name) + '</span>' +
-    (dir ? '' : '<span class="sz">' + fmtBytes(e.size || 0) + '</span>');
-  el.onclick = () => act(el);
-  return el;
-}
-
-async function loadBrowse() {
-  const box = $('browseList');
-  $('browsePath').textContent = BROWSE.cur;
-  $('browseHint').textContent = BROWSE.picked
-    ? '已选中文件：' + BROWSE.picked
-    : '点目录进入；点文件选中它；“用这个路径”取当前目录';
-  box.innerHTML = '<div class="it meta">读取中…</div>';
-  let d;
-  try { d = (await api('/api/browse?path=' + encodeURIComponent(BROWSE.cur))).data; }
-  catch (e) {
-    BROWSE.cur = BROWSE.ok || browseStart();    /* 别把游标留在列不出来的目录上，否则后面每点一次都是 403 */
-    $('browsePath').textContent = BROWSE.cur;
-    box.innerHTML = '<div class="it meta">读取失败：' + escapeHtml(e.message) + '</div>';
-    syncUp();
-    return;
-  }
-  BROWSE.cur = d.path;
-  BROWSE.ok = d.path;
-  syncUp();
-  $('browsePath').textContent = d.path + (d.truncated ? '（条目过多，只列出前 1000 项）' : '');
-  box.innerHTML = '';
-  /* 老服务端不给 parent，就本地退一级；两种情况都只在根内给入口。 */
-  const up = (typeof d.parent === 'string') ? d.parent : parentOf(d.path);
-  if (up && withinRoot(up)) box.appendChild(mkRow('..（上一级）', { dir: true }, () => loadInto(up)));
-  (d.entries || []).forEach((en) => {
-    const full = joinOf(d.path, en.name);
-    if (isDirEntry(en)) box.appendChild(mkRow(en.name, en, () => loadInto(full)));
-    else box.appendChild(mkRow(en.name, en, (el) => {
-      BROWSE.picked = full;
-      box.querySelectorAll('.it.sel').forEach((x) => x.classList.remove('sel'));
-      el.classList.add('sel');
-      $('browseHint').textContent = '已选中文件：' + full;
-    }));
-  });
-  if (!box.children.length) box.innerHTML = '<div class="it meta">空目录</div>';
-}
-
-function loadInto(p) {
-  if (p && !withinRoot(p)) { toast('已经到数据根边界，外面不给浏览', true); return; }
-  BROWSE.picked = ''; BROWSE.cur = p; loadBrowse();
-}
-function openBrowse(target) {
-  BROWSE.target = target;
-  BROWSE.picked = '';
-  BROWSE.ok = '';
-  const v = $(target).value.trim();
-  BROWSE.cur = browseSeed(v);
-  if (!withinRoot(BROWSE.cur)) BROWSE.cur = browseStart();   /* 输入框里填的是根外路径时别一开就报错 */
-  $('browseMask').classList.remove('hide');
-  syncUp();
-  loadBrowse();
-}
-function closeBrowse() { $('browseMask').classList.add('hide'); }
-function commitBrowse() {
-  const v = BROWSE.picked || trimSep(BROWSE.cur);
-  $(BROWSE.target).value = v;
-  closeBrowse();
-  toast('已填入：' + v);
-  onFieldInteract();   /* 浏览回填不会自动触发 input/change，手动刷一次校验 */
-}
-
-$('btnBrowseSrc').onclick = () => openBrowse('source');
-$('btnBrowseDst').onclick = () => openBrowse('destination');
-$('btnBrowseStat').onclick = () => openBrowse('statPath');
-$('btnBrowseWatchSrc').onclick = () => openBrowse('watchSource');
-$('btnBrowseWatchDst').onclick = () => openBrowse('watchDest');
-$('bRoot').onclick = () => loadInto(browseStart());
-$('bUp').onclick = () => { const p = parentOf(BROWSE.cur); if (p !== BROWSE.cur) loadInto(p); };
-$('bCancel').onclick = closeBrowse;
-$('bOk').onclick = commitBrowse;
-$('browseMask').onclick = (e) => { if (e.target === $('browseMask')) closeBrowse(); };
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !$('browseMask').classList.contains('hide')) closeBrowse();
-});
-
-$('btnSubmit').onclick = submitJob;
-$('btnStat').onclick = readStat;
-/* 实时联动：任一关键输入变动就重算校验，标红 + 提示 + 按需禁用提交按钮 */
-['type', 'source', 'destination', 'crypto', 'jobPassword', 'mode', 'checksum', 'maxDepth'].forEach((id) => {
-  const el = $(id); if (!el) return;
-  el.addEventListener('input', onFieldInteract);
-  el.addEventListener('change', onFieldInteract);
-});
-/* 每 5 秒兜底刷新一次：SSE 只有 25 秒生命周期，浏览器会自动重连，
-   但列表页还是要有个稳定节奏，避免事件丢失后数字长期不动。 */
-setInterval(() => { if (TOKEN) refreshJobs(); }, 5000);
-
-/* --------------------------------------------------------------- 实时备份面板 */
-function paintWatchStatus(d) {
-  const el = $('watchStatus');
-  const startBtn = $('btnWatchStart'), stopBtn = $('btnWatchStop');
-  if (!d) { el.textContent = '当前未在监听。'; startBtn.disabled = false; stopBtn.disabled = true; return; }
-  const mode = d.native ? '原生事件(ReadDirectoryChangesW)' : '轮询降级';
-  if (d.running) {
-    const st = d.stopping ? '（正在停止…）' : '';
-    el.innerHTML = '● 监听中' + st + '：' + escapeHtml(d.source) + ' → ' + escapeHtml(d.archiveDir)
-      + ' · ' + mode + ' · 已自动备份 <b>' + (d.backupCount || 0) + '</b> 次'
-      + (d.failCount ? ' · 失败 ' + d.failCount + ' 次' : '');
-    startBtn.disabled = true; stopBtn.disabled = d.stopping;
-  } else {
-    el.textContent = '当前未在监听。上次：备份 ' + (d.backupCount || 0) + ' 次'
-      + (d.lastError ? ('，最后错误：' + d.lastError) : '');
-    startBtn.disabled = false; stopBtn.disabled = true;
-  }
-  const det = $('watchDetail');
-  if (d.lastArchive || d.lastError) {
-    det.classList.remove('hide');
-    det.textContent = '最近归档：' + (d.lastArchive || '(无)') +
-      '\n去抖：' + (d.debounceSeconds || 0) + 's · 保留：' + (d.keep || '不限') +
-      (d.lastError ? ('\n最后错误：' + d.lastError) : '');
-  } else det.classList.add('hide');
-}
-
-/* 前端即时校验：与后端 watch 启动参数同口径 */
-function watchPreflight() {
-  const src = $('watchSource').value.trim();
-  const dst = $('watchDest').value.trim();
-  const crypto = $('watchCrypto').value;
-  const pw = $('watchPassword').value;
-  const hint = $('watchHint');
-  const fail = (m) => { hint.textContent = '⚠ ' + m; hint.className = 'fielderr'; return false; };
-  if (!src) return fail('源目录不能为空');
-  if (!dst) return fail('输出目录不能为空');
-  if (crypto !== 'none' && !pw) return fail('选了加密算法 ' + crypto + '，必须填密码');
-  const norm = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-  if (norm(src) === norm(dst) || norm(src).startsWith(norm(dst) + '/'))
-    return fail('输出目录不能是源的本身或其父目录，否则验证会失败');
-  hint.textContent = ''; hint.className = '';
-  return true;
-}
-
-async function watchStart() {
-  if (!watchPreflight()) return;
-  $('btnWatchStart').disabled = true;
-  const body = {
-    source: $('watchSource').value.trim(),
-    destination: $('watchDest').value.trim(),
-    debounce: $('watchDebounce').value.trim() || '2s',
-    keep: parseInt($('watchKeep').value, 10) || 0,
-    algorithm: $('watchAlgo').value,
-    crypto: $('watchCrypto').value,
-    password: $('watchPassword').value,
-    checksum: 'crc64', verifyAfter: true
-  };
-  try {
-    const r = await api('/api/watch', { method: 'POST', body: JSON.stringify(body) });
-    toast('实时备份已启动（' + (r.data.native ? '原生' : '轮询') + '）');
-    paintWatchStatus(r.data); pollWatch();
-  } catch (e) { toast('启动失败：' + e.message, true); $('btnWatchStart').disabled = false; }
-}
-
-async function watchStop() {
-  $('btnWatchStop').disabled = true;
-  try {
-    const r = await api('/api/watch/stop', { method: 'POST', body: '{}' });
-    toast(r.msg || '已请求停止');
-    paintWatchStatus(r.data); setTimeout(pollWatch, 1200);
-  } catch (e) { toast('停止失败：' + e.message, true); $('btnWatchStop').disabled = false; }
-}
-
-let WATCH_TIMER = null;
-async function pollWatch() {
-  try {
-    const r = await api('/api/watch');
-    paintWatchStatus(r.data);
-    /* 监听中：每 2 秒刷新一次计数；停止后：关掉定时器 */
-    if (r.data && r.data.running) {
-      if (!WATCH_TIMER) WATCH_TIMER = setInterval(pollWatch, 2000);
-    } else if (WATCH_TIMER) { clearInterval(WATCH_TIMER); WATCH_TIMER = null; }
-  } catch (e) { /* 未登录/服务不可达时静默 */ }
-}
-
-$('btnWatchStart').onclick = watchStart;
-$('btnWatchStop').onclick = watchStop;
-
-boot();
-
-</script>
+  </script>
 </body>
+
 </html>

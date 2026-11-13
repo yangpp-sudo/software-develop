@@ -13,10 +13,13 @@ __pycache__/
 .vscode/
 
 # 忽略备份工具的测试/运行产物（垃圾目录、临时输出、归档二进制）
-System.Collections.Hashtable/
 dbkp/tmp/
 *.dbkp
 # 仓库根目录下的临时输出（用 / 锁到根，避免误伤 dbkp/test 等真实源码）
 /test/
 /test_out/
 /tmp/
+
+# 调试草稿区：界面验收截图、一次性探针脚本与提交消息临时文件
+# 只做过程留证，不入库；确实要提交其中的脚本时用 git add -f _probe/<file>
+_probe/

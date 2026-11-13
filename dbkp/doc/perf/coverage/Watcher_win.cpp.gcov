@@ -1,0 +1,296 @@
+        -:    0:Source:src/Backup/Watcher_win.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Backup/Watcher_win.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Backup/Watcher_win.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Watcher_win.cpp  -- Windows 原生目录监听（ReadDirectoryChangesW）
+        -:    3: *
+        -:    4: *  仅在 _WIN32 下编译（Makefile 过滤），核心逻辑：
+        -:    5: *    1. 用 CreateFileW + FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OVERLAPPED 打开目录
+        -:    6: *       （路径经 Path::apiWide 做 UTF-8->UTF-16 转换，兼容中文/超长路径）
+        -:    7: *    2. 启动后台线程，循环调 ReadDirectoryChangesW（递归=TRUE）
+        -:    8: *    3. 每次完成回调置 m_dirty = true
+        -:    9: *    4. stop() 时 CancelIoEx + join，确保线程安全退出
+        -:   10: * ==========================================================================*/
+        -:   11:#include "Backup/Watcher.h"
+        -:   12:
+        -:   13:#if defined(DBKP_OS_WINDOWS)
+        -:   14:
+        -:   15:#include <windows.h>
+        -:   16:
+        -:   17:#include <cstring>
+        -:   18:#include <thread>
+        -:   19:
+        -:   20:#include "Utils/PathUtil.h"
+        -:   21:
+        -:   22:namespace DBKP {
+        -:   23:
+        -:   24:struct CDirWatcher::Impl {
+        -:   25:    std::thread      worker;
+        -:   26:    HANDLE           dirHandle   = INVALID_HANDLE_VALUE;
+        -:   27:    HANDLE           ovEvent     = nullptr;
+        -:   28:    /* ReadDirectoryChangesW 推荐 >= 4096 字节缓冲 */
+        -:   29:    uint8_t          buffer[8192];
+        -:   30:};
+        -:   31:
+        -:   32:/* 后台线程主循环：阻塞在 ReadDirectoryChangesW，有变化就置脏 */
+function _ZN4DBKPL9watchLoopEPNS_11CDirWatcherEPNS0_4ImplE called 0 returned 0% blocks executed 0%
+    #####:   33:static void watchLoop(CDirWatcher* self, CDirWatcher::Impl* impl) {
+        -:   34:    /* 通知过滤器：新增/删除/改名/写入/创建/大小变化 */
+    #####:   35:    const DWORD filter = FILE_NOTIFY_CHANGE_FILE_NAME
+        -:   36:                       | FILE_NOTIFY_CHANGE_DIR_NAME
+        -:   37:                       | FILE_NOTIFY_CHANGE_LAST_WRITE
+        -:   38:                       | FILE_NOTIFY_CHANGE_CREATION
+        -:   39:                       | FILE_NOTIFY_CHANGE_SIZE;
+        -:   40:
+        -:   41:    OVERLAPPED ov;
+        -:   42:
+    #####:   43:    while (!self->m_stop.load(std::memory_order_relaxed)) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   44:        ResetEvent(impl->ovEvent);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   45:        std::memset(&ov, 0, sizeof(ov));
+    #####:   46:        ov.hEvent = impl->ovEvent;
+        -:   47:
+    #####:   48:        DWORD bytesReturned = 0;
+    #####:   49:        BOOL ok = ReadDirectoryChangesW(
+        -:   50:            impl->dirHandle,
+    #####:   51:            impl->buffer,
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:   52:            static_cast<DWORD>(sizeof(impl->buffer)),
+        -:   53:            TRUE,               /* 递归子目录 */
+        -:   54:            filter,
+        -:   55:            &bytesReturned,
+        -:   56:            &ov,
+        -:   57:            nullptr);
+        -:   58:
+    #####:   59:        if (!ok) {
+branch  0 never executed
+branch  1 never executed
+    #####:   60:            DWORD err = GetLastError();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   61:            if (err == ERROR_OPERATION_ABORTED || self->m_stop.load()) break;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+    #####:   62:            break;  /* 其它错误（如目录被删除），停止 */
+        -:   63:        }
+        -:   64:
+        -:   65:        /* 内层等待：轮询事件或检查停止标志 */
+    #####:   66:        bool aborted = false;
+        -:   67:        for (;;) {
+    #####:   68:            DWORD w = WaitForSingleObject(impl->ovEvent, 200 /* ms */);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   69:            if (w == WAIT_OBJECT_0) break;   /* 操作完成 */
+branch  0 never executed
+branch  1 never executed
+    #####:   70:            if (self->m_stop.load(std::memory_order_relaxed)) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:   71:                /* CancelIo 取消当前线程在该 handle 上的所有 pending I/O。
+        -:   72:                   因为 ReadDirectoryChangesW 是由本线程发起的，所以 CancelIo 可用。 */
+    #####:   73:                CancelIo(impl->dirHandle);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   74:                WaitForSingleObject(impl->ovEvent, 2000);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   75:                aborted = true;
+    #####:   76:                break;
+        -:   77:            }
+        -:   78:            /* WAIT_TIMEOUT 且未停止：继续等待同一次操作 */
+    #####:   79:        }
+    #####:   80:        if (aborted) break;
+branch  0 never executed
+branch  1 never executed
+        -:   81:
+        -:   82:        /* 获取结果 */
+    #####:   83:        DWORD transferred = 0;
+    #####:   84:        if (!GetOverlappedResult(impl->dirHandle, &ov, &transferred, FALSE)) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:   85:            DWORD e2 = GetLastError();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   86:            if (e2 == ERROR_OPERATION_ABORTED) break;
+branch  0 never executed
+branch  1 never executed
+    #####:   87:            continue;   /* 非致命错误，重试 */
+        -:   88:        }
+    #####:   89:        if (transferred > 0) {
+branch  0 never executed
+branch  1 never executed
+    #####:   90:            self->m_dirty.store(true, std::memory_order_relaxed);
+call    0 never executed
+        -:   91:        }
+        -:   92:    }
+    #####:   93:}
+        -:   94:
+function _ZN4DBKP11CDirWatcher5startERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:   95:ErrCode CDirWatcher::start(const std::string& dir) {
+    #####:   96:    if (!m_impl) m_impl = new Impl();
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+        -:   97:
+        -:   98:    /* 目录必须以 FILE_ACCESS_READ|FILE_LIST_DIRECTORY 方式打开。
+        -:   99:       路径统一走 UTF-16 W 系 API：dir 内部是 UTF-8，直接喂 CreateFileA 会被
+        -:  100:       按系统 ANSI(GBK) 代码页解释，含中文时得到 ERROR_INVALID_NAME(123)。 */
+    #####:  101:    const std::wstring wdir = Path::apiWide(dir);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  102:    HANDLE h = CreateFileW(
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  103:        wdir.c_str(),
+        -:  104:        FILE_LIST_DIRECTORY,
+        -:  105:        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        -:  106:        nullptr,
+        -:  107:        OPEN_EXISTING,
+        -:  108:        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+        -:  109:        nullptr);
+        -:  110:
+    #####:  111:    if (h == INVALID_HANDLE_VALUE) {
+branch  0 never executed
+branch  1 never executed
+    #####:  112:        DWORD err = GetLastError();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  113:        char buf[160];
+    #####:  114:        std::snprintf(buf, sizeof(buf), "CreateFileW(%s) failed, err=%lu", dir.c_str(), err);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  115:        m_error = buf;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  116:        return E_SOURCE_NOT_FOUND;
+        -:  117:    }
+        -:  118:
+    #####:  119:    m_impl->dirHandle = h;
+    #####:  120:    m_impl->ovEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  121:    if (!m_impl->ovEvent) {
+branch  0 never executed
+branch  1 never executed
+    #####:  122:        CloseHandle(h);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  123:        m_impl->dirHandle = INVALID_HANDLE_VALUE;
+    #####:  124:        m_error = "CreateEventA failed";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  125:        return E_INTERNAL;
+        -:  126:    }
+        -:  127:
+    #####:  128:    m_dirty.store(false);
+call    0 never executed
+    #####:  129:    m_stop.store(false);
+call    0 never executed
+    #####:  130:    m_native.store(true);
+call    0 never executed
+        -:  131:
+    #####:  132:    m_impl->worker = std::thread(watchLoop, this, m_impl);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  133:    return E_OK;
+        -:  134:}
+        -:  135:
+function _ZN4DBKP11CDirWatcher4stopEv called 0 returned 0% blocks executed 0%
+    #####:  136:void CDirWatcher::stop() {
+    #####:  137:    m_stop.store(true);
+call    0 never executed
+    #####:  138:    if (m_impl) {
+branch  0 never executed
+branch  1 never executed
+        -:  139:        /* 等待后台线程自行检测 m_stop 并调用 CancelIo 退出 */
+    #####:  140:        if (m_impl->worker.joinable()) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  141:            m_impl->worker.join();
+call    0 never executed
+        -:  142:        }
+    #####:  143:        if (m_impl->ovEvent) { CloseHandle(m_impl->ovEvent); m_impl->ovEvent = nullptr; }
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+    #####:  144:        if (m_impl->dirHandle != INVALID_HANDLE_VALUE) {
+branch  0 never executed
+branch  1 never executed
+    #####:  145:            CloseHandle(m_impl->dirHandle);
+call    0 never executed
+    #####:  146:            m_impl->dirHandle = INVALID_HANDLE_VALUE;
+        -:  147:        }
+        -:  148:    }
+    #####:  149:    m_native.store(false);
+call    0 never executed
+    #####:  150:}
+        -:  151:
+function _ZN4DBKP11CDirWatcher9takeDirtyEv called 0 returned 0% blocks executed 0%
+    #####:  152:bool CDirWatcher::takeDirty() {
+    #####:  153:    bool expected = true;
+    #####:  154:    return m_dirty.compare_exchange_strong(expected, false, std::memory_order_acq_rel);
+call    0 never executed
+        -:  155:}
+        -:  156:
+function _ZN4DBKP11CDirWatcherC2Ev called 0 returned 0% blocks executed 0%
+    #####:  157:CDirWatcher::CDirWatcher() : m_impl(nullptr) {}
+call    0 never executed
+        -:  158:
+function _ZN4DBKP11CDirWatcherD2Ev called 0 returned 0% blocks executed 0%
+    #####:  159:CDirWatcher::~CDirWatcher() {
+    #####:  160:    stop();
+call    0 never executed
+    #####:  161:    delete m_impl;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+call    3 never executed
+    #####:  162:    m_impl = nullptr;
+call    0 never executed
+    #####:  163:}
+        -:  164:
+        -:  165:} /* namespace DBKP */
+        -:  166:
+        -:  167:#endif /* DBKP_OS_WINDOWS */

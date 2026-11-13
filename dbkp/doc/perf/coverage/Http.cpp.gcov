@@ -1,0 +1,1906 @@
+        -:    0:Source:src/Web/Http.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/Http.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/Http.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Http.cpp  -- 见 Http.h
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Web/Http.h"
+        -:    5:
+        -:    6:#include <cstdio>
+        -:    7:#include <cstdlib>
+        -:    8:#include <cstring>
+        -:    9:
+        -:   10:namespace DBKP {
+        -:   11:
+        -:   12:/* ------------------------------------------------------------- 小工具 */
+function _ZN4DBKP12CHttpRequest7ToLowerERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 37 returned 100% blocks executed 94%
+       37:   13:std::string CHttpRequest::ToLower(const std::string& s) {
+       37:   14:    std::string out;
+call    0 returned 37
+       37:   15:    out.reserve(s.size());
+call    0 returned 37
+call    1 returned 37
+branch  2 taken 37 (fallthrough)
+branch  3 taken 0 (throw)
+      437:   16:    for (std::size_t i = 0; i < s.size(); ++i) {
+call    0 returned 437
+branch  1 taken 400 (fallthrough)
+branch  2 taken 37
+      400:   17:        const unsigned char c = static_cast<unsigned char>(s[i]);
+call    0 returned 400
+      400:   18:        out += static_cast<char>((c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c);
+branch  0 taken 374 (fallthrough)
+branch  1 taken 26
+branch  2 taken 23 (fallthrough)
+branch  3 taken 351
+call    4 returned 400
+branch  5 taken 400 (fallthrough)
+branch  6 taken 0 (throw)
+        -:   19:    }
+       37:   20:    return out;
+        -:   21:}
+        -:   22:
+function _ZN4DBKP12CHttpRequest11methodUpperERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 13 returned 100% blocks executed 82%
+       13:   23:std::string CHttpRequest::methodUpper(const std::string& m) {
+       13:   24:    std::string out;
+call    0 returned 13
+       13:   25:    out.reserve(m.size());
+call    0 returned 13
+call    1 returned 13
+branch  2 taken 13 (fallthrough)
+branch  3 taken 0 (throw)
+       57:   26:    for (std::size_t i = 0; i < m.size(); ++i) {
+call    0 returned 57
+branch  1 taken 44 (fallthrough)
+branch  2 taken 13
+       44:   27:        const unsigned char c = static_cast<unsigned char>(m[i]);
+call    0 returned 44
+      44*:   28:        out += static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
+branch  0 taken 0 (fallthrough)
+branch  1 taken 44
+branch  2 never executed
+branch  3 never executed
+call    4 returned 44
+branch  5 taken 44 (fallthrough)
+branch  6 taken 0 (throw)
+        -:   29:    }
+       13:   30:    return out;
+        -:   31:}
+        -:   32:
+function _ZN4DBKPL6hexValEcRi called 46 returned 100% blocks executed 92%
+       46:   33:static bool hexVal(char c, int& out) {
+       46:   34:    if (c >= '0' && c <= '9') out = c - '0';
+branch  0 taken 46 (fallthrough)
+branch  1 taken 0
+branch  2 taken 25 (fallthrough)
+branch  3 taken 21
+       21:   35:    else if (c >= 'a' && c <= 'f') out = c - 'a' + 10;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 19
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0
+       19:   36:    else if (c >= 'A' && c <= 'F') out = c - 'A' + 10;
+branch  0 taken 19 (fallthrough)
+branch  1 taken 0
+branch  2 taken 19 (fallthrough)
+branch  3 taken 0
+    #####:   37:    else return false;
+       46:   38:    return true;
+        -:   39:}
+        -:   40:
+function _ZN4DBKP9urlDecodeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 32 returned 100% blocks executed 89%
+       32:   41:std::string urlDecode(const std::string& in) {
+       32:   42:    std::string out;
+call    0 returned 32
+       32:   43:    out.reserve(in.size());
+call    0 returned 32
+call    1 returned 32
+branch  2 taken 32 (fallthrough)
+branch  3 taken 0 (throw)
+      221:   44:    for (std::size_t i = 0; i < in.size(); ++i) {
+call    0 returned 221
+branch  1 taken 189 (fallthrough)
+branch  2 taken 32
+      189:   45:        const char c = in[i];
+call    0 returned 189
+      189:   46:        if (c == '+') { out += ' '; continue; }
+branch  0 taken 4 (fallthrough)
+branch  1 taken 185
+call    2 returned 4
+branch  3 taken 4 (fallthrough)
+branch  4 taken 0 (throw)
+      185:   47:        if (c == '%' && i + 2 < in.size()) {
+branch  0 taken 23 (fallthrough)
+branch  1 taken 162
+call    2 returned 23
+branch  3 taken 23 (fallthrough)
+branch  4 taken 0
+branch  5 taken 23 (fallthrough)
+branch  6 taken 162
+       23:   48:            int hi = 0, lo = 0;
+      23*:   49:            if (hexVal(in[i + 1], hi) && hexVal(in[i + 2], lo)) {
+call    0 returned 23
+call    1 returned 23
+branch  2 taken 23 (fallthrough)
+branch  3 taken 0
+call    4 returned 23
+call    5 returned 23
+branch  6 taken 23 (fallthrough)
+branch  7 taken 0
+branch  8 taken 23 (fallthrough)
+branch  9 taken 0
+       23:   50:                out += static_cast<char>((hi << 4) + lo);
+call    0 returned 23
+branch  1 taken 23 (fallthrough)
+branch  2 taken 0 (throw)
+       23:   51:                i += 2;
+       23:   52:                continue;
+        -:   53:            }
+        -:   54:        }
+      162:   55:        out += c;                     /* 非法转义原样保留：宁可宽容也不丢路径 */
+call    0 returned 162
+branch  1 taken 162 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   56:    }
+       32:   57:    return out;
+        -:   58:}
+        -:   59:
+function _ZN4DBKP9urlEncodeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:   60:std::string urlEncode(const std::string& in) {
+        -:   61:    static const char* kHex = "0123456789ABCDEF";
+    #####:   62:    std::string out;
+call    0 never executed
+    #####:   63:    out.reserve(in.size() + 8);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   64:    for (std::size_t i = 0; i < in.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   65:        const unsigned char c = static_cast<unsigned char>(in[i]);
+call    0 never executed
+    #####:   66:        const bool safe = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:   67:                          (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:   68:                          c == '.' || c == '~' || c == '/';
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:   69:        if (safe) out += static_cast<char>(c);
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:   70:        else { out += '%'; out += kHex[c >> 4]; out += kHex[c & 0xF]; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+        -:   71:    }
+    #####:   72:    return out;
+        -:   73:}
+        -:   74:
+function _ZN4DBKP15parseQueryPairsERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERSt3mapIS5_S5_St4lessIS5_ESaISt4pairIS6_S5_EEE called 6 returned 100% blocks executed 71%
+        6:   75:void parseQueryPairs(const std::string& text, std::map<std::string, std::string>& out) {
+        6:   76:    std::size_t pos = 0;
+       17:   77:    while (pos < text.size()) {
+call    0 returned 17
+branch  1 taken 11 (fallthrough)
+branch  2 taken 6
+       11:   78:        std::size_t eq = text.find('=', pos);
+call    0 returned 11
+       11:   79:        std::size_t amp = text.find('&', pos);
+call    0 returned 11
+       11:   80:        if (amp == std::string::npos) amp = text.size();
+branch  0 taken 6 (fallthrough)
+branch  1 taken 5
+call    2 returned 6
+       22:   81:        std::string key, val;
+call    0 returned 11
+call    1 returned 11
+call    2 returned 11
+call    3 never executed
+call    4 never executed
+       11:   82:        if (eq == std::string::npos || eq > amp) {
+branch  0 taken 11 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 11
+    #####:   83:            key = text.substr(pos, amp - pos);       /* 无值开关，如 ?verbose */
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+        -:   84:        } else {
+       11:   85:            key = text.substr(pos, eq - pos);
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 11
+call    4 returned 11
+       11:   86:            val = text.substr(eq + 1, amp - eq - 1);
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 11
+call    4 returned 11
+        -:   87:        }
+       11:   88:        if (!key.empty()) {
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0
+       22:   89:            const std::string k = urlDecode(key);
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 11
+call    4 never executed
+       11:   90:            if (out.find(k) == out.end()) out[k] = urlDecode(val);  /* 重复键取首个 */
+call    0 returned 11
+call    1 returned 11
+branch  2 taken 11 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 11
+branch  5 taken 11 (fallthrough)
+branch  6 taken 0
+call    7 returned 11
+branch  8 taken 11 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 11
+branch 11 taken 11 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 11
+call   14 returned 11
+call   15 never executed
+        -:   91:        }
+       11:   92:        pos = amp + 1;
+call    0 returned 11
+        -:   93:    }
+        6:   94:}
+        -:   95:
+        -:   96:/* ------------------------------------------------------------- 请求访问 */
+function _ZNK4DBKP12CHttpRequest5queryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 7 returned 100% blocks executed 77%
+        7:   97:std::string CHttpRequest::query(const std::string& key, const std::string& def) const {
+        7:   98:    const std::size_t q = m_rawTarget.find('?');
+call    0 returned 7
+        7:   99:    if (q == std::string::npos) return def;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 6
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+        6:  100:    std::map<std::string, std::string> kv;
+call    0 returned 6
+call    1 never executed
+        6:  101:    parseQueryPairs(m_rawTarget.substr(q + 1), kv);
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 6
+branch  4 taken 6 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 6
+call    7 never executed
+        6:  102:    std::map<std::string, std::string>::const_iterator it = kv.find(key);
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 6
+        6:  103:    return it == kv.end() ? def : it->second;
+call    0 returned 6
+call    1 returned 6
+call    2 returned 6
+branch  3 taken 1 (fallthrough)
+branch  4 taken 5
+call    5 returned 5
+call    6 returned 6
+branch  7 taken 6 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 6
+        -:  104:}
+        -:  105:
+function _ZNK4DBKP12CHttpRequest6headerERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 19 returned 100% blocks executed 78%
+       19:  106:std::string CHttpRequest::header(const std::string& key, const std::string& def) const {
+       19:  107:    std::map<std::string, std::string>::const_iterator it = m_headers.find(ToLower(key));
+call    0 returned 19
+branch  1 taken 19 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 19
+branch  4 taken 19 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 19
+call    7 never executed
+       19:  108:    return it == m_headers.end() ? def : it->second;
+call    0 returned 19
+call    1 returned 19
+branch  2 taken 10 (fallthrough)
+branch  3 taken 9
+call    4 returned 9
+call    5 returned 19
+branch  6 taken 19 (fallthrough)
+branch  7 taken 0 (throw)
+        -:  109:}
+        -:  110:
+function _ZNK4DBKP12CHttpRequest10isJsonBodyEv called 1 returned 100% blocks executed 56%
+        1:  111:bool CHttpRequest::isJsonBody() const {
+        1:  112:    return header("content-type").find("application/json") != std::string::npos;
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 1
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+branch  9 taken 1 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 1
+call   12 returned 1
+call   13 returned 1
+call   14 returned 1
+call   15 returned 1
+call   16 returned 1
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+        -:  113:}
+        -:  114:
+function _ZNK4DBKP12CHttpRequest17hasExpectContinueEv called 2 returned 100% blocks executed 53%
+        2:  115:bool CHttpRequest::hasExpectContinue() const {
+        2:  116:    return ToLower(header("expect")).find("100-continue") != std::string::npos;
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 2
+call    5 returned 2
+branch  6 taken 2 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 2
+branch  9 taken 2 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 2
+branch 12 taken 2 (fallthrough)
+branch 13 taken 0 (throw)
+call   14 returned 2
+call   15 returned 2
+call   16 returned 2
+call   17 returned 2
+call   18 returned 2
+call   19 returned 2
+call   20 returned 2
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+        -:  117:}
+        -:  118:
+function _ZNK4DBKP12CHttpRequest4jsonERNS_10CJsonValueERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  119:bool CHttpRequest::json(CJsonValue& value, std::string& err) const {
+    #####:  120:    if (body.empty()) { err = "empty request body"; return false; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  121:    return CJsonValue::parse(body, value, err);
+call    0 never executed
+        -:  122:}
+        -:  123:
+function _ZNK4DBKP12CHttpRequest11bearerTokenB5cxx11Ev called 4 returned 100% blocks executed 53%
+        4:  124:std::string CHttpRequest::bearerToken() const {
+       12:  125:    const std::string auth = header("authorization");
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 4
+call    5 returned 4
+branch  6 taken 4 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 4
+branch  9 taken 4 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 4
+call   12 returned 4
+call   13 returned 4
+call   14 returned 4
+call   15 never executed
+        -:  126:    /* "Bearer " 是 7 个字符（含空格）：早期写成 6 会让所有带 token 的请求
+        -:  127:       都掉去查 ?token=，表现为"登录后仍然 401" */
+        4:  128:    if (auth.size() >= 7 && ToLower(auth.substr(0, 7)) == "bearer ")
+call    0 returned 4
+branch  1 taken 3 (fallthrough)
+branch  2 taken 1
+call    3 returned 3
+branch  4 taken 3 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 3
+branch  7 taken 3 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 3
+branch 10 taken 2 (fallthrough)
+branch 11 taken 1
+branch 12 taken 3 (fallthrough)
+branch 13 taken 1
+call   14 returned 3
+branch 15 taken 3 (fallthrough)
+branch 16 taken 1
+call   17 returned 3
+branch 18 taken 2 (fallthrough)
+branch 19 taken 2
+branch 20 never executed
+branch 21 never executed
+call   22 never executed
+branch 23 never executed
+branch 24 never executed
+call   25 never executed
+        2:  129:        return auth.substr(7);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:  130:    return query("token");            /* EventSource 不能设请求头，只能用查询串 */
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 2
+call    5 returned 2
+branch  6 taken 2 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 2
+branch  9 taken 2 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 2
+call   12 returned 2
+call   13 returned 2
+call   14 returned 2
+call   15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+        -:  131:}
+        -:  132:
+function _ZNK4DBKP12CHttpRequest4formERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 0 returned 0% blocks executed 0%
+    #####:  133:std::string CHttpRequest::form(const std::string& key, const std::string& def) const {
+    #####:  134:    if (!body.empty() && header("content-type").find("x-www-form-urlencoded") != std::string::npos) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+branch 12 never executed
+branch 13 never executed
+call   14 never executed
+branch 15 never executed
+branch 16 never executed
+branch 17 never executed
+branch 18 never executed
+call   19 never executed
+branch 20 never executed
+branch 21 never executed
+call   22 never executed
+branch 23 never executed
+branch 24 never executed
+call   25 never executed
+branch 26 never executed
+branch 27 never executed
+call   28 never executed
+branch 29 never executed
+branch 30 never executed
+call   31 never executed
+branch 32 never executed
+branch 33 never executed
+branch 34 never executed
+branch 35 never executed
+call   36 never executed
+branch 37 never executed
+branch 38 never executed
+call   39 never executed
+branch 40 never executed
+branch 41 never executed
+call   42 never executed
+branch 43 never executed
+branch 44 never executed
+call   45 never executed
+branch 46 never executed
+branch 47 never executed
+call   48 never executed
+call   49 never executed
+    #####:  135:        std::map<std::string, std::string> kv;
+call    0 never executed
+call    1 never executed
+    #####:  136:        parseQueryPairs(body, kv);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  137:        std::map<std::string, std::string>::const_iterator it = kv.find(key);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  138:        if (it != kv.end()) return it->second;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+        -:  139:    }
+    #####:  140:    return query(key, def);
+call    0 never executed
+        -:  141:}
+        -:  142:
+        -:  143:/* -------------------------------------------------------------- base64 */
+        -:  144:static const char* kB64Chars =
+        -:  145:    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        -:  146:
+function _ZN4DBKP12base64EncodeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  147:std::string base64Encode(const std::string& in) {
+    #####:  148:    std::string out;
+call    0 never executed
+    #####:  149:    out.reserve((in.size() + 2) / 3 * 4);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  150:    std::size_t i = 0;
+    #####:  151:    while (i + 2 < in.size()) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  152:        const unsigned v = (static_cast<unsigned char>(in[i]) << 16) |
+call    0 never executed
+    #####:  153:                           (static_cast<unsigned char>(in[i + 1]) << 8) |
+call    0 never executed
+    #####:  154:                            static_cast<unsigned char>(in[i + 2]);
+call    0 never executed
+    #####:  155:        out += kB64Chars[(v >> 18) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  156:        out += kB64Chars[(v >> 12) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  157:        out += kB64Chars[(v >> 6) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  158:        out += kB64Chars[v & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  159:        i += 3;
+        -:  160:    }
+    #####:  161:    const std::size_t rem = in.size() - i;
+call    0 never executed
+    #####:  162:    if (rem == 1) {
+branch  0 never executed
+branch  1 never executed
+    #####:  163:        const unsigned v = static_cast<unsigned char>(in[i]) << 16;
+call    0 never executed
+    #####:  164:        out += kB64Chars[(v >> 18) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  165:        out += kB64Chars[(v >> 12) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  166:        out += "==";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  167:    } else if (rem == 2) {
+branch  0 never executed
+branch  1 never executed
+    #####:  168:        const unsigned v = (static_cast<unsigned char>(in[i]) << 16) |
+call    0 never executed
+    #####:  169:                           (static_cast<unsigned char>(in[i + 1]) << 8);
+call    0 never executed
+    #####:  170:        out += kB64Chars[(v >> 18) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  171:        out += kB64Chars[(v >> 12) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  172:        out += kB64Chars[(v >> 6) & 63];
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  173:        out += '=';
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  174:    }
+    #####:  175:    return out;
+        -:  176:}
+        -:  177:
+function _ZN4DBKP12base64DecodeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS5_ called 0 returned 0% blocks executed 0%
+    #####:  178:bool base64Decode(const std::string& in, std::string& out) {
+        -:  179:    int table[256];
+    #####:  180:    for (int i = 0; i < 256; ++i) table[i] = -1;
+branch  0 never executed
+branch  1 never executed
+    #####:  181:    for (int i = 0; i < 64; ++i) table[static_cast<unsigned char>(kB64Chars[i])] = i;
+branch  0 never executed
+branch  1 never executed
+    #####:  182:    table[static_cast<unsigned char>('-')] = 62;   /* 容忍 URL-safe 变体 */
+    #####:  183:    table[static_cast<unsigned char>('_')] = 63;
+        -:  184:
+    #####:  185:    out.clear();
+call    0 never executed
+    #####:  186:    out.reserve(in.size() / 4 * 3 + 3);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  187:    int bits = 0, acc = 0, n = 0;
+    #####:  188:    for (std::size_t i = 0; i < in.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  189:        const unsigned char c = in[i];
+call    0 never executed
+    #####:  190:        if (c == '=' || c == '\n' || c == '\r') { if (c == '=') break; continue; }
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  191:        const int v = table[c];
+    #####:  192:        if (v < 0) return false;                   /* 非法字符：交给上层报 400 */
+branch  0 never executed
+branch  1 never executed
+    #####:  193:        acc = (acc << 6) | v;
+    #####:  194:        bits += 6;
+    #####:  195:        ++n;
+    #####:  196:        if (bits >= 8) {
+branch  0 never executed
+branch  1 never executed
+    #####:  197:            bits -= 8;
+    #####:  198:            out += static_cast<char>((acc >> bits) & 0xFF);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  199:        }
+        -:  200:    }
+        -:  201:    (void)n;
+    #####:  202:    return true;
+        -:  203:}
+        -:  204:
+        -:  205:/* ---------------------------------------------------------------- MIME */
+function _ZN4DBKP10mimeTypeOfERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  206:const char* mimeTypeOf(const std::string& path) {
+    #####:  207:    const std::size_t dot = path.find_last_of('.');
+call    0 never executed
+    #####:  208:    if (dot == std::string::npos) return "application/octet-stream";
+branch  0 never executed
+branch  1 never executed
+    #####:  209:    std::string ext = path.substr(dot + 1);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  210:    for (std::size_t i = 0; i < ext.size(); ++i)
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  211:        ext[i] = static_cast<char>((ext[i] >= 'A' && ext[i] <= 'Z') ? ext[i] - 'A' + 'a' : ext[i]);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+branch 17 never executed
+branch 18 never executed
+    #####:  212:    if (ext == "html" || ext == "htm") return "text/html; charset=utf-8";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  213:    if (ext == "css")  return "text/css; charset=utf-8";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  214:    if (ext == "js")   return "application/javascript; charset=utf-8";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  215:    if (ext == "json") return "application/json; charset=utf-8";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  216:    if (ext == "svg")  return "image/svg+xml";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  217:    if (ext == "png")  return "image/png";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  218:    if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  219:    if (ext == "ico")  return "image/x-icon";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  220:    if (ext == "txt" || ext == "log") return "text/plain; charset=utf-8";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  221:    if (ext == "wasm") return "application/wasm";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  222:    return "application/octet-stream";
+        -:  223:}
+        -:  224:
+        -:  225:/* -------------------------------------------------- 静态路径安全化处理 */
+function _ZN4DBKP19normalizeStaticPathERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS5_ called 7 returned 100% blocks executed 89%
+        7:  226:bool normalizeStaticPath(const std::string& urlPath, std::string& relPath) {
+        7:  227:    relPath.clear();
+call    0 returned 7
+       7*:  228:    if (urlPath.empty() || urlPath.find('\0') != std::string::npos) return false;
+call    0 returned 7
+branch  1 taken 7 (fallthrough)
+branch  2 taken 0
+call    3 returned 7
+branch  4 taken 0 (fallthrough)
+branch  5 taken 7
+branch  6 taken 0 (fallthrough)
+branch  7 taken 7
+        -:  229:
+        -:  230:    /* 逐段处理：只接受普通名字，遇到 "." ".." 反斜杠一律拒绝。
+        -:  231:     * 注意 path 已经 percent-decode 过，"%2e%2e" 这类编码穿越在这里
+        -:  232:     * 已经还原成 ".."，所以能一并拦掉。 */
+        7:  233:    std::size_t pos = 0;
+        7:  234:    if (urlPath[0] == '/') pos = 1;
+call    0 returned 7
+branch  1 taken 7 (fallthrough)
+branch  2 taken 0
+        7:  235:    bool any = false;
+        9:  236:    while (pos <= urlPath.size()) {
+call    0 returned 9
+branch  1 taken 9 (fallthrough)
+branch  2 taken 0
+        9:  237:        std::size_t slash = urlPath.find('/', pos);
+call    0 returned 9
+        9:  238:        if (slash == std::string::npos) slash = urlPath.size();
+branch  0 taken 3 (fallthrough)
+branch  1 taken 6
+call    2 returned 3
+        9:  239:        const std::string seg = urlPath.substr(pos, slash - pos);
+call    0 returned 9
+branch  1 taken 9 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+       9*:  240:        if (seg.empty()) {                          /* 连续斜杠：跳过 */
+call    0 returned 9
+branch  1 taken 1 (fallthrough)
+branch  2 taken 8
+        1:  241:            if (slash >= urlPath.size()) break;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0
+    #####:  242:            pos = slash + 1;
+    #####:  243:            continue;
+        -:  244:        }
+       12:  245:        if (seg == "." || seg == ".." || seg.find('\\') != std::string::npos ||
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0
+call    3 returned 8
+branch  4 taken 5 (fallthrough)
+branch  5 taken 3
+call    6 returned 5
+branch  7 taken 4 (fallthrough)
+branch  8 taken 1
+branch  9 taken 1 (fallthrough)
+branch 10 taken 3
+branch 11 taken 5 (fallthrough)
+branch 12 taken 3
+        4:  246:            seg.find(':') != std::string::npos)
+call    0 returned 4
+        5:  247:            return false;
+        3:  248:        if (any) relPath += '/';
+branch  0 taken 1 (fallthrough)
+branch  1 taken 2
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+        3:  249:        relPath += seg;
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+        3:  250:        any = true;
+        3:  251:        if (slash >= urlPath.size()) break;
+call    0 returned 3
+branch  1 taken 1 (fallthrough)
+branch  2 taken 2
+        2:  252:        pos = slash + 1;
+        -:  253:    }
+        2:  254:    if (!any) { relPath = "index.html"; return true; }   /* "/" -> 首页 */
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1
+call    2 returned 1
+       1*:  255:    if (urlPath[urlPath.size() - 1] == '/') relPath += "/index.html";
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 0 (fallthrough)
+branch  3 taken 1
+call    4 never executed
+        1:  256:    return true;
+        -:  257:}
+        -:  258:
+        -:  259:/* -------------------------------------------------------------- 响应 */
+function _ZN4DBKP13CHttpResponse12statusTextOfEi called 4 returned 100% blocks executed 22%
+        4:  260:const char* CHttpResponse::statusTextOf(int status) {
+        4:  261:    switch (status) {
+branch  0 taken 3
+branch  1 taken 0
+branch  2 taken 0
+branch  3 taken 0
+branch  4 taken 0
+branch  5 taken 0
+branch  6 taken 0
+branch  7 taken 0
+branch  8 taken 0
+branch  9 taken 0
+branch 10 taken 0
+branch 11 taken 1
+branch 12 taken 0
+branch 13 taken 0
+branch 14 taken 0
+branch 15 taken 0
+        3:  262:    case 200: return "OK";
+    #####:  263:    case 201: return "Created";
+    #####:  264:    case 204: return "No Content";
+    #####:  265:    case 304: return "Not Modified";
+    #####:  266:    case 400: return "Bad Request";
+    #####:  267:    case 401: return "Unauthorized";
+    #####:  268:    case 403: return "Forbidden";
+    #####:  269:    case 404: return "Not Found";
+    #####:  270:    case 405: return "Method Not Allowed";
+    #####:  271:    case 409: return "Conflict";
+    #####:  272:    case 413: return "Payload Too Large";
+        1:  273:    case 429: return "Too Many Requests";
+    #####:  274:    case 500: return "Internal Server Error";
+    #####:  275:    case 501: return "Not Implemented";
+    #####:  276:    case 503: return "Service Unavailable";
+    #####:  277:    default:  return "Unknown";
+        -:  278:    }
+        -:  279:}
+        -:  280:
+function _ZN4DBKP13CHttpResponse8makeJsonEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_10CJsonValueEb called 4 returned 100% blocks executed 44%
+        4:  281:CHttpResponse CHttpResponse::makeJson(int code, const std::string& msg,
+        -:  282:                                      const CJsonValue& data, bool includeData) {
+        4:  283:    CHttpResponse r;
+call    0 returned 4
+        8:  284:    CJsonValue o = CJsonValue::makeObject();
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 never executed
+        4:  285:    o["code"] = CJsonValue::makeInt(code);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 returned 4
+branch  5 taken 4 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 4
+branch  8 taken 4 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 4
+call   11 returned 4
+call   12 returned 4
+call   13 returned 4
+call   14 never executed
+call   15 never executed
+call   16 never executed
+        4:  286:    o["msg"] = CJsonValue::makeString(msg);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 returned 4
+branch  5 taken 4 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 4
+branch  8 taken 4 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 4
+call   11 returned 4
+call   12 returned 4
+call   13 returned 4
+call   14 never executed
+call   15 never executed
+call   16 never executed
+       4*:  287:    if (includeData) o["data"] = data;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+        4:  288:    r.contentType = "application/json; charset=utf-8";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  289:    r.body = o.dump();
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 returned 4
+        8:  290:    return r;
+        -:  291:}
+        -:  292:
+function _ZN4DBKP13CHttpResponse6jsonOkERKNS_10CJsonValueE called 3 returned 100% blocks executed 64%
+        3:  293:CHttpResponse CHttpResponse::jsonOk(const CJsonValue& data) {
+        3:  294:    return makeJson(0, "ok", data, !data.isNull());
+call    0 returned 3
+call    1 returned 3
+call    2 returned 3
+branch  3 taken 3 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 3
+branch  6 taken 3 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 3
+call    9 returned 3
+call   10 never executed
+call   11 never executed
+        -:  295:}
+        -:  296:
+function _ZN4DBKP13CHttpResponse6jsonOkERKNS_10CJsonValueERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  297:CHttpResponse CHttpResponse::jsonOk(const CJsonValue& data, const std::string& msg) {
+    #####:  298:    CHttpResponse r = makeJson(0, msg, data, !data.isNull());
+call    0 never executed
+call    1 never executed
+    #####:  299:    return r;
+        -:  300:}
+        -:  301:
+function _ZN4DBKP13CHttpResponse9jsonErrorEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEi called 1 returned 100% blocks executed 75%
+        1:  302:CHttpResponse CHttpResponse::jsonError(int code, const std::string& msg, int httpStatus) {
+        1:  303:    CHttpResponse r = makeJson(code, msg, CJsonValue(), false);
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0 (throw)
+        1:  304:    r.status = httpStatus;
+        1:  305:    return r;
+        -:  306:}
+        -:  307:
+function _ZN4DBKP13CHttpResponse4textEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  308:CHttpResponse CHttpResponse::text(int status, const std::string& bodyText) {
+    #####:  309:    CHttpResponse r;
+call    0 never executed
+    #####:  310:    r.status = status;
+    #####:  311:    r.contentType = "text/plain; charset=utf-8";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  312:    r.body = bodyText;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  313:    return r;
+        -:  314:}
+        -:  315:
+function _ZN4DBKP13CHttpResponse4htmlERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  316:CHttpResponse CHttpResponse::html(const std::string& markup) {
+    #####:  317:    CHttpResponse r;
+call    0 never executed
+    #####:  318:    r.contentType = "text/html; charset=utf-8";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  319:    r.body = markup;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  320:    return r;
+        -:  321:}
+        -:  322:
+function _ZN4DBKP13CHttpResponse4fileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 0 returned 0% blocks executed 0%
+    #####:  323:CHttpResponse CHttpResponse::file(const std::string& contentType_, const std::string& bytes) {
+    #####:  324:    CHttpResponse r;
+call    0 never executed
+    #####:  325:    r.contentType = contentType_;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  326:    r.body = bytes;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  327:    return r;
+        -:  328:}
+        -:  329:
+function _ZN4DBKP13CHttpResponse11notModifiedEv called 0 returned 0% blocks executed 0%
+    #####:  330:CHttpResponse CHttpResponse::notModified() {
+    #####:  331:    CHttpResponse r;
+call    0 never executed
+    #####:  332:    r.status = 304;
+    #####:  333:    r.body.clear();
+call    0 never executed
+    #####:  334:    return r;
+        -:  335:}
+        -:  336:
+function _ZNK4DBKP13CHttpResponse9serializeB5cxx11Ev called 4 returned 100% blocks executed 63%
+        4:  337:std::string CHttpResponse::serialize() const {
+        4:  338:    std::string out;
+call    0 returned 4
+        4:  339:    out.reserve(body.size() + 320);
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0 (throw)
+        4:  340:    out += "HTTP/1.1 ";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  341:    out += std::to_string(status);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+call    7 never executed
+        4:  342:    out += ' ';
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+       8*:  343:    out += statusText.empty() ? statusTextOf(status) : statusText;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0
+call    3 returned 4
+call    4 returned 4
+call    5 returned 4
+branch  6 taken 4 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 returned 4
+branch 12 taken 4 (fallthrough)
+branch 13 taken 0 (throw)
+call   14 returned 4
+branch 15 taken 4 (fallthrough)
+branch 16 taken 0
+call   17 returned 4
+call   18 never executed
+branch 19 never executed
+branch 20 never executed
+call   21 never executed
+        4:  344:    out += "\r\n";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  345:
+       4*:  346:    if (status != 304 && !body.empty())
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+call    2 returned 4
+branch  3 taken 4 (fallthrough)
+branch  4 taken 0
+branch  5 taken 4 (fallthrough)
+branch  6 taken 0
+        4:  347:        out += "Content-Type: " + contentType + "\r\n";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+branch  7 taken 4 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 4
+call   10 returned 4
+call   11 never executed
+call   12 never executed
+       4*:  348:    out += "Content-Length: " + std::to_string(status == 304 ? 0u : body.size()) + "\r\n";
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+call    2 returned 4
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+branch  7 taken 4 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 4
+branch 10 taken 4 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 4
+branch 13 taken 4 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 4
+call   16 returned 4
+call   17 returned 4
+call   18 never executed
+call   19 never executed
+call   20 never executed
+        4:  349:    out += "Connection: close\r\n";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  350:
+        -:  351:    /* F12：CORS 收敛。历史上这里对所有响应无条件发
+        -:  352:     * Access-Control-Allow-Origin: *，且允许 Authorization 头 —— 任意恶意
+        -:  353:     * 网页都能读取本机 API 的响应。本批推翻那个决定：默认不再发 *，
+        -:  354:     * 改由服务器按请求 Origin + --cors-origin 配置算出结论（见
+        -:  355:     * resolveCorsOrigin），通过 corsAllowOrigin 字段透传进来。字段为空
+        -:  356:     * 表示本响应不发任何 CORS 头（同源、命令行、非白名单来源）。 */
+        4:  357:    if (!corsAllowOrigin.empty()) {
+call    0 returned 4
+branch  1 taken 1 (fallthrough)
+branch  2 taken 3
+        1:  358:        out += "Access-Control-Allow-Origin: " + corsAllowOrigin + "\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 returned 1
+call   11 never executed
+call   12 never executed
+        1:  359:        out += "Access-Control-Allow-Headers: Content-Type, Authorization\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  360:        out += "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  361:        out += "Access-Control-Max-Age: 86400\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  362:        /* 结论随请求 Origin 变化，必须声明 Vary，否则共享缓存会串味。 */
+        1:  363:        out += "Vary: Origin\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  364:    }
+        4:  365:    out += "Cache-Control: no-store\r\n";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  366:
+        5:  367:    for (std::map<std::string, std::string>::const_iterator it = extraHeaders.begin();
+call    0 returned 4
+        5:  368:         it != extraHeaders.end(); ++it)
+call    0 returned 5
+call    1 returned 5
+branch  2 taken 1 (fallthrough)
+branch  3 taken 4
+        1:  369:        out += it->first + ": " + it->second + "\r\n";
+call    0 returned 1
+call    1 returned 1
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+branch  9 taken 1 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 1
+branch 12 taken 1 (fallthrough)
+branch 13 taken 0 (throw)
+call   14 returned 1
+call   15 returned 1
+call   16 returned 1
+call   17 returned 1
+call   18 never executed
+call   19 never executed
+call   20 never executed
+        -:  370:
+        4:  371:    out += "\r\n";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  372:    if (status != 304 && status != 204) out += body;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0
+call    4 returned 4
+branch  5 taken 4 (fallthrough)
+branch  6 taken 0 (throw)
+        4:  373:    return out;
+        -:  374:}
+        -:  375:
+        -:  376:/* ------------------------------------------------------------ 请求解析 */
+        -:  377:static const std::size_t kMaxHeaderBytes = 64u * 1024u;
+        -:  378:static const std::size_t kMaxBodyBytes   = 64u * 1024u * 1024u;   /* 硬上限，
+        -:  379:                                     站点配置里的 maxBodyBytes 通常远小于它 */
+        -:  380:
+function _ZN4DBKPL10trimSpacesERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 49 returned 100% blocks executed 92%
+       49:  381:static std::string trimSpaces(const std::string& s) {
+       49:  382:    std::size_t b = 0, e = s.size();
+call    0 returned 49
+       62:  383:    while (b < e && (s[b] == ' ' || s[b] == '\t')) ++b;
+branch  0 taken 62 (fallthrough)
+branch  1 taken 0
+call    2 returned 62
+branch  3 taken 49 (fallthrough)
+branch  4 taken 13
+call    5 returned 49
+branch  6 taken 0 (fallthrough)
+branch  7 taken 49
+branch  8 taken 13 (fallthrough)
+branch  9 taken 49
+      98*:  384:    while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t' ||
+branch  0 taken 49 (fallthrough)
+branch  1 taken 0
+call    2 returned 49
+branch  3 taken 49 (fallthrough)
+branch  4 taken 0
+call    5 returned 49
+branch  6 taken 49 (fallthrough)
+branch  7 taken 0
+branch  8 taken 0 (fallthrough)
+branch  9 taken 49
+      49*:  385:                     s[e - 1] == '\r' || s[e - 1] == '\n')) --e;
+call    0 returned 49
+branch  1 taken 49 (fallthrough)
+branch  2 taken 0
+call    3 returned 49
+branch  4 taken 0 (fallthrough)
+branch  5 taken 49
+       49:  386:    return s.substr(b, e - b);
+call    0 returned 49
+        -:  387:}
+        -:  388:
+function _ZN4DBKP16parseHttpRequestERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERNS_12CHttpRequestERS5_Ry called 14 returned 100% blocks executed 69%
+       14:  389:bool parseHttpRequest(const std::string& raw, CHttpRequest& req,
+        -:  390:                      std::string& err, std::size_t& need) {
+       14:  391:    need = 0;
+       28:  392:    const std::string sep = "\r\n\r\n";
+call    0 returned 14
+call    1 returned 14
+branch  2 taken 14 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 14
+call    5 never executed
+       14:  393:    const std::size_t headEnd = raw.find(sep);
+call    0 returned 14
+       14:  394:    if (headEnd == std::string::npos) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 14
+    #####:  395:        if (raw.size() > kMaxHeaderBytes) { err = "request header too large"; return false; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  396:        need = 1;                     /* 头还没收完，继续读 */
+    #####:  397:        return true;
+        -:  398:    }
+        -:  399:
+       28:  400:    const std::string head = raw.substr(0, headEnd);
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 14
+call    4 never executed
+       14:  401:    const std::size_t firstBreak = head.find("\r\n");
+call    0 returned 14
+       28:  402:    const std::string line = firstBreak == std::string::npos ? head : head.substr(0, firstBreak);
+branch  0 taken 7 (fallthrough)
+branch  1 taken 7
+call    2 returned 7
+branch  3 taken 7 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 7
+branch  6 taken 7 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 14
+call    9 never executed
+        -:  403:
+       14:  404:    const std::size_t sp1 = line.find(' ');
+call    0 returned 14
+       14:  405:    if (sp1 == std::string::npos) { err = "malformed request line"; return false; }
+branch  0 taken 1 (fallthrough)
+branch  1 taken 13
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+       13:  406:    const std::size_t sp2 = line.find(' ', sp1 + 1);
+call    0 returned 13
+      13*:  407:    if (sp2 == std::string::npos) { err = "malformed request line"; return false; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 13
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  408:
+       13:  409:    req.method = CHttpRequest::methodUpper(line.substr(0, sp1));
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 13
+branch  4 taken 13 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 13
+call    7 returned 13
+call    8 returned 13
+call    9 never executed
+       13:  410:    req.target = trimSpaces(line.substr(sp1 + 1, sp2 - sp1 - 1));
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 13
+branch  4 taken 13 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 13
+call    7 returned 13
+call    8 returned 13
+call    9 never executed
+       13:  411:    req.version = trimSpaces(line.substr(sp2 + 1));
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 13
+branch  4 taken 13 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 13
+call    7 returned 13
+call    8 returned 13
+call    9 never executed
+       13:  412:    if (req.version != "HTTP/1.1" && req.version != "HTTP/1.0") {
+call    0 returned 13
+branch  1 taken 1 (fallthrough)
+branch  2 taken 12
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0
+branch  6 taken 1 (fallthrough)
+branch  7 taken 12
+        1:  413:        err = "unsupported protocol version " + req.version;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+call    4 returned 1
+        1:  414:        return false;
+        -:  415:    }
+       17:  416:    if (req.method != "GET" && req.method != "POST" && req.method != "PUT" &&
+call    0 returned 12
+call    1 returned 4
+branch  2 taken 1 (fallthrough)
+branch  3 taken 3
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0
+       17:  417:        req.method != "DELETE" && req.method != "OPTIONS" && req.method != "HEAD") {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 8
+call    2 returned 1
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0
+branch  9 taken 1 (fallthrough)
+branch 10 taken 11
+        1:  418:        err = "unsupported method " + req.method;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+call    4 returned 1
+        1:  419:        return false;
+        -:  420:    }
+        -:  421:
+        -:  422:    /* 头字段 */
+       11:  423:    std::size_t pos = firstBreak == std::string::npos ? head.size() : firstBreak + 2;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 7
+call    2 returned 4
+       24:  424:    while (pos < head.size()) {
+call    0 returned 24
+branch  1 taken 14 (fallthrough)
+branch  2 taken 10
+       14:  425:        std::size_t brk = head.find("\r\n", pos);
+call    0 returned 14
+       14:  426:        if (brk == std::string::npos) brk = head.size();
+branch  0 taken 7 (fallthrough)
+branch  1 taken 7
+call    2 returned 7
+       14:  427:        const std::string one = head.substr(pos, brk - pos);
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+       14:  428:        pos = brk + 2;
+      14*:  429:        if (one.empty()) continue;
+call    0 returned 14
+branch  1 taken 0 (fallthrough)
+branch  2 taken 14
+      14*:  430:        if (one[0] == ' ' || one[0] == '\t') continue;   /* 折行头：本项目用不到 */
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0
+call    3 returned 14
+branch  4 taken 0 (fallthrough)
+branch  5 taken 14
+branch  6 taken 0 (fallthrough)
+branch  7 taken 14
+       14:  431:        const std::size_t colon = one.find(':');
+call    0 returned 14
+       14:  432:        if (colon == std::string::npos) { err = "malformed header line"; return false; }
+branch  0 taken 1 (fallthrough)
+branch  1 taken 13
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+       13:  433:        req.setHeader(one.substr(0, colon), trimSpaces(one.substr(colon + 1)));
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 13
+branch  4 taken 13 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 13
+branch  7 taken 13 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 13
+branch 10 taken 13 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 13
+call   13 returned 13
+call   14 returned 13
+call   15 never executed
+call   16 never executed
+call   17 never executed
+        -:  434:    }
+        -:  435:
+        -:  436:    /* 路径：查询串单独留着给 query() 用 */
+       10:  437:    const std::size_t q = req.target.find('?');
+call    0 returned 10
+       20:  438:    const std::string rawPath = q == std::string::npos ? req.target : req.target.substr(0, q);
+branch  0 taken 7 (fallthrough)
+branch  1 taken 3
+call    2 returned 7
+branch  3 taken 7 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 3
+branch  6 taken 3 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 10
+call    9 never executed
+       10:  439:    req.path = urlDecode(rawPath);
+call    0 returned 10
+branch  1 taken 10 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 10
+call    4 returned 10
+        -:  440:    /* 必须把带查询串的原始 target 也存下来：query() 是从 m_rawTarget 里
+        -:  441:       找 '?' 的，漏了这一步就会让所有 ?xxx=yyy 参数静默失效
+        -:  442:       （/api/stat 的 path、/api/events 的 job、/api/jobs 的 log 全中招）。 */
+       10:  443:    req.setRawTarget(req.target);
+call    0 returned 10
+branch  1 taken 10 (fallthrough)
+branch  2 taken 0 (throw)
+       10:  444:    req.body.clear();
+call    0 returned 10
+        -:  445:
+        -:  446:    /* 请求体：只支持 Content-Length（不实现 chunked，理由见 Http.h） */
+       30:  447:    const std::string clStr = trimSpaces(req.header("content-length", "0"));
+call    0 returned 10
+call    1 returned 10
+branch  2 taken 10 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 10
+call    5 returned 10
+branch  6 taken 10 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 10
+branch  9 taken 10 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 10
+branch 12 taken 10 (fallthrough)
+branch 13 taken 0 (throw)
+call   14 returned 10
+call   15 returned 10
+call   16 returned 10
+call   17 returned 10
+call   18 returned 10
+call   19 never executed
+       10:  448:    unsigned long long cl = 0;
+       10:  449:    if (!clStr.empty()) {
+call    0 returned 10
+branch  1 taken 10 (fallthrough)
+branch  2 taken 0
+       10:  450:        char* end = nullptr;
+       10:  451:        cl = std::strtoull(clStr.c_str(), &end, 10);
+call    0 returned 10
+call    1 returned 10
+      10*:  452:        if (end == clStr.c_str() || (end && *end != '\0')) { err = "bad Content-Length"; return false; }
+call    0 returned 10
+branch  1 taken 10 (fallthrough)
+branch  2 taken 0
+branch  3 taken 10 (fallthrough)
+branch  4 taken 0
+branch  5 taken 0 (fallthrough)
+branch  6 taken 10
+branch  7 taken 0 (fallthrough)
+branch  8 taken 10
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+        -:  453:    }
+      10*:  454:    if (cl > kMaxBodyBytes) { err = "request body too large"; return false; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 10
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  455:
+       10:  456:    const std::size_t total = headEnd + sep.size() + static_cast<std::size_t>(cl);
+call    0 returned 10
+       10:  457:    if (raw.size() < total) { need = total - raw.size(); return true; }   /* 体还没收完 */
+call    0 returned 10
+branch  1 taken 1 (fallthrough)
+branch  2 taken 9
+call    3 returned 1
+        9:  458:    req.body = raw.substr(headEnd + sep.size(), static_cast<std::size_t>(cl));
+call    0 returned 9
+call    1 returned 9
+branch  2 taken 9 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 9
+call    5 returned 9
+        9:  459:    return true;
+        -:  460:}
+        -:  461:
+        -:  462:/* ---------------------------------------------------------------- CORS */
+        -:  463:/* Origin 白名单判定：只放行 http://localhost[:port] 与
+        -:  464:   http://127.0.0.1[:port]（大小写不敏感，端口任意且必须是数字）。
+        -:  465:   刻意不放行 https、不放行 0.0.0.0/局域网地址：本机工具的前端只可能
+        -:  466:   从这两处加载。 */
+function _ZN4DBKPL10lowerAsciiERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 18 returned 100% blocks executed 94%
+       18:  467:static std::string lowerAscii(const std::string& s) {
+       18:  468:    std::string out;
+call    0 returned 18
+       18:  469:    out.reserve(s.size());
+call    0 returned 18
+call    1 returned 18
+branch  2 taken 18 (fallthrough)
+branch  3 taken 0 (throw)
+      354:  470:    for (std::size_t i = 0; i < s.size(); ++i) {
+call    0 returned 354
+branch  1 taken 336 (fallthrough)
+branch  2 taken 18
+      336:  471:        const unsigned char c = static_cast<unsigned char>(s[i]);
+call    0 returned 336
+      336:  472:        out += static_cast<char>((c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c);
+branch  0 taken 198 (fallthrough)
+branch  1 taken 138
+branch  2 taken 22 (fallthrough)
+branch  3 taken 176
+call    4 returned 336
+branch  5 taken 336 (fallthrough)
+branch  6 taken 0 (throw)
+        -:  473:    }
+       18:  474:    return out;
+        -:  475:}
+        -:  476:
+function _ZN4DBKPL16isLoopbackOriginERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 8 returned 100% blocks executed 87%
+        8:  477:static bool isLoopbackOrigin(const std::string& o) {
+       16:  478:    const std::string s = lowerAscii(o);
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 8
+call    4 never executed
+        -:  479:    static const char kLp4[] = "http://127.0.0.1";
+        -:  480:    static const char kLp6[] = "http://localhost";
+        8:  481:    const char* host = nullptr;
+        8:  482:    std::size_t hlen = 0;
+        8:  483:    if (s.compare(0, sizeof(kLp4) - 1, kLp4) == 0) {
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 7
+        1:  484:        host = s.c_str() + (sizeof(kLp4) - 1);
+call    0 returned 1
+        1:  485:        hlen = s.size() - (sizeof(kLp4) - 1);
+call    0 returned 1
+        7:  486:    } else if (s.compare(0, sizeof(kLp6) - 1, kLp6) == 0) {
+call    0 returned 7
+branch  1 taken 7 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 3 (fallthrough)
+branch  4 taken 4
+        3:  487:        host = s.c_str() + (sizeof(kLp6) - 1);
+call    0 returned 3
+        3:  488:        hlen = s.size() - (sizeof(kLp6) - 1);
+call    0 returned 3
+        -:  489:    } else {
+        4:  490:        return false;
+        -:  491:    }
+        4:  492:    if (hlen == 0) return true;                       /* 不带端口 */
+branch  0 taken 1 (fallthrough)
+branch  1 taken 3
+        3:  493:    if (host[0] != ':') return false;                 /* 如 http://localhost.evil */
+branch  0 taken 1 (fallthrough)
+branch  1 taken 2
+       2*:  494:    if (hlen == 1) return false;                      /* 只剩一个冒号 */
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+       10:  495:    for (std::size_t i = 1; i < hlen; ++i)            /* 端口必须全是数字 */
+branch  0 taken 8 (fallthrough)
+branch  1 taken 2
+       8*:  496:        if (host[i] < '0' || host[i] > '9') return false;
+branch  0 taken 8 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 8
+        2:  497:    return true;
+        -:  498:}
+        -:  499:
+function _ZN4DBKP17resolveCorsOriginERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES7_ called 15 returned 100% blocks executed 91%
+       15:  500:std::string resolveCorsOrigin(const std::string& configured,
+        -:  501:                              const std::string& requestOrigin) {
+        -:  502:    /* 1. 显式配置优先：--cors-origin 配了啥就发啥（含 "*"，供本地开发放行）。 */
+       15:  503:    if (!configured.empty()) return configured;
+call    0 returned 15
+branch  1 taken 3 (fallthrough)
+branch  2 taken 12
+call    3 returned 3
+        -:  504:    /* 2. 没有 Origin 头：同源 / 命令行 / PowerShell 脚本，不发 CORS 头。 */
+       12:  505:    if (requestOrigin.empty()) return std::string();
+call    0 returned 12
+branch  1 taken 2 (fallthrough)
+branch  2 taken 10
+call    3 returned 2
+        -:  506:    /* 3. Origin: null —— file:// 双击打开前端。必须保留，否则该用法报废。 */
+       10:  507:    if (lowerAscii(requestOrigin) == "null") return "null";
+call    0 returned 10
+call    1 returned 10
+call    2 returned 10
+branch  3 taken 2 (fallthrough)
+branch  4 taken 8
+call    5 returned 2
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 2
+call   10 never executed
+        -:  508:    /* 4. 回环地址：回请求原值（不是 *），并配 Vary: Origin。 */
+        8:  509:    if (isLoopbackOrigin(requestOrigin)) return requestOrigin;
+call    0 returned 8
+branch  1 taken 3 (fallthrough)
+branch  2 taken 5
+call    3 returned 3
+        -:  510:    /* 5. 其他来源：不发 CORS 头，浏览器会拦下跨域读取。 */
+        5:  511:    return std::string();
+call    0 returned 5
+        -:  512:}
+        -:  513:
+        -:  514:/* ---------------------------------------------------------------- SSE */
+function _ZN4DBKP7sseHeadERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 1 returned 100% blocks executed 73%
+        1:  515:std::string sseHead(const std::string& origin) {
+        1:  516:    std::string out;
+call    0 returned 1
+        1:  517:    out += "HTTP/1.1 200 OK\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  518:    out += "Content-Type: text/event-stream; charset=utf-8\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  519:    out += "Cache-Control: no-cache\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  520:    out += "Connection: close\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  521:    out += "X-Accel-Buffering: no\r\n";     /* 经 nginx 反代时禁用缓冲 */
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  522:    /* F12：与 serialize() 同样收敛，不再无条件发 *。 */
+        1:  523:    if (!origin.empty()) {
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0
+        1:  524:        out += "Access-Control-Allow-Origin: " + origin + "\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 returned 1
+call   11 never executed
+call   12 never executed
+        1:  525:        out += "Vary: Origin\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  526:    }
+        1:  527:    out += "\r\n";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  528:    return out;
+        -:  529:}
+        -:  530:
+function _ZN4DBKP8sseEventERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES7_ called 0 returned 0% blocks executed 0%
+    #####:  531:std::string sseEvent(const std::string& name, const std::string& data) {
+    #####:  532:    std::string out;
+call    0 never executed
+    #####:  533:    out += "event: " + name + "\r\n";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+        -:  534:    /* data 可能多行（日志），SSE 要求每行都以 "data: " 开头 */
+    #####:  535:    std::size_t start = 0;
+        -:  536:    for (;;) {
+    #####:  537:        const std::size_t nl = data.find('\n', start);
+call    0 never executed
+    #####:  538:        out += "data: ";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  539:        if (nl == std::string::npos) { out += data.substr(start); break; }
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+call    9 never executed
+    #####:  540:        out += data.substr(start, nl - start);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+    #####:  541:        start = nl + 1;
+    #####:  542:        if (start >= data.size()) break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  543:    }
+    #####:  544:    out += "\r\n\r\n";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  545:    return out;
+        -:  546:}
+        -:  547:
+        -:  548:} /* namespace DBKP */

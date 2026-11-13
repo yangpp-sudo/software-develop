@@ -1,0 +1,312 @@
+        -:    0:Source:src/Crypto/CryptoCodecs.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/CryptoCodecs.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/CryptoCodecs.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  CryptoCodecs.cpp  -- 把 AES / ChaCha20 / DES-EDE / XOR 封装成统一的 IDataCodec
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Codec/DataCodec.h"
+        -:    5:#include "Crypto/Algorithms.h"
+        -:    6:#include "Crypto/Blob.h"
+        -:    7:#include "Crypto/Sha256.h"
+        -:    8:
+        -:    9:#include <cstring>
+        -:   10:
+        -:   11:namespace DBKP {
+        -:   12:
+        -:   13:namespace {
+        -:   14:
+        -:   15:class CCryptoCodec : public IDataCodec {
+        -:   16:public:
+function _ZN4DBKP12_GLOBAL__N_112CCryptoCodecC2ENS_8CryptoIdERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhi called 103 returned 100% blocks executed 88%
+      103:   17:    CCryptoCodec(CryptoId id, const std::string& password,
+        -:   18:                 const uint8_t salt[16], int rounds)
+      103:   19:        : m_id(id), m_rounds(rounds > 0 ? rounds : 4096) {
+call    0 returned 103
+branch  1 taken 102 (fallthrough)
+branch  2 taken 1
+call    3 never executed
+      103:   20:        std::memcpy(m_salt, salt, 16);
+      103:   21:        deriveCipherKeys(password, m_salt, m_rounds, m_enc, m_mac);
+call    0 returned 103
+branch  1 taken 103 (fallthrough)
+branch  2 taken 0 (throw)
+      103:   22:    }
+      202:   23:    ~CCryptoCodec() override { std::memset(m_enc, 0, 32); std::memset(m_mac, 0, 32); }
+------------------
+_ZN4DBKP12_GLOBAL__N_112CCryptoCodecD0Ev:
+function _ZN4DBKP12_GLOBAL__N_112CCryptoCodecD0Ev called 101 returned 100% blocks executed 100%
+      101:   23:    ~CCryptoCodec() override { std::memset(m_enc, 0, 32); std::memset(m_mac, 0, 32); }
+call    0 returned 101
+call    1 returned 101
+------------------
+_ZN4DBKP12_GLOBAL__N_112CCryptoCodecD2Ev:
+function _ZN4DBKP12_GLOBAL__N_112CCryptoCodecD2Ev called 101 returned 100% blocks executed 100%
+      101:   23:    ~CCryptoCodec() override { std::memset(m_enc, 0, 32); std::memset(m_mac, 0, 32); }
+call    0 returned 101
+------------------
+        -:   24:
+function _ZNK4DBKP12_GLOBAL__N_112CCryptoCodec4nameEv called 2 returned 100% blocks executed 78%
+        2:   25:    std::string name() const override { return cryptoName(m_id); }
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 2
+branch  5 taken 2 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 2
+call    8 never executed
+        -:   26:
+function _ZN4DBKP12_GLOBAL__N_112CCryptoCodec6encodeERKSt6vectorIhSaIhEERS4_ called 96 returned 100% blocks executed 100%
+       96:   27:    ErrCode encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override {
+       96:   28:        if (m_id == CRY_AES256_CBC) return AesCbcEncrypt(m_enc, m_mac, in, out);
+branch  0 taken 70 (fallthrough)
+branch  1 taken 26
+call    2 returned 70
+       26:   29:        if (m_id == CRY_DESEDE_CBC) return DesEdeCbcEncrypt(m_enc, m_mac, in, out);
+branch  0 taken 9 (fallthrough)
+branch  1 taken 17
+call    2 returned 9
+       17:   30:        return ChaChaEncrypt(m_enc, m_mac, in, out);
+call    0 returned 17
+        -:   31:    }
+function _ZN4DBKP12_GLOBAL__N_112CCryptoCodec6decodeERKSt6vectorIhSaIhEERS4_ called 85 returned 100% blocks executed 100%
+       85:   32:    ErrCode decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override {
+       85:   33:        if (m_id == CRY_AES256_CBC) return AesCbcDecrypt(m_enc, m_mac, in, out);
+branch  0 taken 62 (fallthrough)
+branch  1 taken 23
+call    2 returned 62
+       23:   34:        if (m_id == CRY_DESEDE_CBC) return DesEdeCbcDecrypt(m_enc, m_mac, in, out);
+branch  0 taken 9 (fallthrough)
+branch  1 taken 14
+call    2 returned 9
+       14:   35:        return ChaChaDecrypt(m_enc, m_mac, in, out);
+call    0 returned 14
+        -:   36:    }
+function _ZNK4DBKP12_GLOBAL__N_112CCryptoCodec16needsPaddedInputEv called 1 returned 100% blocks executed 83%
+        1:   37:    bool needsPaddedInput() const override {
+       1*:   38:        return m_id == CRY_AES256_CBC || m_id == CRY_DESEDE_CBC;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0
+        -:   39:    }
+        -:   40:
+        -:   41:private:
+        -:   42:    CryptoId m_id;
+        -:   43:    int m_rounds;
+        -:   44:    uint8_t m_salt[16];
+        -:   45:    uint8_t m_enc[32];
+        -:   46:    uint8_t m_mac[32];
+        -:   47:};
+        -:   48:
+        -:   49:/* 仅用于单元测试的弱密码：SHA-256 计数器模式密钥流 + HMAC 标签 */
+        -:   50:class CXorCodec : public IDataCodec {
+        -:   51:public:
+function _ZN4DBKP12_GLOBAL__N_19CXorCodecC2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 16 returned 100% blocks executed 80%
+       16:   52:    explicit CXorCodec(const std::string& password) : m_pw(password) {}
+call    0 returned 16
+call    1 returned 16
+branch  2 taken 16 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+function _ZNK4DBKP12_GLOBAL__N_19CXorCodec4nameEv called 1 returned 100% blocks executed 75%
+        1:   53:    std::string name() const override { return "xor-test"; }
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 1
+call    5 never executed
+        -:   54:
+function _ZN4DBKP12_GLOBAL__N_19CXorCodec6encodeERKSt6vectorIhSaIhEERS4_ called 11 returned 100% blocks executed 85%
+       11:   55:    ErrCode encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override {
+        -:   56:        uint8_t nonce[8];
+       11:   57:        fillRandom(nonce, 8);
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+       11:   58:        out.clear();
+call    0 returned 11
+       11:   59:        Crypto::putCipherHeader(out, Crypto::kMagicXor, static_cast<uint64_t>(in.size()));
+call    0 returned 11
+call    1 returned 11
+branch  2 taken 11 (fallthrough)
+branch  3 taken 0 (throw)
+       11:   60:        out.insert(out.end(), nonce, nonce + 8);
+call    0 returned 11
+call    1 returned 11
+call    2 returned 11
+branch  3 taken 11 (fallthrough)
+branch  4 taken 0 (throw)
+       11:   61:        const std::size_t head = out.size();
+call    0 returned 11
+       11:   62:        out.resize(head + in.size());
+call    0 returned 11
+call    1 returned 11
+branch  2 taken 11 (fallthrough)
+branch  3 taken 0 (throw)
+       11:   63:        applyKeystream(nonce, in.data(), out.data() + head, in.size());
+call    0 returned 11
+call    1 returned 11
+call    2 returned 11
+call    3 returned 11
+branch  4 taken 11 (fallthrough)
+branch  5 taken 0 (throw)
+        -:   64:        uint8_t tag[32];
+       11:   65:        CSha256::hmac(nonce, 8, out.data(), head + in.size(), tag);
+call    0 returned 11
+call    1 returned 11
+call    2 returned 11
+branch  3 taken 11 (fallthrough)
+branch  4 taken 0 (throw)
+       11:   66:        out.insert(out.end(), tag, tag + Crypto::kTagSize);
+call    0 returned 11
+call    1 returned 11
+call    2 returned 11
+branch  3 taken 11 (fallthrough)
+branch  4 taken 0 (throw)
+       11:   67:        return E_OK;
+        -:   68:    }
+        -:   69:
+function _ZN4DBKP12_GLOBAL__N_19CXorCodec6decodeERKSt6vectorIhSaIhEERS4_ called 15 returned 100% blocks executed 96%
+       15:   70:    ErrCode decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override {
+       15:   71:        uint64_t rawLen = 0;
+       15:   72:        std::size_t start = 0;
+       15:   73:        if (!Crypto::readCipherHeader(in, Crypto::kMagicXor, rawLen, start)) return E_CRYPTO_FAIL;
+call    0 returned 15
+branch  1 taken 2 (fallthrough)
+branch  2 taken 13
+       13:   74:        const std::size_t ctStart = start + 8;
+      13*:   75:        if (in.size() < ctStart + Crypto::kTagSize) return E_TRUNCATED_ARCHIVE;
+call    0 returned 13
+branch  1 taken 0 (fallthrough)
+branch  2 taken 13
+       13:   76:        if (in.size() - ctStart - Crypto::kTagSize != rawLen) return E_CRYPTO_FAIL;
+call    0 returned 13
+branch  1 taken 1 (fallthrough)
+branch  2 taken 12
+        -:   77:        uint8_t tag[32];
+       12:   78:        CSha256::hmac(in.data() + start, 8, in.data(), ctStart + rawLen, tag);
+call    0 returned 12
+call    1 returned 12
+call    2 returned 12
+branch  3 taken 12 (fallthrough)
+branch  4 taken 0 (throw)
+       12:   79:        if (std::memcmp(tag, in.data() + in.size() - Crypto::kTagSize, Crypto::kTagSize) != 0) {
+call    0 returned 12
+call    1 returned 12
+branch  2 taken 2 (fallthrough)
+branch  3 taken 10
+        2:   80:            return E_WRONG_PASSWORD;
+        -:   81:        }
+       10:   82:        out.resize(static_cast<size_t>(rawLen));
+call    0 returned 10
+branch  1 taken 10 (fallthrough)
+branch  2 taken 0 (throw)
+       10:   83:        if (rawLen) applyKeystream(in.data() + start, in.data() + ctStart, out.data(), out.size());
+branch  0 taken 9 (fallthrough)
+branch  1 taken 1
+call    2 returned 9
+call    3 returned 9
+call    4 returned 9
+call    5 returned 9
+call    6 returned 9
+branch  7 taken 9 (fallthrough)
+branch  8 taken 0 (throw)
+       10:   84:        return E_OK;
+        -:   85:    }
+        -:   86:
+        -:   87:private:
+function _ZN4DBKP12_GLOBAL__N_19CXorCodec14applyKeystreamEPKhS3_Phy called 20 returned 100% blocks executed 100%
+       20:   88:    void applyKeystream(const uint8_t nonce[8], const uint8_t* in, uint8_t* out, std::size_t len) {
+       20:   89:        std::size_t off = 0;
+       20:   90:        uint32_t counter = 0;
+       92:   91:        while (off < len) {
+branch  0 taken 72 (fallthrough)
+branch  1 taken 20
+        -:   92:            uint8_t material[8 + 4];
+       72:   93:            std::memcpy(material, nonce, 8);
+      360:   94:            for (int i = 0; i < 4; ++i) material[8 + i] = static_cast<uint8_t>(counter >> (8 * i));
+branch  0 taken 288 (fallthrough)
+branch  1 taken 72
+        -:   95:            uint8_t block[32];
+       72:   96:            CSha256::hmac(m_pw.data(), m_pw.size(), material, sizeof(material), block);
+call    0 returned 72
+call    1 returned 72
+call    2 returned 72
+branch  3 taken 72 (fallthrough)
+branch  4 taken 0 (throw)
+       72:   97:            const std::size_t take = (len - off) < 32 ? (len - off) : 32;
+     2155:   98:            for (std::size_t i = 0; i < take; ++i) out[off + i] = static_cast<uint8_t>(in[off + i] ^ block[i]);
+branch  0 taken 2083 (fallthrough)
+branch  1 taken 72
+       72:   99:            off += take;
+       72:  100:            ++counter;
+        -:  101:        }
+       20:  102:    }
+        -:  103:
+        -:  104:    std::string m_pw;
+        -:  105:};
+        -:  106:
+        -:  107:} /* anonymous namespace */
+        -:  108:
+function _ZN4DBKP14NewAesCbcCodecERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhi called 70 returned 100% blocks executed 89%
+       70:  109:IDataCodec* NewAesCbcCodec(const std::string& password, const uint8_t salt[16], int rounds) {
+       70:  110:    if (password.empty()) return nullptr;
+call    0 returned 70
+branch  1 taken 2 (fallthrough)
+branch  2 taken 68
+       68:  111:    return new CCryptoCodec(CRY_AES256_CBC, password, salt, rounds);
+call    0 returned 68
+call    1 returned 68
+branch  2 taken 68 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+        -:  112:}
+        -:  113:
+function _ZN4DBKP16NewChaCha20CodecERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhi called 17 returned 100% blocks executed 89%
+       17:  114:IDataCodec* NewChaCha20Codec(const std::string& password, const uint8_t salt[16], int rounds) {
+       17:  115:    if (password.empty()) return nullptr;
+call    0 returned 17
+branch  1 taken 1 (fallthrough)
+branch  2 taken 16
+       16:  116:    return new CCryptoCodec(CRY_CHACHA20, password, salt, rounds);
+call    0 returned 16
+call    1 returned 16
+branch  2 taken 16 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+        -:  117:}
+        -:  118:
+function _ZN4DBKP17NewDesEdEcbcCodecERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhi called 21 returned 100% blocks executed 89%
+       21:  119:IDataCodec* NewDesEdEcbcCodec(const std::string& password, const uint8_t salt[16], int rounds) {
+       21:  120:    if (password.empty()) return nullptr;
+call    0 returned 21
+branch  1 taken 2 (fallthrough)
+branch  2 taken 19
+       19:  121:    return new CCryptoCodec(CRY_DESEDE_CBC, password, salt, rounds);
+call    0 returned 19
+call    1 returned 19
+branch  2 taken 19 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+        -:  122:}
+        -:  123:
+function _ZN4DBKP15newXorTestCodecERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 18 returned 100% blocks executed 89%
+       18:  124:IDataCodec* newXorTestCodec(const std::string& password) {
+       18:  125:    if (password.empty()) return nullptr;
+call    0 returned 18
+branch  1 taken 2 (fallthrough)
+branch  2 taken 16
+       16:  126:    return new CXorCodec(password);
+call    0 returned 16
+call    1 returned 16
+branch  2 taken 16 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+        -:  127:}
+        -:  128:
+        -:  129:} /* namespace DBKP */

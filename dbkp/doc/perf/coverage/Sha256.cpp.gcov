@@ -1,0 +1,343 @@
+        -:    0:Source:src/Crypto/Sha256.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/Sha256.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/Sha256.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Sha256.cpp  -- FIPS 180-4 SHA-256 + HMAC + PBKDF2（全部自实现）
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Crypto/Sha256.h"
+        -:    5:
+        -:    6:#include <algorithm>
+        -:    7:#include <cstring>
+        -:    8:
+        -:    9:namespace DBKP {
+        -:   10:
+        -:   11:namespace {
+        -:   12:
+        -:   13:const uint32_t kK[64] = {
+        -:   14:    0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u,
+        -:   15:    0x923f82a4u, 0xab1c5ed5u, 0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u,
+        -:   16:    0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u, 0xc19bf174u, 0xe49b69c1u, 0xefbe4786u,
+        -:   17:    0x0fc19dc6u, 0x240ca1ccu, 0x2de92c6fu, 0x4a7484aau, 0x5cb0a9dcu, 0x76f988dau,
+        -:   18:    0x983e5152u, 0xa831c66du, 0xb00327c8u, 0xbf597fc7u, 0xc6e00bf3u, 0xd5a79147u,
+        -:   19:    0x06ca6351u, 0x14292967u, 0x27b70a85u, 0x2e1b2138u, 0x4d2c6dfcu, 0x53380d13u,
+        -:   20:    0x650a7354u, 0x766a0abbu, 0x81c2c92eu, 0x92722c85u, 0xa2bfe8a1u, 0xa81a664bu,
+        -:   21:    0xc24b8b70u, 0xc76c51a3u, 0xd192e819u, 0xd6990624u, 0xf40e3585u, 0x106aa070u,
+        -:   22:    0x19a4c116u, 0x1e376c08u, 0x2748774cu, 0x34b0bcb5u, 0x391c0cb3u, 0x4ed8aa4au,
+        -:   23:    0x5b9cca4fu, 0x682e6ff3u, 0x748f82eeu, 0x78a5636fu, 0x84c87814u, 0x8cc70208u,
+        -:   24:    0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u
+        -:   25:};
+        -:   26:
+function _ZN4DBKP12_GLOBAL__N_14rotrEji called 2768412096 returned 100% blocks executed 100%
+2768412096:   27:inline uint32_t rotr(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
+        -:   28:
+        -:   29:} /* anonymous namespace */
+        -:   30:
+function _ZN4DBKP7CSha2565resetEv called 4803764 returned 100% blocks executed 100%
+  4803764:   31:void CSha256::reset() {
+  4803764:   32:    m_state[0] = 0x6a09e667u; m_state[1] = 0xbb67ae85u;
+  4803764:   33:    m_state[2] = 0x3c6ef372u; m_state[3] = 0xa54ff53au;
+  4803764:   34:    m_state[4] = 0x510e527fu; m_state[5] = 0x9b05688cu;
+  4803764:   35:    m_state[6] = 0x1f83d9abu; m_state[7] = 0x5be0cd19u;
+  4803764:   36:    m_bitLen = 0;
+  4803764:   37:    m_bufLen = 0;
+  4803764:   38:}
+        -:   39:
+function _ZN4DBKP7CSha2569transformEPKh called 4806271 returned 100% blocks executed 100%
+  4806271:   40:void CSha256::transform(const uint8_t* block) {
+        -:   41:    uint32_t w[64];
+ 81706607:   42:    for (int i = 0; i < 16; ++i) {
+branch  0 taken 76900336 (fallthrough)
+branch  1 taken 4806271
+230701008:   43:        w[i] = (uint32_t(block[i * 4]) << 24) | (uint32_t(block[i * 4 + 1]) << 16) |
+ 76900336:   44:               (uint32_t(block[i * 4 + 2]) << 8) | uint32_t(block[i * 4 + 3]);
+        -:   45:    }
+235507279:   46:    for (int i = 16; i < 64; ++i) {
+branch  0 taken 230701008 (fallthrough)
+branch  1 taken 4806271
+230701008:   47:        const uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
+call    0 returned 230701008
+call    1 returned 230701008
+230701008:   48:        const uint32_t s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
+call    0 returned 230701008
+call    1 returned 230701008
+230701008:   49:        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+        -:   50:    }
+  4806271:   51:    uint32_t a = m_state[0], b = m_state[1], c = m_state[2], d = m_state[3];
+  4806271:   52:    uint32_t e = m_state[4], f = m_state[5], g = m_state[6], h = m_state[7];
+312407615:   53:    for (int i = 0; i < 64; ++i) {
+branch  0 taken 307601344 (fallthrough)
+branch  1 taken 4806271
+307601344:   54:        const uint32_t S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+call    0 returned 307601344
+call    1 returned 307601344
+call    2 returned 307601344
+307601344:   55:        const uint32_t ch = (e & f) ^ ((~e) & g);
+307601344:   56:        const uint32_t t1 = h + S1 + ch + kK[i] + w[i];
+307601344:   57:        const uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+call    0 returned 307601344
+call    1 returned 307601344
+call    2 returned 307601344
+307601344:   58:        const uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+307601344:   59:        const uint32_t t2 = S0 + maj;
+307601344:   60:        h = g; g = f; f = e; e = d + t1;
+307601344:   61:        d = c; c = b; b = a; a = t1 + t2;
+        -:   62:    }
+  4806271:   63:    m_state[0] += a; m_state[1] += b; m_state[2] += c; m_state[3] += d;
+  4806271:   64:    m_state[4] += e; m_state[5] += f; m_state[6] += g; m_state[7] += h;
+  4806271:   65:}
+        -:   66:
+function _ZN4DBKP7CSha2566updateEPKvy called 62456354 returned 100% blocks executed 100%
+ 62456354:   67:void CSha256::update(const void* data, std::size_t len) {
+ 62456354:   68:    const uint8_t* p = static_cast<const uint8_t*>(data);
+ 62456354:   69:    m_bitLen += static_cast<uint64_t>(len) * 8;
+124915335:   70:    while (len) {
+branch  0 taken 62458981 (fallthrough)
+branch  1 taken 62456354
+ 62458981:   71:        const std::size_t take = std::min<std::size_t>(len, 64 - m_bufLen);
+call    0 returned 62458981
+ 62458981:   72:        std::memcpy(m_buf + m_bufLen, p, take);
+ 62458981:   73:        m_bufLen += take; p += take; len -= take;
+ 62458981:   74:        if (m_bufLen == 64) { transform(m_buf); m_bufLen = 0; }
+branch  0 taken 2404515 (fallthrough)
+branch  1 taken 60054466
+call    2 returned 2404515
+        -:   75:    }
+ 62456354:   76:}
+        -:   77:
+function _ZN4DBKP7CSha2566finishEPh called 2401756 returned 100% blocks executed 100%
+  2401756:   78:void CSha256::finish(uint8_t out[kDigestSize]) {
+        -:   79:    /* 填充：0x80 + 0 + 64bit 大端长度 */
+  2401756:   80:    const uint64_t bits = m_bitLen;
+  2401756:   81:    uint8_t pad = 0x80;
+  2401756:   82:    update(&pad, 1);
+call    0 returned 2401756
+branch  1 taken 2401756 (fallthrough)
+branch  2 taken 0 (throw)
+  2401756:   83:    pad = 0x00;
+ 57651861:   84:    while (m_bufLen != 56) update(&pad, 1);
+branch  0 taken 55250105 (fallthrough)
+branch  1 taken 2401756
+call    2 returned 55250105
+branch  3 taken 55250105 (fallthrough)
+branch  4 taken 0 (throw)
+        -:   85:    uint8_t lenbe[8];
+ 21615804:   86:    for (int i = 0; i < 8; ++i) lenbe[i] = static_cast<uint8_t>((bits >> (56 - 8 * i)) & 0xFF);
+branch  0 taken 19214048 (fallthrough)
+branch  1 taken 2401756
+        -:   87:    /* 注意：update 会累加 m_bitLen，这里直接落块避免污染长度字段 */
+  2401756:   88:    std::memcpy(m_buf + 56, lenbe, 8);
+  2401756:   89:    transform(m_buf);
+call    0 returned 2401756
+  2401756:   90:    m_bufLen = 0;
+ 21615804:   91:    for (int i = 0; i < 8; ++i) {
+branch  0 taken 19214048 (fallthrough)
+branch  1 taken 2401756
+ 19214048:   92:        out[i * 4]     = static_cast<uint8_t>(m_state[i] >> 24);
+ 19214048:   93:        out[i * 4 + 1] = static_cast<uint8_t>(m_state[i] >> 16);
+ 19214048:   94:        out[i * 4 + 2] = static_cast<uint8_t>(m_state[i] >> 8);
+ 19214048:   95:        out[i * 4 + 3] = static_cast<uint8_t>(m_state[i]);
+        -:   96:    }
+  2401756:   97:    reset();
+call    0 returned 2401756
+  2401756:   98:}
+        -:   99:
+function _ZN4DBKP7CSha2564hashEPKvyPh called 8 returned 100% blocks executed 100%
+        8:  100:void CSha256::hash(const void* data, std::size_t len, uint8_t out[kDigestSize]) {
+        8:  101:    CSha256 h;
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+        8:  102:    h.update(data, len);
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+        8:  103:    h.finish(out);
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+        8:  104:}
+        -:  105:
+function _ZN4DBKP7CSha2564hashERKSt6vectorIhSaIhEE called 0 returned 0% blocks executed 0%
+    #####:  106:std::vector<uint8_t> CSha256::hash(const std::vector<uint8_t>& data) {
+        -:  107:    uint8_t d[kDigestSize];
+    #####:  108:    hash(data.data(), data.size(), d);
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  109:    return std::vector<uint8_t>(d, d + kDigestSize);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  110:}
+        -:  111:
+function _ZN4DBKP7CSha2565toHexB5cxx11EPKh called 21 returned 100% blocks executed 91%
+       21:  112:std::string CSha256::toHex(const uint8_t digest[kDigestSize]) {
+        -:  113:    static const char* hex = "0123456789abcdef";
+       21:  114:    std::string s;
+call    0 returned 21
+       21:  115:    s.reserve(64);
+call    0 returned 21
+branch  1 taken 21 (fallthrough)
+branch  2 taken 0 (throw)
+      693:  116:    for (std::size_t i = 0; i < kDigestSize; ++i) {
+branch  0 taken 672 (fallthrough)
+branch  1 taken 21
+      672:  117:        s.push_back(hex[digest[i] >> 4]);
+call    0 returned 672
+branch  1 taken 672 (fallthrough)
+branch  2 taken 0 (throw)
+      672:  118:        s.push_back(hex[digest[i] & 0x0F]);
+call    0 returned 672
+branch  1 taken 672 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  119:    }
+       21:  120:    return s;
+        -:  121:}
+        -:  122:
+        -:  123:/* --------------------------------------------------------------- HMAC */
+function _ZN4DBKP7CSha2564hmacEPKvyS2_yPh called 1200869 returned 100% blocks executed 94%
+  1200869:  124:void CSha256::hmac(const void* key, std::size_t keyLen,
+        -:  125:                   const void* msg, std::size_t msgLen, uint8_t out[kDigestSize]) {
+        -:  126:    uint8_t k[64];
+  1200869:  127:    std::memset(k, 0, sizeof(k));
+  1200869:  128:    if (keyLen > 64) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 1200867
+        2:  129:        hash(key, keyLen, k);                 /* 长密钥先哈希到 32 字节 */
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  130:    } else {
+  1200867:  131:        std::memcpy(k, key, keyLen);
+        -:  132:    }
+        -:  133:    uint8_t ipad[64], opad[64];
+ 78056485:  134:    for (int i = 0; i < 64; ++i) {
+branch  0 taken 76855616 (fallthrough)
+branch  1 taken 1200869
+ 76855616:  135:        ipad[i] = static_cast<uint8_t>(k[i] ^ 0x36);
+ 76855616:  136:        opad[i] = static_cast<uint8_t>(k[i] ^ 0x5c);
+        -:  137:    }
+        -:  138:    uint8_t inner[32];
+        -:  139:    {
+  1200869:  140:        CSha256 h;
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+  1200869:  141:        h.update(ipad, 64);
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+  1200869:  142:        h.update(msg, msgLen);
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+  1200869:  143:        h.finish(inner);
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  144:    }
+  1200869:  145:    CSha256 h2;
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+  1200869:  146:    h2.update(opad, 64);
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+  1200869:  147:    h2.update(inner, 32);
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+  1200869:  148:    h2.finish(out);
+call    0 returned 1200869
+branch  1 taken 1200869 (fallthrough)
+branch  2 taken 0 (throw)
+  1200869:  149:    std::memset(k, 0, sizeof(k));
+  1200869:  150:    std::memset(ipad, 0, sizeof(ipad));
+  1200869:  151:    std::memset(opad, 0, sizeof(opad));
+  1200869:  152:}
+        -:  153:
+        -:  154:/* -------------------------------------------------------------- PBKDF2 */
+function _ZN4DBKP7CSha2566pbkdf2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhyiyPh called 170 returned 100% blocks executed 82%
+      170:  155:void CSha256::pbkdf2(const std::string& password, const uint8_t* salt, std::size_t saltLen,
+        -:  156:                     int rounds, std::size_t dkLen, uint8_t* dk) {
+     170*:  157:    if (rounds < 1) rounds = 1;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 170
+      170:  158:    const std::size_t pwLen = password.size();
+call    0 returned 170
+      170:  159:    const uint8_t* pw = reinterpret_cast<const uint8_t*>(password.data());
+call    0 returned 170
+      170:  160:    std::vector<uint8_t> buf(saltLen + 4);
+call    0 returned 170
+call    1 returned 170
+branch  2 taken 170 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+      170:  161:    if (saltLen) std::memcpy(buf.data(), salt, saltLen);
+branch  0 taken 170 (fallthrough)
+branch  1 taken 0
+call    2 returned 170
+        -:  162:
+      170:  163:    std::size_t done = 0;
+      170:  164:    uint32_t blockIdx = 1;
+      504:  165:    while (done < dkLen) {
+branch  0 taken 334 (fallthrough)
+branch  1 taken 170
+      334:  166:        buf[saltLen + 0] = static_cast<uint8_t>(blockIdx >> 24);
+call    0 returned 334
+      334:  167:        buf[saltLen + 1] = static_cast<uint8_t>(blockIdx >> 16);
+call    0 returned 334
+      334:  168:        buf[saltLen + 2] = static_cast<uint8_t>(blockIdx >> 8);
+call    0 returned 334
+      334:  169:        buf[saltLen + 3] = static_cast<uint8_t>(blockIdx);
+call    0 returned 334
+        -:  170:        uint8_t u[32], t[32];
+      334:  171:        hmac(pw, pwLen, buf.data(), buf.size(), u);
+call    0 returned 334
+call    1 returned 334
+call    2 returned 334
+branch  3 taken 334 (fallthrough)
+branch  4 taken 0 (throw)
+      334:  172:        std::memcpy(t, u, 32);
+  1200421:  173:        for (int i = 2; i <= rounds; ++i) {
+branch  0 taken 1200087 (fallthrough)
+branch  1 taken 334
+  1200087:  174:            hmac(pw, pwLen, u, 32, u);
+call    0 returned 1200087
+branch  1 taken 1200087 (fallthrough)
+branch  2 taken 0 (throw)
+ 39602871:  175:            for (int j = 0; j < 32; ++j) t[j] ^= u[j];
+branch  0 taken 38402784 (fallthrough)
+branch  1 taken 1200087
+        -:  176:        }
+      334:  177:        const std::size_t take = std::min<std::size_t>(32, dkLen - done);
+call    0 returned 334
+      334:  178:        std::memcpy(dk + done, t, take);
+      334:  179:        done += take;
+      334:  180:        ++blockIdx;
+        -:  181:    }
+      170:  182:    std::memset(buf.data(), 0, buf.size());
+call    0 returned 170
+call    1 returned 170
+call    2 returned 170
+      170:  183:}
+        -:  184:
+function _ZN4DBKP7CSha2569deriveKeyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhiPh called 0 returned 0% blocks executed 0%
+    #####:  185:void CSha256::deriveKey(const std::string& password, const uint8_t salt[16],
+        -:  186:                        int rounds, uint8_t outKey[32]) {
+    #####:  187:    pbkdf2(password, salt, 16, rounds > 0 ? rounds : 4096, 32, outKey);
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+    #####:  188:}
+        -:  189:
+        -:  190:} /* namespace DBKP */
+        -:  191:

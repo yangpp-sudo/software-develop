@@ -1,0 +1,241 @@
+        -:    0:Source:src/Common/Defs.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Common/Defs.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Common/Defs.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Defs.cpp  -- 名称/描述转换与错误码字符串
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Common/Defs.h"
+        -:    5:
+        -:    6:namespace DBKP {
+        -:    7:
+function _ZN4DBKP15errCodeToStringENS_7ErrCodeE called 15 returned 100% blocks executed 34%
+       15:    8:const char* errCodeToString(ErrCode code) {
+       15:    9:    switch (code) {
+branch  0 taken 0
+branch  1 taken 0
+branch  2 taken 1
+branch  3 taken 0
+branch  4 taken 0
+branch  5 taken 0
+branch  6 taken 1
+branch  7 taken 0
+branch  8 taken 0
+branch  9 taken 0
+branch 10 taken 1
+branch 11 taken 0
+branch 12 taken 0
+branch 13 taken 2
+branch 14 taken 0
+branch 15 taken 2
+branch 16 taken 4
+branch 17 taken 0
+branch 18 taken 0
+branch 19 taken 0
+branch 20 taken 3
+branch 21 taken 0
+branch 22 taken 0
+branch 23 taken 0
+branch 24 taken 0
+branch 25 taken 1
+branch 26 taken 0
+    #####:   10:    case E_OK:                      return "success";
+    #####:   11:    case E_INVALID_PARAMETER:       return "invalid parameter";
+        1:   12:    case E_DESTINATION_NOT_EMPTY:   return "destination is not an empty directory";
+    #####:   13:    case E_DESTINATION_CREATE_FAIL: return "failed to create destination";
+    #####:   14:    case E_SOURCE_NOT_FOUND:        return "source path not found";
+    #####:   15:    case E_FILE_OPEN_FAIL:          return "failed to open file";
+        1:   16:    case E_FILE_READ_FAIL:          return "failed to read file";
+    #####:   17:    case E_FILE_WRITE_FAIL:         return "failed to write file";
+    #####:   18:    case E_INVALID_HEADER_RECORD:   return "invalid header record";
+    #####:   19:    case E_INVALID_DATA_RECORD:     return "invalid data record";
+        1:   20:    case E_CHECKSUM_MISMATCH:       return "checksum mismatch (archive corrupted)";
+    #####:   21:    case E_PATH_TOO_LONG:           return "path too long";
+    #####:   22:    case E_NOT_ENOUGH_SPACE:        return "not enough space on device";
+        2:   23:    case E_PERMISSION_DENIED:       return "permission denied";
+    #####:   24:    case E_UNSUPPORTED_FEATURE:     return "unsupported feature on this platform";
+        2:   25:    case E_TRUNCATED_ARCHIVE:       return "truncated archive";
+        4:   26:    case E_WRONG_PASSWORD:          return "wrong password or damaged archive";
+    #####:   27:    case E_CRYPTO_FAIL:             return "crypto failed";
+    #####:   28:    case E_COMPRESS_FAIL:           return "compression failed";
+    #####:   29:    case E_ALREADY_EXISTS:          return "already exists";
+        3:   30:    case E_NOT_FOUND:               return "not found";
+    #####:   31:    case E_INTERNAL:                return "internal error";
+    #####:   32:    case E_CANCELED:                return "operation canceled";
+    #####:   33:    case E_BUSY:                    return "target is locked by another backup process";
+    #####:   34:    case E_INCOMPLETE:              return "previous backup incomplete (temp file left behind)";
+        1:   35:    case E_HEADER_TAMPERED:         return "归档头部校验失败，可能被篡改";
+    #####:   36:    default:                        return "unknown error";
+        -:   37:    }
+        -:   38:}
+        -:   39:
+function _ZN4DBKP14fileTypeToDescEc called 1 returned 100% blocks executed 25%
+        1:   40:const char* fileTypeToDesc(char type) {
+        1:   41:    switch (type) {
+branch  0 taken 0
+branch  1 taken 0
+branch  2 taken 1
+branch  3 taken 0
+branch  4 taken 0
+branch  5 taken 0
+branch  6 taken 0
+branch  7 taken 0
+branch  8 taken 0
+branch  9 taken 0
+    #####:   42:    case FT_REGULAR:  return "regular file";
+    #####:   43:    case FT_DIR:      return "directory";
+        1:   44:    case FT_SYMLINK:  return "symbolic link";
+    #####:   45:    case FT_BLOCK:    return "block device";
+    #####:   46:    case FT_CHAR:     return "character device";
+    #####:   47:    case FT_FIFO:     return "named pipe (FIFO)";
+    #####:   48:    case FT_SOCKET:   return "unix socket";
+    #####:   49:    case FT_HARDLINK: return "hard link";
+    #####:   50:    case FT_EXTEND:   return "extended header";
+    #####:   51:    default:          return "unknown";
+        -:   52:    }
+        -:   53:}
+        -:   54:
+function _ZN4DBKP13algorithmNameENS_11AlgorithmIdE called 1 returned 100% blocks executed 38%
+        1:   55:const char* algorithmName(AlgorithmId id) {
+        1:   56:    switch (id) {
+branch  0 taken 0
+branch  1 taken 1
+branch  2 taken 0
+branch  3 taken 0
+branch  4 taken 0
+branch  5 taken 0
+    #####:   57:    case ALG_NONE:    return "none";
+        1:   58:    case ALG_HUFFMAN: return "huffman";
+    #####:   59:    case ALG_LZ77:    return "lz77";
+    #####:   60:    case ALG_LZHUFF:  return "lzhuff";
+    #####:   61:    case ALG_RLE:     return "rle";
+    #####:   62:    default:          return "none";
+        -:   63:    }
+        -:   64:}
+        -:   65:
+function _ZN4DBKP17algorithmFromNameERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 4 returned 100% blocks executed 92%
+        4:   66:AlgorithmId algorithmFromName(const std::string& name) {
+        4:   67:    if (name == "huffman" || name == "huff") return ALG_HUFFMAN;
+call    0 returned 4
+branch  1 taken 3 (fallthrough)
+branch  2 taken 1
+call    3 returned 3
+branch  4 taken 0 (fallthrough)
+branch  5 taken 3
+branch  6 taken 1 (fallthrough)
+branch  7 taken 3
+        3:   68:    if (name == "lz77"     || name == "lz")   return ALG_LZ77;
+call    0 returned 3
+branch  1 taken 2 (fallthrough)
+branch  2 taken 1
+call    3 returned 2
+branch  4 taken 0 (fallthrough)
+branch  5 taken 2
+branch  6 taken 1 (fallthrough)
+branch  7 taken 2
+        2:   69:    if (name == "lzhuff"   || name == "lz+huffman") return ALG_LZHUFF;
+call    0 returned 2
+branch  1 taken 1 (fallthrough)
+branch  2 taken 1
+call    3 returned 1
+branch  4 taken 0 (fallthrough)
+branch  5 taken 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 1
+       1*:   70:    if (name == "rle")     return ALG_RLE;
+call    0 returned 1
+branch  1 taken 0 (fallthrough)
+branch  2 taken 1
+       1*:   71:    if (name == "none"     || name.empty())   return ALG_NONE;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0
+call    3 returned 1
+branch  4 taken 0 (fallthrough)
+branch  5 taken 1
+branch  6 taken 0 (fallthrough)
+branch  7 taken 1
+        1:   72:    return ALG_NONE;
+        -:   73:}
+        -:   74:
+function _ZN4DBKP10cryptoNameENS_8CryptoIdE called 4 returned 100% blocks executed 75%
+        4:   75:const char* cryptoName(CryptoId id) {
+        4:   76:    switch (id) {
+branch  0 taken 1
+branch  1 taken 1
+branch  2 taken 0
+branch  3 taken 0
+branch  4 taken 1
+branch  5 taken 1
+        1:   77:    case CRY_NONE:       return "none";
+        1:   78:    case CRY_AES256_CBC: return "aes256-cbc";
+    #####:   79:    case CRY_CHACHA20:   return "chacha20";
+    #####:   80:    case CRY_XOR_TEST:   return "xor-test";
+        1:   81:    case CRY_DESEDE_CBC: return "des-ede-cbc";
+        1:   82:    default:             return "none";
+        -:   83:    }
+        -:   84:}
+        -:   85:
+function _ZN4DBKP14cryptoFromNameERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 2 returned 100% blocks executed 38%
+        2:   86:CryptoId cryptoFromName(const std::string& name) {
+        2:   87:    if (name == "aes" || name == "aes256" || name == "aes256-cbc") return CRY_AES256_CBC;
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0
+call    3 returned 2
+branch  4 taken 1 (fallthrough)
+branch  5 taken 1
+call    6 returned 1
+branch  7 taken 0 (fallthrough)
+branch  8 taken 1
+branch  9 taken 1 (fallthrough)
+branch 10 taken 1
+       1*:   88:    if (name == "chacha" || name == "chacha20")                    return CRY_CHACHA20;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0
+    #####:   89:    if (name == "xor")                                             return CRY_XOR_TEST;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   90:    if (name == "des" || name == "3des" || name == "des3" ||
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+    #####:   91:        name == "des-ede" || name == "des-ede-cbc" || name == "3des-cbc") return CRY_DESEDE_CBC;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+branch 10 never executed
+    #####:   92:    if (name == "none" || name.empty())                            return CRY_NONE;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:   93:    return CRY_NONE;
+        -:   94:}
+        -:   95:
+        -:   96:} /* namespace DBKP */

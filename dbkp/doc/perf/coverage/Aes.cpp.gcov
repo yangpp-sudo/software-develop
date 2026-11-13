@@ -1,0 +1,595 @@
+        -:    0:Source:src/Crypto/Aes.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/Aes.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/Aes.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Aes.cpp  -- AES-256（FIPS-197）原语 + CBC/PKCS#7 + Encrypt-then-MAC
+        -:    3: *
+        -:    4: *  特点：S 盒与逆 S 盒由 GF(2^8) 运算在线生成，不内嵌查找表常量，
+        -:    5: *        避免抄表出错，同时满足"自己实现加解密算法"的要求。
+        -:    6: * ==========================================================================*/
+        -:    7:#include "Crypto/Algorithms.h"
+        -:    8:#include "Crypto/Blob.h"
+        -:    9:
+        -:   10:#include <cstring>
+        -:   11:#include <ctime>
+        -:   12:#include <stdexcept>
+        -:   13:
+        -:   14:#include "Common/Serialize.h"
+        -:   15:#include "Crypto/Sha256.h"
+        -:   16:#include "Platform/Compat.h"      /* DBKP_OS_WINDOWS / DBKP_OS_POSIX 平台宏 */
+        -:   17:
+        -:   18:#if defined(DBKP_OS_WINDOWS)
+        -:   19:#  include <windows.h>
+        -:   20:#  include <bcrypt.h>             /* F3：BCryptGenRandom（系统首选 CSPRNG） */
+        -:   21:#else
+        -:   22:#  include <errno.h>
+        -:   23:#  if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
+        -:   24:#    define DBKP_HAS_GETRANDOM 1  /* glibc >= 2.25 */
+        -:   25:#    include <sys/random.h>
+        -:   26:#  endif
+        -:   27:#endif
+        -:   28:
+        -:   29:namespace DBKP {
+        -:   30:
+        -:   31:namespace {
+        -:   32:
+        -:   33:uint8_t g_sbox[256];
+        -:   34:uint8_t g_invbox[256];
+        -:   35:uint8_t g_log[256];
+        -:   36:uint8_t g_alog[512];
+        -:   37:bool    g_tablesReady = false;
+        -:   38:
+function _ZN4DBKP12_GLOBAL__N_15xtimeEh called 973 returned 100% blocks executed 80%
+      973:   39:inline uint8_t xtime(uint8_t b) {
+     973*:   40:    return static_cast<uint8_t>((b << 1) ^ ((b & 0x80) ? 0x1B : 0x00));
+branch  0 taken 0 (fallthrough)
+branch  1 taken 973
+        -:   41:}
+        -:   42:
+        -:   43:/* GF(2^8)（模 0x11B）乘法，仅用于建表 */
+function _ZN4DBKP12_GLOBAL__N_18gmulSlowEhh called 255 returned 100% blocks executed 100%
+      255:   44:inline uint8_t gmulSlow(uint8_t a, uint8_t b) {
+      255:   45:    uint8_t p = 0;
+     2295:   46:    for (int i = 0; i < 8; ++i) {
+branch  0 taken 2040 (fallthrough)
+branch  1 taken 255
+     2040:   47:        if (b & 1) p ^= a;
+branch  0 taken 510 (fallthrough)
+branch  1 taken 1530
+     2040:   48:        const uint8_t hi = static_cast<uint8_t>(a & 0x80);
+     2040:   49:        a = static_cast<uint8_t>(a << 1);
+     2040:   50:        if (hi) a ^= 0x1B;
+branch  0 taken 1024 (fallthrough)
+branch  1 taken 1016
+     2040:   51:        b = static_cast<uint8_t>(b >> 1);
+        -:   52:    }
+      255:   53:    return p;
+        -:   54:}
+        -:   55:
+function _ZN4DBKP12_GLOBAL__N_15rotl8Ehi called 1024 returned 100% blocks executed 100%
+     1024:   56:inline uint8_t rotl8(uint8_t b, int n) {
+     1024:   57:    return static_cast<uint8_t>((b << n) | (b >> (8 - n)));
+        -:   58:}
+        -:   59:
+function _ZN4DBKP12_GLOBAL__N_111buildTablesEv called 143 returned 100% blocks executed 100%
+      143:   60:void buildTables() {
+      143:   61:    if (g_tablesReady) return;
+branch  0 taken 142 (fallthrough)
+branch  1 taken 1
+        1:   62:    uint8_t x = 1;
+      256:   63:    for (int i = 0; i < 255; ++i) {
+branch  0 taken 255 (fallthrough)
+branch  1 taken 1
+      255:   64:        g_alog[i] = x;
+      255:   65:        g_log[x] = static_cast<uint8_t>(i);
+      255:   66:        x = static_cast<uint8_t>(gmulSlow(x, 3));      /* 3 是 GF(2^8) 的本原元 */
+call    0 returned 255
+        -:   67:    }
+      258:   68:    for (int i = 255; i < 512; ++i) g_alog[i] = g_alog[i - 255];
+branch  0 taken 257 (fallthrough)
+branch  1 taken 1
+        1:   69:    g_log[0] = 0;
+        -:   70:
+      257:   71:    for (int i = 0; i < 256; ++i) {
+branch  0 taken 256 (fallthrough)
+branch  1 taken 1
+      256:   72:        const uint8_t inv = (i == 0) ? 0 : g_alog[255 - g_log[i]];
+branch  0 taken 255 (fallthrough)
+branch  1 taken 1
+      256:   73:        const uint8_t s = static_cast<uint8_t>(inv ^ rotl8(inv, 1) ^ rotl8(inv, 2) ^
+call    0 returned 256
+call    1 returned 256
+      256:   74:                                               rotl8(inv, 3) ^ rotl8(inv, 4) ^ 0x63);
+call    0 returned 256
+call    1 returned 256
+      256:   75:        g_sbox[i] = s;
+      256:   76:        g_invbox[s] = static_cast<uint8_t>(i);
+        -:   77:    }
+        1:   78:    g_tablesReady = true;
+        -:   79:}
+        -:   80:
+function _ZN4DBKP12_GLOBAL__N_14gmulEhh called 2771808 returned 100% blocks executed 100%
+  2771808:   81:inline uint8_t gmul(uint8_t a, uint8_t b) {
+  2771808:   82:    if (a == 0 || b == 0) return 0;
+branch  0 taken 2760892 (fallthrough)
+branch  1 taken 10916
+branch  2 taken 0 (fallthrough)
+branch  3 taken 2760892
+  2760892:   83:    return g_alog[g_log[a] + g_log[b]];
+        -:   84:}
+        -:   85:
+function _ZN4DBKP12_GLOBAL__N_111addRoundKeyEPhPKj called 70260 returned 100% blocks executed 100%
+    70260:   86:void addRoundKey(uint8_t s[16], const uint32_t* w) {
+   351300:   87:    for (int c = 0; c < 4; ++c) {
+branch  0 taken 281040 (fallthrough)
+branch  1 taken 70260
+   281040:   88:        const uint32_t k = w[c];
+   281040:   89:        s[0 + 4 * c] ^= static_cast<uint8_t>(k >> 24);
+   281040:   90:        s[1 + 4 * c] ^= static_cast<uint8_t>(k >> 16);
+   281040:   91:        s[2 + 4 * c] ^= static_cast<uint8_t>(k >> 8);
+   281040:   92:        s[3 + 4 * c] ^= static_cast<uint8_t>(k);
+        -:   93:    }
+    70260:   94:}
+        -:   95:
+function _ZN4DBKP12_GLOBAL__N_18subBytesEPh called 37870 returned 100% blocks executed 100%
+   643790:   96:void subBytes(uint8_t s[16])    { for (int i = 0; i < 16; ++i) s[i] = g_sbox[s[i]]; }
+branch  0 taken 605920 (fallthrough)
+branch  1 taken 37870
+function _ZN4DBKP12_GLOBAL__N_111invSubBytesEPh called 27706 returned 100% blocks executed 100%
+   471002:   97:void invSubBytes(uint8_t s[16]) { for (int i = 0; i < 16; ++i) s[i] = g_invbox[s[i]]; }
+branch  0 taken 443296 (fallthrough)
+branch  1 taken 27706
+        -:   98:
+function _ZN4DBKP12_GLOBAL__N_19shiftRowsEPh called 37870 returned 100% blocks executed 100%
+    37870:   99:void shiftRows(uint8_t s[16]) {
+        -:  100:    uint8_t t;
+    37870:  101:    t = s[1]; s[1] = s[5]; s[5] = s[9]; s[9] = s[13]; s[13] = t;
+    37870:  102:    t = s[2]; s[2] = s[10]; s[10] = t; t = s[6]; s[6] = s[14]; s[14] = t;
+    37870:  103:    t = s[15]; s[15] = s[11]; s[11] = s[7]; s[7] = s[3]; s[3] = t;
+    37870:  104:}
+        -:  105:
+function _ZN4DBKP12_GLOBAL__N_112invShiftRowsEPh called 27706 returned 100% blocks executed 100%
+    27706:  106:void invShiftRows(uint8_t s[16]) {
+        -:  107:    uint8_t t;
+    27706:  108:    t = s[13]; s[13] = s[9]; s[9] = s[5]; s[5] = s[1]; s[1] = t;
+    27706:  109:    t = s[2]; s[2] = s[10]; s[10] = t; t = s[6]; s[6] = s[14]; s[14] = t;
+    27706:  110:    t = s[3]; s[3] = s[7]; s[7] = s[11]; s[11] = s[15]; s[15] = t;
+    27706:  111:}
+        -:  112:
+function _ZN4DBKP12_GLOBAL__N_110mixColumnsEPh called 35165 returned 100% blocks executed 100%
+    35165:  113:void mixColumns(uint8_t s[16]) {
+   175825:  114:    for (int c = 0; c < 4; ++c) {
+branch  0 taken 140660 (fallthrough)
+branch  1 taken 35165
+   140660:  115:        const uint8_t a0 = s[4 * c], a1 = s[4 * c + 1], a2 = s[4 * c + 2], a3 = s[4 * c + 3];
+   140660:  116:        s[4 * c]     = static_cast<uint8_t>(gmul(a0, 2) ^ gmul(a1, 3) ^ a2 ^ a3);
+call    0 returned 140660
+call    1 returned 140660
+   140660:  117:        s[4 * c + 1] = static_cast<uint8_t>(a0 ^ gmul(a1, 2) ^ gmul(a2, 3) ^ a3);
+call    0 returned 140660
+call    1 returned 140660
+   140660:  118:        s[4 * c + 2] = static_cast<uint8_t>(a0 ^ a1 ^ gmul(a2, 2) ^ gmul(a3, 3));
+call    0 returned 140660
+call    1 returned 140660
+   140660:  119:        s[4 * c + 3] = static_cast<uint8_t>(gmul(a0, 3) ^ a1 ^ a2 ^ gmul(a3, 2));
+call    0 returned 140660
+call    1 returned 140660
+        -:  120:    }
+    35165:  121:}
+        -:  122:
+function _ZN4DBKP12_GLOBAL__N_113invMixColumnsEPh called 25727 returned 100% blocks executed 100%
+    25727:  123:void invMixColumns(uint8_t s[16]) {
+   128635:  124:    for (int c = 0; c < 4; ++c) {
+branch  0 taken 102908 (fallthrough)
+branch  1 taken 25727
+   102908:  125:        const uint8_t a0 = s[4 * c], a1 = s[4 * c + 1], a2 = s[4 * c + 2], a3 = s[4 * c + 3];
+   102908:  126:        s[4 * c]     = static_cast<uint8_t>(gmul(a0, 0x0E) ^ gmul(a1, 0x0B) ^
+call    0 returned 102908
+call    1 returned 102908
+   102908:  127:                                            gmul(a2, 0x0D) ^ gmul(a3, 0x09));
+call    0 returned 102908
+call    1 returned 102908
+   102908:  128:        s[4 * c + 1] = static_cast<uint8_t>(gmul(a0, 0x09) ^ gmul(a1, 0x0E) ^
+call    0 returned 102908
+call    1 returned 102908
+   102908:  129:                                            gmul(a2, 0x0B) ^ gmul(a3, 0x0D));
+call    0 returned 102908
+call    1 returned 102908
+   102908:  130:        s[4 * c + 2] = static_cast<uint8_t>(gmul(a0, 0x0D) ^ gmul(a1, 0x09) ^
+call    0 returned 102908
+call    1 returned 102908
+   102908:  131:                                            gmul(a2, 0x0E) ^ gmul(a3, 0x0B));
+call    0 returned 102908
+call    1 returned 102908
+   102908:  132:        s[4 * c + 3] = static_cast<uint8_t>(gmul(a0, 0x0B) ^ gmul(a1, 0x0D) ^
+call    0 returned 102908
+call    1 returned 102908
+   102908:  133:                                            gmul(a2, 0x09) ^ gmul(a3, 0x0E));
+call    0 returned 102908
+call    1 returned 102908
+        -:  134:    }
+    25727:  135:}
+        -:  136:
+        -:  137:const int kRounds = 14;
+        -:  138:const int kKeyWords = 4 * (kRounds + 1);      /* 60 */
+        -:  139:
+function _ZN4DBKP12_GLOBAL__N_17subWordEj called 1807 returned 100% blocks executed 100%
+     1807:  140:uint32_t subWord(uint32_t w) {
+     3614:  141:    return (uint32_t(g_sbox[(w >> 24) & 0xFF]) << 24) |
+     3614:  142:           (uint32_t(g_sbox[(w >> 16) & 0xFF]) << 16) |
+     1807:  143:           (uint32_t(g_sbox[(w >> 8) & 0xFF]) << 8) |
+     1807:  144:           uint32_t(g_sbox[w & 0xFF]);
+        -:  145:}
+function _ZN4DBKP12_GLOBAL__N_17rotWordEj called 973 returned 100% blocks executed 100%
+      973:  146:uint32_t rotWord(uint32_t w) { return (w << 8) | (w >> 24); }
+        -:  147:
+        -:  148:} /* anonymous namespace */
+        -:  149:
+        -:  150:/* -------------------------------------------------- 密文块公共小头结构 */
+        -:  151:static const uint16_t kAesMagic = 0x4145u;   /* 'AE' —— 与 Crypto/Blob.h 保持一致 */
+        -:  152:
+        -:  153:/* 薄封装：格式定义只在 Crypto/Blob.h 里存在一份 */
+function _ZN4DBKPL13putBlobHeaderERSt6vectorIhSaIhEEty called 79 returned 100% blocks executed 100%
+       79:  154:static void putBlobHeader(std::vector<uint8_t>& out, uint16_t magic, uint64_t rawLen) {
+       79:  155:    Crypto::putCipherHeader(out, magic, rawLen);
+call    0 returned 79
+       79:  156:}
+        -:  157:
+function _ZN4DBKPL14readBlobHeaderERKSt6vectorIhSaIhEEtRyS5_ called 84 returned 100% blocks executed 100%
+       84:  158:static bool readBlobHeader(const std::vector<uint8_t>& in, uint16_t magic,
+        -:  159:                           uint64_t& rawLen, std::size_t& start) {
+       84:  160:    return Crypto::readCipherHeader(in, magic, rawLen, start);
+call    0 returned 84
+        -:  161:}
+        -:  162:
+        -:  163:/* F3 修复：原实现是 time()+栈地址播种的 xorshift，IV/nonce/salt 可预测。
+        -:  164: * 现改为 OS 原生密码学强随机源，接口签名保持不变：
+        -:  165: *   Windows: BCryptGenRandom(BCRYPT_USE_SYSTEM_PREFERRED_RNG)（链接 bcrypt）
+        -:  166: *   POSIX:   getrandom()（glibc>=2.25），否则读 /dev/urandom 并检查返回值
+        -:  167: * 取不到系统随机字节时直接抛异常失败，绝不静默退回弱随机。 */
+function _ZN4DBKP10fillRandomEPhy called 268 returned 100% blocks executed 50%
+      268:  168:void fillRandom(uint8_t* out, std::size_t n) {
+     268*:  169:    if (n == 0) return;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 268
+        -:  170:#if defined(DBKP_OS_WINDOWS)
+      268:  171:    const NTSTATUS st = BCryptGenRandom(nullptr, out, static_cast<ULONG>(n),
+call    0 returned 268
+branch  1 taken 268 (fallthrough)
+branch  2 taken 0 (throw)
+      268:  172:                                        BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+      268:  173:    if (!BCRYPT_SUCCESS(st)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 268
+    #####:  174:        throw std::runtime_error("BCryptGenRandom failed");
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  175:    }
+        -:  176:#else
+        -:  177:#  if defined(DBKP_HAS_GETRANDOM)
+        -:  178:    std::size_t got = 0;
+        -:  179:    while (got < n) {
+        -:  180:        const ssize_t r = getrandom(out + got, n - got, 0);
+        -:  181:        if (r > 0) { got += static_cast<std::size_t>(r); continue; }
+        -:  182:        if (r < 0 && errno == EINTR) continue;
+        -:  183:        throw std::runtime_error("getrandom failed");
+        -:  184:    }
+        -:  185:#  else
+        -:  186:    /* /dev/urandom 打开或读取失败同样视为致命，不允许弱随机兜底 */
+        -:  187:    const int fd = ::open("/dev/urandom", O_RDONLY);
+        -:  188:    if (fd < 0) throw std::runtime_error("open /dev/urandom failed");
+        -:  189:    std::size_t got = 0;
+        -:  190:    while (got < n) {
+        -:  191:        const ssize_t r = ::read(fd, out + got, n - got);
+        -:  192:        if (r > 0) { got += static_cast<std::size_t>(r); continue; }
+        -:  193:        if (r < 0 && errno == EINTR) continue;
+        -:  194:        ::close(fd);
+        -:  195:        throw std::runtime_error("read /dev/urandom failed");
+        -:  196:    }
+        -:  197:    ::close(fd);
+        -:  198:#  endif
+        -:  199:#endif
+        -:  200:}
+        -:  201:
+function _ZN4DBKP16deriveCipherKeysERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhiPhSA_ called 163 returned 100% blocks executed 83%
+      163:  202:void deriveCipherKeys(const std::string& password, const uint8_t salt[16], int rounds,
+        -:  203:                      uint8_t encKey[32], uint8_t macKey[32]) {
+        -:  204:    uint8_t dk[64];
+     163*:  205:    CSha256::pbkdf2(password, salt, 16, rounds > 0 ? rounds : 4096, 64, dk);
+branch  0 taken 163 (fallthrough)
+branch  1 taken 0
+call    2 returned 163
+branch  3 taken 163 (fallthrough)
+branch  4 taken 0 (throw)
+      163:  206:    std::memcpy(encKey, dk, 32);
+      163:  207:    std::memcpy(macKey, dk + 32, 32);
+      163:  208:    std::memset(dk, 0, sizeof(dk));
+      163:  209:}
+        -:  210:
+        -:  211:/* --------------------------------------------------------- AES-256 原语 */
+function _ZN4DBKP7CAes25610initTablesEv called 0 returned 0% blocks executed 0%
+    #####:  212:void CAes256::initTables() { buildTables(); }
+call    0 never executed
+function _ZN4DBKP7CAes2564sboxEh called 4 returned 100% blocks executed 100%
+        4:  213:uint8_t CAes256::sbox(uint8_t b) { buildTables(); return g_sbox[b]; }
+call    0 returned 4
+        -:  214:
+function _ZN4DBKP7CAes256C2EPKh called 139 returned 100% blocks executed 100%
+      139:  215:CAes256::CAes256(const uint8_t key[kKeySize]) {
+      139:  216:    buildTables();
+call    0 returned 139
+      139:  217:    uint32_t* w = m_enc;
+     1251:  218:    for (int i = 0; i < 8; ++i) {
+branch  0 taken 1112 (fallthrough)
+branch  1 taken 139
+     4448:  219:        w[i] = (uint32_t(key[4 * i]) << 24) | (uint32_t(key[4 * i + 1]) << 16) |
+     1112:  220:               (uint32_t(key[4 * i + 2]) << 8) | uint32_t(key[4 * i + 3]);
+        -:  221:    }
+      139:  222:    uint8_t rcon = 1;
+     7367:  223:    for (int i = 8; i < kKeyWords; ++i) {
+branch  0 taken 7228 (fallthrough)
+branch  1 taken 139
+     7228:  224:        uint32_t t = w[i - 1];
+     7228:  225:        if (i % 8 == 0) { t = subWord(rotWord(t)) ^ (uint32_t(rcon) << 24); rcon = xtime(rcon); }
+branch  0 taken 973 (fallthrough)
+branch  1 taken 6255
+call    2 returned 973
+call    3 returned 973
+call    4 returned 973
+     6255:  226:        else if (i % 8 == 4) { t = subWord(t); }
+branch  0 taken 834 (fallthrough)
+branch  1 taken 5421
+call    2 returned 834
+     7228:  227:        w[i] = w[i - 8] ^ t;
+        -:  228:    }
+      139:  229:    std::memset(m_dec, 0, sizeof(m_dec));       /* 直接逆密码：不需要等价调度表 */
+      139:  230:}
+        -:  231:
+function _ZNK4DBKP7CAes25612encryptBlockEPKhPh called 2705 returned 100% blocks executed 100%
+     2705:  232:void CAes256::encryptBlock(const uint8_t in[16], uint8_t out[16]) const {
+        -:  233:    uint8_t s[16];
+     2705:  234:    std::memcpy(s, in, 16);
+     2705:  235:    addRoundKey(s, m_enc);
+call    0 returned 2705
+    37870:  236:    for (int r = 1; r < kRounds; ++r) {
+branch  0 taken 35165 (fallthrough)
+branch  1 taken 2705
+    35165:  237:        subBytes(s); shiftRows(s); mixColumns(s);
+call    0 returned 35165
+call    1 returned 35165
+call    2 returned 35165
+    35165:  238:        addRoundKey(s, m_enc + 4 * r);
+call    0 returned 35165
+        -:  239:    }
+     2705:  240:    subBytes(s); shiftRows(s);
+call    0 returned 2705
+call    1 returned 2705
+     2705:  241:    addRoundKey(s, m_enc + 4 * kRounds);
+call    0 returned 2705
+     2705:  242:    std::memcpy(out, s, 16);
+     2705:  243:}
+        -:  244:
+function _ZNK4DBKP7CAes25612decryptBlockEPKhPh called 1979 returned 100% blocks executed 100%
+     1979:  245:void CAes256::decryptBlock(const uint8_t in[16], uint8_t out[16]) const {
+        -:  246:    uint8_t s[16];
+     1979:  247:    std::memcpy(s, in, 16);
+     1979:  248:    addRoundKey(s, m_enc + 4 * kRounds);
+call    0 returned 1979
+    27706:  249:    for (int r = kRounds - 1; r >= 1; --r) {
+branch  0 taken 25727 (fallthrough)
+branch  1 taken 1979
+    25727:  250:        invShiftRows(s); invSubBytes(s);
+call    0 returned 25727
+call    1 returned 25727
+    25727:  251:        addRoundKey(s, m_enc + 4 * r);
+call    0 returned 25727
+    25727:  252:        invMixColumns(s);
+call    0 returned 25727
+        -:  253:    }
+     1979:  254:    invShiftRows(s); invSubBytes(s);
+call    0 returned 1979
+call    1 returned 1979
+     1979:  255:    addRoundKey(s, m_enc);
+call    0 returned 1979
+     1979:  256:    std::memcpy(out, s, 16);
+     1979:  257:}
+        -:  258:
+        -:  259:/* ------------------------------------------------------------- CBC 模式 */
+function _ZN4DBKP13AesCbcEncryptEPKhS1_RKSt6vectorIhSaIhEERS4_ called 79 returned 100% blocks executed 79%
+       79:  260:ErrCode AesCbcEncrypt(const uint8_t key[32], const uint8_t macKey[32],
+        -:  261:                      const std::vector<uint8_t>& plain, std::vector<uint8_t>& cipher) {
+       79:  262:    CAes256 aes(key);
+call    0 returned 79
+       79:  263:    cipher.clear();
+call    0 returned 79
+       79:  264:    putBlobHeader(cipher, kAesMagic, static_cast<uint64_t>(plain.size()));
+call    0 returned 79
+call    1 returned 79
+branch  2 taken 79 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  265:
+        -:  266:    uint8_t iv[16];
+       79:  267:    fillRandom(iv, 16);
+call    0 returned 79
+branch  1 taken 79 (fallthrough)
+branch  2 taken 0 (throw)
+       79:  268:    cipher.insert(cipher.end(), iv, iv + 16);
+call    0 returned 79
+call    1 returned 79
+call    2 returned 79
+branch  3 taken 79 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  269:
+        -:  270:    /* PKCS#7：总是补 1..16 字节 */
+       79:  271:    const std::size_t pad = 16 - (plain.size() % 16);
+call    0 returned 79
+       79:  272:    std::vector<uint8_t> buf(plain.size() + pad, static_cast<uint8_t>(pad));
+call    0 returned 79
+call    1 returned 79
+call    2 returned 79
+branch  3 taken 79 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 79
+call    6 never executed
+       79:  273:    if (!plain.empty()) std::memcpy(buf.data(), plain.data(), plain.size());
+call    0 returned 79
+branch  1 taken 77 (fallthrough)
+branch  2 taken 2
+call    3 returned 77
+call    4 returned 77
+call    5 returned 77
+        -:  274:
+       79:  275:    const size_t blocks = buf.size() / 16;
+call    0 returned 79
+       79:  276:    const size_t head = cipher.size();
+call    0 returned 79
+       79:  277:    cipher.resize(head + buf.size());
+call    0 returned 79
+call    1 returned 79
+branch  2 taken 79 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  278:    uint8_t chain[16];
+       79:  279:    std::memcpy(chain, iv, 16);
+     2783:  280:    for (size_t b = 0; b < blocks; ++b) {
+branch  0 taken 2704 (fallthrough)
+branch  1 taken 79
+        -:  281:        uint8_t in[16], out[16];
+    45968:  282:        for (int i = 0; i < 16; ++i) in[i] = static_cast<uint8_t>(buf[b * 16 + i] ^ chain[i]);
+branch  0 taken 43264 (fallthrough)
+branch  1 taken 2704
+call    2 returned 43264
+     2704:  283:        aes.encryptBlock(in, out);
+call    0 returned 2704
+     2704:  284:        std::memcpy(cipher.data() + head + b * 16, out, 16);
+call    0 returned 2704
+     2704:  285:        std::memcpy(chain, out, 16);
+        -:  286:    }
+        -:  287:    /* Encrypt-then-MAC：tag = HMAC-SHA256(macKey, 全部密文)[0..15] */
+        -:  288:    uint8_t tag[32];
+       79:  289:    CSha256::hmac(macKey, 32, cipher.data(), cipher.size(), tag);
+call    0 returned 79
+call    1 returned 79
+call    2 returned 79
+branch  3 taken 79 (fallthrough)
+branch  4 taken 0 (throw)
+       79:  290:    cipher.insert(cipher.end(), tag, tag + 16);
+call    0 returned 79
+call    1 returned 79
+call    2 returned 79
+branch  3 taken 79 (fallthrough)
+branch  4 taken 0 (throw)
+       79:  291:    std::memset(chain, 0, sizeof(chain));
+      158:  292:    return E_OK;
+call    0 returned 79
+        -:  293:}
+        -:  294:
+function _ZN4DBKP13AesCbcDecryptEPKhS1_RKSt6vectorIhSaIhEERS4_ called 84 returned 100% blocks executed 84%
+       84:  295:ErrCode AesCbcDecrypt(const uint8_t key[32], const uint8_t macKey[32],
+        -:  296:                      const std::vector<uint8_t>& cipher, std::vector<uint8_t>& plain) {
+       84:  297:    uint64_t rawLen = 0;
+       84:  298:    std::size_t start = 0;
+       84:  299:    if (!readBlobHeader(cipher, kAesMagic, rawLen, start)) return E_CRYPTO_FAIL;
+call    0 returned 84
+branch  1 taken 1 (fallthrough)
+branch  2 taken 83
+        -:  300:    /* 12 + IV16 + 密文(>=16) + tag16 */
+      83*:  301:    if (cipher.size() < start + 16 + 16 + 16) return E_TRUNCATED_ARCHIVE;
+call    0 returned 83
+branch  1 taken 0 (fallthrough)
+branch  2 taken 83
+       83:  302:    const std::size_t ctStart = start + 16;
+       83:  303:    const std::size_t ctLen = cipher.size() - ctStart - 16;
+call    0 returned 83
+       83:  304:    if (ctLen % 16) return E_CRYPTO_FAIL;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 82
+        -:  305:
+        -:  306:    uint8_t tag[32];
+       82:  307:    CSha256::hmac(macKey, 32, cipher.data(), ctStart + ctLen, tag);
+call    0 returned 82
+call    1 returned 82
+branch  2 taken 82 (fallthrough)
+branch  3 taken 0 (throw)
+       82:  308:    if (std::memcmp(tag, cipher.data() + cipher.size() - 16, 16) != 0) {
+call    0 returned 82
+call    1 returned 82
+branch  2 taken 23 (fallthrough)
+branch  3 taken 59
+       23:  309:        return E_WRONG_PASSWORD;                     /* 口令错或数据被篡改 */
+        -:  310:    }
+        -:  311:
+       59:  312:    CAes256 aes(key);
+call    0 returned 59
+        -:  313:    uint8_t chain[16];
+       59:  314:    std::memcpy(chain, cipher.data() + start, 16);
+call    0 returned 59
+      118:  315:    std::vector<uint8_t> buf(ctLen);
+call    0 returned 59
+call    1 returned 59
+branch  2 taken 59 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 59
+call    5 never executed
+     2037:  316:    for (size_t b = 0; b < ctLen / 16; ++b) {
+branch  0 taken 1978 (fallthrough)
+branch  1 taken 59
+        -:  317:        uint8_t out[16];
+     1978:  318:        aes.decryptBlock(cipher.data() + ctStart + b * 16, out);
+call    0 returned 1978
+call    1 returned 1978
+    33626:  319:        for (int i = 0; i < 16; ++i) buf[b * 16 + i] = static_cast<uint8_t>(out[i] ^ chain[i]);
+branch  0 taken 31648 (fallthrough)
+branch  1 taken 1978
+call    2 returned 31648
+     1978:  320:        std::memcpy(chain, cipher.data() + ctStart + b * 16, 16);
+call    0 returned 1978
+        -:  321:    }
+      59*:  322:    const uint8_t pad = buf.empty() ? 0 : buf[buf.size() - 1];
+call    0 returned 59
+branch  1 taken 0 (fallthrough)
+branch  2 taken 59
+call    3 returned 59
+call    4 returned 59
+      59*:  323:    if (pad == 0 || pad > 16 || buf.size() < rawLen + pad) return E_CRYPTO_FAIL;
+branch  0 taken 59 (fallthrough)
+branch  1 taken 0
+branch  2 taken 59 (fallthrough)
+branch  3 taken 0
+call    4 returned 59
+branch  5 taken 0 (fallthrough)
+branch  6 taken 59
+branch  7 taken 0 (fallthrough)
+branch  8 taken 59
+      737:  324:    for (std::size_t i = buf.size() - pad; i < buf.size(); ++i) {
+call    0 returned 59
+call    1 returned 737
+branch  2 taken 678 (fallthrough)
+branch  3 taken 59
+     678*:  325:        if (buf[i] != pad) return E_CRYPTO_FAIL;
+call    0 returned 678
+branch  1 taken 0 (fallthrough)
+branch  2 taken 678
+        -:  326:    }
+       59:  327:    buf.resize(buf.size() - pad);
+call    0 returned 59
+call    1 returned 59
+branch  2 taken 59 (fallthrough)
+branch  3 taken 0 (throw)
+      59*:  328:    if (buf.size() != rawLen) return E_CRYPTO_FAIL;
+call    0 returned 59
+branch  1 taken 0 (fallthrough)
+branch  2 taken 59
+       59:  329:    plain.swap(buf);
+call    0 returned 59
+       59:  330:    return E_OK;
+        -:  331:}
+        -:  332:
+        -:  333:} /* namespace DBKP */
+        -:  334:
+        -:  335:

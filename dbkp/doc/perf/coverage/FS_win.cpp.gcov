@@ -1,0 +1,1312 @@
+        -:    0:Source:src/Platform/FS_win.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Platform/FS_win.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Platform/FS_win.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  FS_win.cpp  -- Windows 平台实现（Win32/UTF-16；特殊文件与属主按能力降级）
+        -:    3: *  对应讲义《打包解包及其关键技术》第 8 章 跨平台移植指南
+        -:    4: * ==========================================================================*/
+        -:    5:#if defined(_WIN32) || defined(_WIN64)
+        -:    6:#  ifndef _WIN32_WINNT
+        -:    7:#    define _WIN32_WINNT 0x0600      /* CreateSymbolicLinkW 需要 Vista+ 接口 */
+        -:    8:#  endif
+        -:    9:#  ifndef WINVER
+        -:   10:#    define WINVER 0x0600
+        -:   11:#  endif
+        -:   12:#endif
+        -:   13:
+        -:   14:#include "Platform/Compat.h"      /* 必须先引入：DBKP_OS_WINDOWS 由它定义 */
+        -:   15:
+        -:   16:#if defined(DBKP_OS_WINDOWS)
+        -:   17:
+        -:   18:#include "Platform/FS.h"
+        -:   19:#include "Utils/PathUtil.h"
+        -:   20:#include "Utils/SimpleFile.h"
+        -:   21:
+        -:   22:#include <cstring>
+        -:   23:#include <cerrno>
+        -:   24:#include <algorithm>
+        -:   25:#include <windows.h>
+        -:   26:#include <winioctl.h>
+        -:   27:#include <sys/stat.h>
+        -:   28:#include <direct.h>
+        -:   29:
+        -:   30:namespace DBKP {
+        -:   31:namespace Platform {
+        -:   32:
+        -:   33:/* FILETIME(1601-01-01 起的 100ns) 与 Unix 秒/纳秒互转 */
+        -:   34:static const int64_t kEpochDiff100ns = 116444736000000000ll;
+        -:   35:
+function _ZN4DBKP8PlatformL14fileTimeToUnixERK9_FILETIMERxS4_ called 1842 returned 100% blocks executed 67%
+     1842:   36:static void fileTimeToUnix(const FILETIME& ft, int64_t& sec, int64_t& nsec) {
+        -:   37:    ULARGE_INTEGER u;
+     1842:   38:    u.LowPart = ft.dwLowDateTime; u.HighPart = ft.dwHighDateTime;
+     1842:   39:    int64_t t100 = int64_t(u.QuadPart) - kEpochDiff100ns;
+     1842:   40:    sec  = t100 / 10000000ll;
+     1842:   41:    nsec = (t100 % 10000000ll) * 100ll;
+    1842*:   42:    if (nsec < 0) { nsec += 1000000000ll; sec -= 1; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1842
+     1842:   43:}
+        -:   44:
+function _ZN4DBKP8PlatformL14unixToFileTimeExx called 342 returned 100% blocks executed 100%
+      342:   45:static FILETIME unixToFileTime(int64_t sec, int64_t nsec) {
+      342:   46:    int64_t t100 = sec * 10000000ll + nsec / 100ll + kEpochDiff100ns;
+      342:   47:    ULARGE_INTEGER u; u.QuadPart = uint64_t(t100);
+      342:   48:    FILETIME ft; ft.dwLowDateTime = u.LowPart; ft.dwHighDateTime = u.HighPart;
+      342:   49:    return ft;
+        -:   50:}
+        -:   51:
+function _ZN4DBKP8PlatformL13typeFromAttrsEmRKNSt7__cxx1112basic_stringIwSt11char_traitsIwESaIwEEE called 1787 returned 100% blocks executed 73%
+     1787:   52:static FileTypeTag typeFromAttrs(DWORD attr, const std::wstring& wpath) {
+     1787:   53:    if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
+branch  0 taken 14 (fallthrough)
+branch  1 taken 1773
+       14:   54:        HANDLE h = CreateFileW(wpath.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+call    0 returned 14
+call    1 returned 14
+        -:   55:                               nullptr, OPEN_EXISTING,
+        -:   56:                               FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        -:   57:                               nullptr);
+       14:   58:        if (h != INVALID_HANDLE_VALUE) {
+branch  0 taken 14 (fallthrough)
+branch  1 taken 0
+        -:   59:            BYTE buf[1024];
+       14:   60:            DWORD ret = 0;
+       14:   61:            BOOL ok = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0,
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   62:                                      buf, sizeof(buf), &ret, nullptr);
+       14:   63:            CloseHandle(h);
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+       14:   64:            if (ok && ret >= 4) {
+branch  0 taken 14 (fallthrough)
+branch  1 taken 0
+branch  2 taken 14 (fallthrough)
+branch  3 taken 0
+       14:   65:                DWORD tag = *reinterpret_cast<DWORD*>(buf);
+        -:   66:                /* F1：junction（IO_REPARSE_TAG_MOUNT_POINT）与符号链接同类，
+        -:   67:                   都必须判成 FT_SYMLINK——以前落到下面被按 FILE_ATTRIBUTE_DIRECTORY
+        -:   68:                   误判成 FT_DIR，枚举器直接下探，围栏与环检测全部形同虚设。 */
+       14:   69:                if (tag == IO_REPARSE_TAG_SYMLINK ||
+branch  0 taken 14 (fallthrough)
+branch  1 taken 0
+branch  2 taken 14 (fallthrough)
+branch  3 taken 0
+       14:   70:                    tag == IO_REPARSE_TAG_MOUNT_POINT) return FT_SYMLINK;
+        -:   71:            }
+        -:   72:        }
+    #####:   73:        return (attr & FILE_ATTRIBUTE_DIRECTORY) ? FT_DIR : FT_SYMLINK;
+branch  0 never executed
+branch  1 never executed
+        -:   74:    }
+     1773:   75:    if (attr & FILE_ATTRIBUTE_DIRECTORY) return FT_DIR;
+branch  0 taken 631 (fallthrough)
+branch  1 taken 1142
+     1142:   76:    return FT_REGULAR;
+        -:   77:}
+        -:   78:
+        -:   79:/* ------------------------------------------------------------- getInfo */
+function _ZN4DBKP8Platform7getInfoERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERNS0_8FileInfoEb called 623 returned 100% blocks executed 84%
+      623:   80:ErrCode getInfo(const std::string& path, FileInfo& out, bool followSymlink) {
+      623:   81:    out = FileInfo();
+call    0 returned 623
+call    1 returned 623
+call    2 returned 623
+     1246:   82:    std::wstring wp = Path::apiWide(path);
+call    0 returned 623
+branch  1 taken 623 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 623
+call    4 never executed
+     623*:   83:    if (wp.empty()) return E_INVALID_PARAMETER;
+call    0 returned 623
+branch  1 taken 0 (fallthrough)
+branch  2 taken 623
+        -:   84:
+      623:   85:    DWORD attr = GetFileAttributesW(wp.c_str());
+call    0 returned 623
+call    1 returned 623
+branch  2 taken 623 (fallthrough)
+branch  3 taken 0 (throw)
+      623:   86:    if (attr == INVALID_FILE_ATTRIBUTES) {
+branch  0 taken 9 (fallthrough)
+branch  1 taken 614
+        9:   87:        DWORD err = GetLastError();
+call    0 returned 9
+branch  1 taken 9 (fallthrough)
+branch  2 taken 0 (throw)
+        9:   88:        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return E_NOT_FOUND;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 8
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0
+    #####:   89:        if (err == ERROR_ACCESS_DENIED) return E_PERMISSION_DENIED;
+branch  0 never executed
+branch  1 never executed
+    #####:   90:        return E_SOURCE_NOT_FOUND;
+        -:   91:    }
+        -:   92:
+      614:   93:    out.type = followSymlink ? ((attr & FILE_ATTRIBUTE_DIRECTORY) ? FT_DIR : FT_REGULAR)
+branch  0 taken 147 (fallthrough)
+branch  1 taken 467
+branch  2 taken 135 (fallthrough)
+branch  3 taken 12
+      467:   94:                             : typeFromAttrs(attr, wp);
+call    0 returned 467
+branch  1 taken 467 (fallthrough)
+branch  2 taken 0 (throw)
+     1227:   95:    out.mode = (attr & FILE_ATTRIBUTE_READONLY) ? 0444u
+branch  0 taken 613 (fallthrough)
+branch  1 taken 1
+      613:   96:             : (out.type == FT_DIR ? 0755u : 0644u);
+branch  0 taken 283 (fallthrough)
+branch  1 taken 330
+      614:   97:    out.uid = 0; out.gid = 0;
+        -:   98:
+        -:   99:    WIN32_FILE_ATTRIBUTE_DATA fad;
+      614:  100:    if (GetFileAttributesExW(wp.c_str(), GetFileExInfoStandard, &fad)) {
+call    0 returned 614
+call    1 returned 614
+branch  2 taken 614 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 614 (fallthrough)
+branch  5 taken 0
+      614:  101:        out.size = (int64_t(fad.nFileSizeHigh) << 32) | fad.nFileSizeLow;
+      614:  102:        fileTimeToUnix(fad.ftLastWriteTime, out.mtimeSec, out.mtimeNSec);
+call    0 returned 614
+      614:  103:        fileTimeToUnix(fad.ftLastAccessTime, out.atimeSec, out.atimeNSec);
+call    0 returned 614
+      614:  104:        int64_t cs = 0, cn = 0;
+      614:  105:        fileTimeToUnix(fad.ftCreationTime, cs, cn);
+call    0 returned 614
+      614:  106:        out.ctimeSec = cs;
+        -:  107:    }
+        -:  108:
+      614:  109:    HANDLE h = CreateFileW(wp.c_str(), FILE_READ_ATTRIBUTES,
+call    0 returned 614
+call    1 returned 614
+branch  2 taken 614 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  110:                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        -:  111:                           nullptr, OPEN_EXISTING,
+        -:  112:                           FILE_FLAG_BACKUP_SEMANTICS |
+      614:  113:                           (out.type == FT_SYMLINK ? FILE_FLAG_OPEN_REPARSE_POINT : 0),
+branch  0 taken 4 (fallthrough)
+branch  1 taken 610
+        -:  114:                           nullptr);
+      614:  115:    if (h != INVALID_HANDLE_VALUE) {
+branch  0 taken 614 (fallthrough)
+branch  1 taken 0
+        -:  116:        BY_HANDLE_FILE_INFORMATION bi;
+      614:  117:        if (GetFileInformationByHandle(h, &bi)) {
+call    0 returned 614
+branch  1 taken 614 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 614 (fallthrough)
+branch  4 taken 0
+      614:  118:            out.ino   = (uint64_t(bi.nFileIndexHigh) << 32) | bi.nFileIndexLow;
+      614:  119:            out.nlink = bi.nNumberOfLinks;
+      614:  120:            out.dev   = bi.dwVolumeSerialNumber;
+        -:  121:        }
+      614:  122:        CloseHandle(h);
+call    0 returned 614
+branch  1 taken 614 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  123:    }
+        -:  124:
+      614:  125:    if (out.type == FT_SYMLINK) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 610
+        8:  126:        std::string target;
+call    0 returned 4
+call    1 returned 4
+call    2 never executed
+       4*:  127:        if (DBKP_IS_ERR(readLink(path, target))) out.type = FT_REGULAR;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 4
+        4:  128:        else out.linkTarget = target;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  129:    }
+      614:  130:    out.valid = true;
+      614:  131:    return E_OK;
+        -:  132:}
+        -:  133:
+function _ZN4DBKP8Platform8readLinkERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS6_ called 4 returned 100% blocks executed 74%
+        4:  134:ErrCode readLink(const std::string& path, std::string& target) {
+        4:  135:    target.clear();
+call    0 returned 4
+        8:  136:    std::wstring wp = Path::apiWide(path);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 never executed
+        4:  137:    HANDLE h = CreateFileW(wp.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  138:                           nullptr, OPEN_EXISTING,
+        -:  139:                           FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        -:  140:                           nullptr);
+       4*:  141:    if (h == INVALID_HANDLE_VALUE) return E_NOT_FOUND;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+        -:  142:    BYTE buf[4096];
+        4:  143:    DWORD ret = 0;
+        4:  144:    BOOL ok = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0,
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  145:                              buf, sizeof(buf), &ret, nullptr);
+        4:  146:    CloseHandle(h);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+       4*:  147:    if (!ok || ret < 8) return E_UNSUPPORTED_FEATURE;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 4
+        -:  148:
+        -:  149:    /* 手工解析 REPARSE_DATA_BUFFER，避免依赖不同 SDK 版本的结构体定义。
+        -:  150:       统一尾部布局（symlink 与 mount point/junction 完全一致）：
+        -:  151:         p+0  ReparseTag(4)  p+4 ReparseDataLength(2)  p+6 Reserved(2)
+        -:  152:         data=p+8：SubstituteNameOffset(2) SubstituteNameLength(2)
+        -:  153:                    PrintNameOffset(2)    PrintNameLength(2)
+        -:  154:         pathBuf=data+8：实际宽字符名（偏移相对 pathBuf 起算）
+        -:  155:       F1 之前 junction 被误判成 FT_DIR，本函数从不在 junction 上被调用，
+        -:  156:       旧实现把字段基址错写成 data+ReparseDataLength，解析恒为空。现按规范
+        -:  157:       修正，link 目标得以还原——环检测（修法②）与 restore link 校验（修法④）
+        -:  158:       都依赖它。 */
+        4:  159:    const uint8_t* p = buf;
+        4:  160:    DWORD tag = *reinterpret_cast<const DWORD*>(p);
+        4:  161:    if (tag != IO_REPARSE_TAG_SYMLINK && tag != IO_REPARSE_TAG_MOUNT_POINT)
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 4
+    #####:  162:        return E_UNSUPPORTED_FEATURE;
+       4*:  163:    if (ret < 16) return E_UNSUPPORTED_FEATURE;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+        4:  164:    const uint8_t* data = p + 8;
+        4:  165:    const size_t pathBufAvail = ret - 16;   /* pathBuf 起（p+16）到缓冲区末尾的字节数 */
+        4:  166:    const uint8_t* pathBuf = data + 8;
+        4:  167:    uint16_t subOff = *reinterpret_cast<const uint16_t*>(data + 0);
+        4:  168:    uint16_t subLen = *reinterpret_cast<const uint16_t*>(data + 2);
+        4:  169:    uint16_t priOff = *reinterpret_cast<const uint16_t*>(data + 4);
+        4:  170:    uint16_t priLen = *reinterpret_cast<const uint16_t*>(data + 6);
+        8:  171:    std::wstring wname;
+call    0 returned 4
+call    1 returned 4
+call    2 never executed
+        -:  172:    /* 优先 SubstituteName（真实目标）；为空时退回 PrintName（展示名）。 */
+        4:  173:    if (subLen > 0 && size_t(subOff) + subLen <= pathBufAvail) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0
+        4:  174:        wname.assign(reinterpret_cast<const wchar_t*>(pathBuf + subOff), subLen / 2);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+    #####:  175:    } else if (priLen > 0 && size_t(priOff) + priLen <= pathBufAvail) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  176:        wname.assign(reinterpret_cast<const wchar_t*>(pathBuf + priOff), priLen / 2);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  177:    }
+        -:  178:    /* junction 的 SubstituteName 常带 \??\ 设备前缀，去掉它得到可读路径 */
+       4*:  179:    if (wname.size() >= 4 && wname.compare(0, 4, L"\\??\\") == 0) wname = wname.substr(4);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 4 (fallthrough)
+branch  7 taken 0
+branch  8 taken 4 (fallthrough)
+branch  9 taken 0
+call   10 returned 4
+branch 11 taken 4 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 4
+call   14 returned 4
+        8:  180:    std::string raw = Path::wideToUtf8(wname);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 never executed
+      229:  181:    for (size_t i = 0; i < raw.size(); ++i) if (raw[i] == '\\') raw[i] = '/';
+call    0 returned 229
+branch  1 taken 225 (fallthrough)
+branch  2 taken 4
+call    3 returned 225
+branch  4 taken 225 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 32 (fallthrough)
+branch  7 taken 193
+call    8 returned 32
+branch  9 taken 32 (fallthrough)
+branch 10 taken 0 (throw)
+        4:  182:    target = raw;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+       4*:  183:    if (target.empty()) return E_UNSUPPORTED_FEATURE;
+call    0 returned 4
+branch  1 taken 0 (fallthrough)
+branch  2 taken 4
+        4:  184:    return E_OK;
+        -:  185:}
+        -:  186:
+        -:  187:/* ------------------------------------------------------------- 目录操作 */
+function _ZN4DBKP8Platform7listDirERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERSt6vectorINS0_8DirEntryESaISA_EE called 1014 returned 100% blocks executed 72%
+     1014:  188:ErrCode listDir(const std::string& path, std::vector<DirEntry>& out) {
+     1014:  189:    out.clear();
+call    0 returned 1014
+     2028:  190:    std::wstring wp = Path::apiWide(path);
+call    0 returned 1014
+branch  1 taken 1014 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1014
+call    4 never executed
+    1014*:  191:    if (wp.empty()) return E_INVALID_PARAMETER;
+call    0 returned 1014
+branch  1 taken 0 (fallthrough)
+branch  2 taken 1014
+        -:  192:    WIN32_FIND_DATAW fd;
+     2028:  193:    std::wstring pat = wp + L"\\*";
+call    0 returned 1014
+branch  1 taken 1014 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1014
+call    4 never executed
+     1014:  194:    HANDLE h = FindFirstFileW(pat.c_str(), &fd);
+call    0 returned 1014
+call    1 returned 1014
+branch  2 taken 1014 (fallthrough)
+branch  3 taken 0 (throw)
+     1014:  195:    if (h == INVALID_HANDLE_VALUE) return E_SOURCE_NOT_FOUND;
+branch  0 taken 214 (fallthrough)
+branch  1 taken 800
+     2120:  196:    do {
+     2920:  197:        std::wstring name(fd.cFileName);
+call    0 returned 2920
+call    1 returned 2920
+branch  2 taken 2920 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+     2920:  198:        if (name == L"." || name == L"..") continue;
+call    0 returned 2920
+branch  1 taken 2120 (fallthrough)
+branch  2 taken 800
+call    3 returned 2120
+branch  4 taken 800 (fallthrough)
+branch  5 taken 1320
+branch  6 taken 1600 (fallthrough)
+branch  7 taken 1320
+     2640:  199:        DirEntry e;
+call    0 returned 1320
+call    1 returned 1320
+call    2 never executed
+     1320:  200:        e.name = Path::wideToUtf8(name);
+call    0 returned 1320
+branch  1 taken 1320 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1320
+call    4 returned 1320
+     1320:  201:        e.type = typeFromAttrs(fd.dwFileAttributes, wp + L"\\" + name);
+call    0 returned 1320
+branch  1 taken 1320 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1320
+branch  4 taken 1320 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1320
+branch  7 taken 1320 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1320
+call   10 returned 1320
+call   11 never executed
+call   12 never executed
+     1320:  202:        out.push_back(e);
+call    0 returned 1320
+branch  1 taken 1320 (fallthrough)
+branch  2 taken 0 (throw)
+     2920:  203:    } while (FindNextFileW(h, &fd));
+call    0 returned 2920
+branch  1 taken 2920 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 2120 (fallthrough)
+branch  4 taken 800
+      800:  204:    FindClose(h);
+call    0 returned 800
+branch  1 taken 800 (fallthrough)
+branch  2 taken 0 (throw)
+      800:  205:    std::sort(out.begin(), out.end(),
+call    0 returned 800
+call    1 returned 800
+call    2 returned 800
+branch  3 taken 800 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  206:              [](const DirEntry& a, const DirEntry& b) { return a.name < b.name; });
+      800:  207:    return E_OK;
+        -:  208:}
+        -:  209:
+function _ZN4DBKP8Platform7makeDirERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 1244 returned 100% blocks executed 87%
+     1244:  210:ErrCode makeDir(const std::string& path) {
+     2488:  211:    std::wstring wp = Path::apiWide(path);
+call    0 returned 1244
+branch  1 taken 1244 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1244
+call    4 never executed
+     1244:  212:    if (_wmkdir(wp.c_str()) == 0) return E_OK;
+call    0 returned 1244
+call    1 returned 1244
+branch  2 taken 1244 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 517 (fallthrough)
+branch  5 taken 727
+      727:  213:    if (errno == EEXIST) return E_ALREADY_EXISTS;
+call    0 returned 727
+branch  1 taken 727 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 726 (fallthrough)
+branch  4 taken 1
+        1:  214:    return E_DESTINATION_CREATE_FAIL;
+        -:  215:}
+        -:  216:
+function _ZN4DBKP8Platform11makeDirTreeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 654 returned 100% blocks executed 85%
+      654:  217:ErrCode makeDirTree(const std::string& path) {
+     1308:  218:    std::string p = Path::normalize(path);
+call    0 returned 654
+branch  1 taken 654 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 654
+call    4 never executed
+     654*:  219:    if (p.empty()) return E_INVALID_PARAMETER;
+call    0 returned 654
+branch  1 taken 0 (fallthrough)
+branch  2 taken 654
+      654:  220:    size_t i = 0;
+      654:  221:    if (p.size() >= 2 && p[1] == ':') i = 2;         /* 盘符 C: */
+call    0 returned 654
+branch  1 taken 654 (fallthrough)
+branch  2 taken 0
+call    3 returned 654
+branch  4 taken 654 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 8 (fallthrough)
+branch  7 taken 646
+branch  8 taken 8 (fallthrough)
+branch  9 taken 646
+      654:  222:    if (i < p.size() && (p[i] == '/' || p[i] == '\\')) ++i;
+call    0 returned 654
+branch  1 taken 654 (fallthrough)
+branch  2 taken 0
+call    3 returned 654
+branch  4 taken 654 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 646 (fallthrough)
+branch  7 taken 8
+call    8 returned 646
+branch  9 taken 646 (fallthrough)
+branch 10 taken 0 (throw)
+branch 11 taken 0 (fallthrough)
+branch 12 taken 646
+branch 13 taken 8 (fallthrough)
+branch 14 taken 646
+      590:  223:    for (;; ++i) {
+     1244:  224:        i = p.find('/', i);
+call    0 returned 1244
+     1244:  225:        if (i == std::string::npos) i = p.size();
+branch  0 taken 654 (fallthrough)
+branch  1 taken 590
+call    2 returned 654
+     1244:  226:        ErrCode e = makeDir(p.substr(0, i));
+call    0 returned 1244
+branch  1 taken 1244 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1244
+branch  4 taken 1244 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1244
+call    7 never executed
+     1244:  227:        if (e == E_ALREADY_EXISTS) e = E_OK;
+branch  0 taken 726 (fallthrough)
+branch  1 taken 518
+     1897:  228:        if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1243
+     1243:  229:        if (i == p.size()) return E_OK;
+call    0 returned 1243
+branch  1 taken 653 (fallthrough)
+branch  2 taken 590
+      590:  230:    }
+        -:  231:}
+        -:  232:
+function _ZN4DBKP8Platform9removeDirERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 524 returned 100% blocks executed 83%
+      524:  233:ErrCode removeDir(const std::string& path) {
+      524:  234:    std::wstring wp = Path::apiWide(path);
+call    0 returned 524
+branch  1 taken 524 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+     1048:  235:    return RemoveDirectoryW(wp.c_str()) ? E_OK : E_FILE_WRITE_FAIL;
+call    0 returned 524
+call    1 returned 524
+branch  2 taken 524 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 517 (fallthrough)
+branch  5 taken 7
+call    6 returned 524
+        -:  236:}
+        -:  237:
+function _ZN4DBKP8Platform10removeFileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 709 returned 100% blocks executed 83%
+      709:  238:ErrCode removeFile(const std::string& path) {
+      709:  239:    std::wstring wp = Path::apiWide(path);
+call    0 returned 709
+branch  1 taken 709 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+     1418:  240:    return DeleteFileW(wp.c_str()) ? E_OK : E_FILE_WRITE_FAIL;
+call    0 returned 709
+call    1 returned 709
+branch  2 taken 709 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 539 (fallthrough)
+branch  5 taken 170
+call    6 returned 709
+        -:  241:}
+        -:  242:
+function _ZN4DBKP8Platform10renameFileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 88 returned 100% blocks executed 76%
+       88:  243:ErrCode renameFile(const std::string& from, const std::string& to) {
+      176:  244:    std::wstring wf = Path::apiWide(from);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 88
+call    4 never executed
+       88:  245:    std::wstring wt = Path::apiWide(to);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+      176:  246:    return MoveFileExW(wf.c_str(), wt.c_str(), MOVEFILE_REPLACE_EXISTING) ? E_OK : E_FILE_WRITE_FAIL;
+call    0 returned 88
+call    1 returned 88
+call    2 returned 88
+branch  3 taken 88 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 87 (fallthrough)
+branch  6 taken 1
+call    7 returned 88
+        -:  247:}
+        -:  248:
+function _ZN4DBKP8Platform6existsERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 445 returned 100% blocks executed 83%
+      445:  249:ErrCode exists(const std::string& path) {
+      445:  250:    std::wstring wp = Path::apiWide(path);
+call    0 returned 445
+branch  1 taken 445 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+      890:  251:    return GetFileAttributesW(wp.c_str()) == INVALID_FILE_ATTRIBUTES ? E_NOT_FOUND : E_OK;
+call    0 returned 445
+call    1 returned 445
+branch  2 taken 445 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 367 (fallthrough)
+branch  5 taken 78
+call    6 returned 445
+        -:  252:}
+        -:  253:
+function _ZN4DBKP8Platform11isDirectoryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 18 returned 100% blocks executed 73%
+       18:  254:bool isDirectory(const std::string& path) {
+       36:  255:    FileInfo fi;
+call    0 returned 18
+call    1 returned 18
+call    2 never executed
+      18*:  256:    if (DBKP_IS_ERR(getInfo(path, fi, true))) return false;
+call    0 returned 18
+branch  1 taken 18 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 18
+       18:  257:    return fi.type == FT_DIR;
+        -:  258:}
+        -:  259:
+function _ZN4DBKP8Platform14assertDirEmptyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 5 returned 100% blocks executed 80%
+        5:  260:ErrCode assertDirEmpty(const std::string& path) {
+       10:  261:    std::vector<DirEntry> es;
+call    0 returned 5
+call    1 returned 5
+call    2 never executed
+        5:  262:    ErrCode e = listDir(path, es);
+call    0 returned 5
+branch  1 taken 5 (fallthrough)
+branch  2 taken 0 (throw)
+       5*:  263:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 5
+        5:  264:    return es.empty() ? E_OK : E_DESTINATION_NOT_EMPTY;
+call    0 returned 5
+branch  1 taken 3 (fallthrough)
+branch  2 taken 2
+        -:  265:}
+        -:  266:
+function _ZN4DBKP8Platform10currentDirERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 47 returned 100% blocks executed 75%
+       47:  267:ErrCode currentDir(std::string& out) {
+        -:  268:    wchar_t buf[4096];
+      47*:  269:    if (!_wgetcwd(buf, 4096)) return E_INTERNAL;
+call    0 returned 47
+branch  1 taken 47 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 47
+       47:  270:    out = Path::wideToUtf8(buf);
+call    0 returned 47
+call    1 returned 47
+branch  2 taken 47 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 47
+branch  5 taken 47 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 47
+call    8 returned 47
+call    9 returned 47
+call   10 returned 47
+call   11 never executed
+call   12 never executed
+     1927:  271:    for (size_t i = 0; i < out.size(); ++i) if (out[i] == '\\') out[i] = '/';
+call    0 returned 1927
+branch  1 taken 1880 (fallthrough)
+branch  2 taken 47
+call    3 returned 1880
+branch  4 taken 1880 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 282 (fallthrough)
+branch  7 taken 1598
+call    8 returned 282
+branch  9 taken 282 (fallthrough)
+branch 10 taken 0 (throw)
+       47:  272:    return E_OK;
+        -:  273:}
+        -:  274:
+function _ZN4DBKP8Platform13canonicalPathERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS6_ called 481 returned 100% blocks executed 64%
+      481:  275:ErrCode canonicalPath(const std::string& path, std::string& out) {
+      962:  276:    std::wstring wp = Path::apiWide(path);
+call    0 returned 481
+branch  1 taken 481 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 481
+call    4 never executed
+      962:  277:    std::vector<wchar_t> buf(8192);
+call    0 returned 481
+call    1 returned 481
+branch  2 taken 481 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 481
+call    5 never executed
+        -:  278:    /* F1：存在的路径优先做"真实解析"——GetFinalPathNameByHandleW 会把
+        -:  279:       junction/symlink 链一直展开到最终位置；纯词法绝对化（GetFullPathNameW）
+        -:  280:       看不见链接，正是 data-root 围栏被绕过的根源。打不开（不存在/无权限）
+        -:  281:       时退回词法结果，保持"不存在的路径也能规范化"的原有能力。 */
+      481:  282:    HANDLE hLink = CreateFileW(wp.c_str(), FILE_READ_ATTRIBUTES,
+call    0 returned 481
+call    1 returned 481
+branch  2 taken 481 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  283:                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        -:  284:                               nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+        -:  285:                               nullptr);
+      481:  286:    if (hLink != INVALID_HANDLE_VALUE) {
+branch  0 taken 291 (fallthrough)
+branch  1 taken 190
+      291:  287:        DWORD fn = GetFinalPathNameByHandleW(hLink, buf.data(), DWORD(buf.size()),
+call    0 returned 291
+call    1 returned 291
+call    2 returned 291
+branch  3 taken 291 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  288:                                             VOLUME_NAME_DOS | FILE_NAME_NORMALIZED);
+      291:  289:        CloseHandle(hLink);
+call    0 returned 291
+branch  1 taken 291 (fallthrough)
+branch  2 taken 0 (throw)
+     291*:  290:        if (fn > 0 && fn < buf.size()) {
+branch  0 taken 291 (fallthrough)
+branch  1 taken 0
+call    2 returned 291
+branch  3 taken 291 (fallthrough)
+branch  4 taken 0
+branch  5 taken 291 (fallthrough)
+branch  6 taken 0
+      582:  291:            std::wstring s(buf.data(), fn);
+call    0 returned 291
+call    1 returned 291
+call    2 returned 291
+branch  3 taken 291 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 291
+call    6 never executed
+     291*:  292:            if (s.size() >= 8 && s.compare(0, 8, L"\\\\?\\UNC\\") == 0) s = L"\\\\" + s.substr(8);
+call    0 returned 291
+branch  1 taken 273 (fallthrough)
+branch  2 taken 18
+call    3 returned 273
+branch  4 taken 273 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 273
+branch  8 taken 0 (fallthrough)
+branch  9 taken 291
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+     291*:  293:            else if (s.size() >= 4 && s.compare(0, 4, L"\\\\?\\") == 0) s = s.substr(4);
+call    0 returned 291
+branch  1 taken 291 (fallthrough)
+branch  2 taken 0
+call    3 returned 291
+branch  4 taken 291 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 291 (fallthrough)
+branch  7 taken 0
+branch  8 taken 291 (fallthrough)
+branch  9 taken 0
+call   10 returned 291
+branch 11 taken 291 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 291
+call   14 returned 291
+      291:  294:            std::string u8 = Path::wideToUtf8(s);
+call    0 returned 291
+branch  1 taken 291 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+    15806:  295:            for (size_t i = 0; i < u8.size(); ++i) if (u8[i] == '\\') u8[i] = '/';
+call    0 returned 15806
+branch  1 taken 15515 (fallthrough)
+branch  2 taken 291
+call    3 returned 15515
+branch  4 taken 15515 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 2103 (fallthrough)
+branch  7 taken 13412
+call    8 returned 2103
+branch  9 taken 2103 (fallthrough)
+branch 10 taken 0 (throw)
+      291:  296:            out = u8;
+call    0 returned 291
+branch  1 taken 291 (fallthrough)
+branch  2 taken 0 (throw)
+      291:  297:            return E_OK;
+call    0 returned 291
+        -:  298:        }
+        -:  299:    }
+      190:  300:    DWORD n = GetFullPathNameW(wp.c_str(), DWORD(buf.size()), buf.data(), nullptr);
+call    0 returned 190
+call    1 returned 190
+call    2 returned 190
+call    3 returned 190
+branch  4 taken 190 (fallthrough)
+branch  5 taken 0 (throw)
+     190*:  301:    if (n == 0 || n >= buf.size()) return E_INVALID_PARAMETER;
+branch  0 taken 190 (fallthrough)
+branch  1 taken 0
+call    2 returned 190
+branch  3 taken 0 (fallthrough)
+branch  4 taken 190
+branch  5 taken 0 (fallthrough)
+branch  6 taken 190
+      380:  302:    std::wstring s(buf.data(), n);
+call    0 returned 190
+call    1 returned 190
+call    2 returned 190
+branch  3 taken 190 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 190
+call    6 never executed
+        -:  303:    /* \\?\ 形式的绝对化结果里带着前缀，内部规范路径不该有它：
+        -:  304:     * 否则后续拼接 '/' 会破坏前缀语义（apiWide 只认反斜杠前缀） */
+     190*:  305:    if (s.size() >= 4 && s.compare(0, 4, L"\\\\?\\") == 0) s = s.substr(4);
+call    0 returned 190
+branch  1 taken 190 (fallthrough)
+branch  2 taken 0
+call    3 returned 190
+branch  4 taken 190 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 190
+branch  8 taken 0 (fallthrough)
+branch  9 taken 190
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+call   14 never executed
+     190*:  306:    else if (s.size() >= 8 && s.compare(0, 8, L"\\\\?\\UNC\\") == 0) s = L"\\\\" + s.substr(8);
+call    0 returned 190
+branch  1 taken 190 (fallthrough)
+branch  2 taken 0
+call    3 returned 190
+branch  4 taken 190 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 190
+branch  8 taken 0 (fallthrough)
+branch  9 taken 190
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+      190:  307:    std::string u8 = Path::wideToUtf8(s);
+call    0 returned 190
+branch  1 taken 190 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+    12489:  308:    for (size_t i = 0; i < u8.size(); ++i) if (u8[i] == '\\') u8[i] = '/';
+call    0 returned 12489
+branch  1 taken 12299 (fallthrough)
+branch  2 taken 190
+call    3 returned 12299
+branch  4 taken 12299 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 1473 (fallthrough)
+branch  7 taken 10826
+call    8 returned 1473
+branch  9 taken 1473 (fallthrough)
+branch 10 taken 0 (throw)
+      190:  309:    out = u8;
+call    0 returned 190
+branch  1 taken 190 (fallthrough)
+branch  2 taken 0 (throw)
+      190:  310:    return E_OK;
+call    0 returned 190
+        -:  311:}
+        -:  312:
+function _ZN4DBKP8Platform11freeSpaceAtERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  313:uint64_t freeSpaceAt(const std::string& path) {
+    #####:  314:    std::string root = path;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  315:    size_t pos = root.find_first_of("/\\");
+call    0 never executed
+    #####:  316:    if (root.size() >= 2 && root[1] == ':') root = root.substr(0, 2) + "\\";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+    #####:  317:    else if (pos != std::string::npos) root = root.substr(0, pos + 1);
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+    #####:  318:    else root = ".";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  319:    ULARGE_INTEGER freeBytes;
+    #####:  320:    std::wstring wp = Path::utf8ToWide(root);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  321:    if (!GetDiskFreeSpaceExW(wp.c_str(), &freeBytes, nullptr, nullptr)) return 0;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  322:    return freeBytes.QuadPart;
+        -:  323:}
+        -:  324:
+        -:  325:/* ------------------------------------------------------------- 特殊文件 */
+function _ZN4DBKP8Platform11makeSymlinkERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 1 returned 100% blocks executed 60%
+        1:  326:ErrCode makeSymlink(const std::string& target, const std::string& linkPath) {
+        2:  327:    std::wstring wt = Path::utf8ToWide(Path::normalize(target));
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+call    7 never executed
+        2:  328:    std::wstring wl = Path::apiWide(linkPath);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+call    4 never executed
+        2:  329:    FileInfo fi;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+       1*:  330:    DWORD flag = (!DBKP_IS_ERR(getInfo(Path::normalize(target), fi, true)) &&
+call    0 returned 1
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+       1*:  331:                  fi.type == FT_DIR) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 1
+branch  8 never executed
+branch  9 never executed
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0
+        -:  332:    /* 非特权/未开启开发者模式时返回不支持，由上层降级为警告 */
+        1:  333:    if (!CreateSymbolicLinkW(wl.c_str(), wt.c_str(), flag)) {
+call    0 returned 1
+call    1 returned 1
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0
+       1*:  334:        return GetLastError() == ERROR_PRIVILEGE_NOT_HELD ? E_PERMISSION_DENIED
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+        1:  335:                                                          : E_UNSUPPORTED_FEATURE;
+        -:  336:    }
+    #####:  337:    return E_OK;
+        -:  338:}
+        -:  339:
+function _ZN4DBKP8Platform12makeHardLinkERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 3 returned 100% blocks executed 71%
+        3:  340:ErrCode makeHardLink(const std::string& existing, const std::string& newPath) {
+        6:  341:    std::wstring we = Path::apiWide(existing);
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3
+call    4 never executed
+        3:  342:    std::wstring wn = Path::apiWide(newPath);
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+       6*:  343:    return CreateHardLinkW(wn.c_str(), we.c_str(), nullptr) ? E_OK : E_FILE_WRITE_FAIL;
+call    0 returned 3
+call    1 returned 3
+call    2 returned 3
+branch  3 taken 3 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 3 (fallthrough)
+branch  6 taken 0
+call    7 returned 3
+        -:  344:}
+        -:  345:
+function _ZN4DBKP8Platform8makeFifoERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEj called 1 returned 100% blocks executed 100%
+        1:  346:ErrCode makeFifo(const std::string&, uint32_t) { return E_UNSUPPORTED_FEATURE; }
+        -:  347:
+function _ZN4DBKP8Platform14makeDeviceNodeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEcjjj called 2 returned 100% blocks executed 100%
+        2:  348:ErrCode makeDeviceNode(const std::string&, char, uint32_t, uint32_t, uint32_t) {
+        2:  349:    return E_UNSUPPORTED_FEATURE;
+        -:  350:}
+        -:  351:
+function _ZN4DBKP8Platform21makeSocketPlaceholderERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 1 returned 100% blocks executed 78%
+        1:  352:ErrCode makeSocketPlaceholder(const std::string& path) {
+        -:  353:    /* Windows 无 AF_UNIX 节点语义，落一个带说明的空文件保留目录项 */
+        1:  354:    return CSimpleFile::writeWhole(path, std::vector<uint8_t>());
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 1
+call    5 never executed
+        -:  355:}
+        -:  356:
+        -:  357:/* ------------------------------------------------------------- 元数据 */
+function _ZN4DBKP8Platform7setModeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEj called 169 returned 100% blocks executed 82%
+      169:  358:ErrCode setMode(const std::string& path, uint32_t mode) {
+      338:  359:    std::wstring wp = Path::apiWide(path);
+call    0 returned 169
+branch  1 taken 169 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 169
+call    4 never executed
+      169:  360:    if (mode & 0200) {
+branch  0 taken 168 (fallthrough)
+branch  1 taken 1
+      168:  361:        SetFileAttributesW(wp.c_str(), FILE_ATTRIBUTE_NORMAL);
+call    0 returned 168
+call    1 returned 168
+branch  2 taken 168 (fallthrough)
+branch  3 taken 0 (throw)
+      168:  362:        return E_OK;
+        -:  363:    }
+       1*:  364:    return SetFileAttributesW(wp.c_str(), FILE_ATTRIBUTE_READONLY) ? E_OK : E_FILE_WRITE_FAIL;
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0
+        -:  365:}
+        -:  366:
+function _ZN4DBKP8Platform8setOwnerERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEjj called 1 returned 100% blocks executed 100%
+        1:  367:ErrCode setOwner(const std::string&, uint32_t, uint32_t) { return E_UNSUPPORTED_FEATURE; }
+        -:  368:
+function _ZN4DBKP8Platform8setTimesERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEExxxxb called 171 returned 100% blocks executed 77%
+      171:  369:ErrCode setTimes(const std::string& path, int64_t mtSec, int64_t mtNs,
+        -:  370:                 int64_t atSec, int64_t atNs, bool follow) {
+      342:  371:    std::wstring wp = Path::apiWide(path);
+call    0 returned 171
+branch  1 taken 171 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 171
+call    4 never executed
+     171*:  372:    HANDLE h = CreateFileW(wp.c_str(), FILE_WRITE_ATTRIBUTES,
+branch  0 taken 171 (fallthrough)
+branch  1 taken 0
+call    2 returned 171
+call    3 returned 171
+branch  4 taken 171 (fallthrough)
+branch  5 taken 0 (throw)
+        -:  373:                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        -:  374:                           nullptr, OPEN_EXISTING,
+        -:  375:                           FILE_FLAG_BACKUP_SEMANTICS |
+        -:  376:                           (follow ? 0 : FILE_FLAG_OPEN_REPARSE_POINT),
+        -:  377:                           nullptr);
+     171*:  378:    if (h == INVALID_HANDLE_VALUE) return E_PERMISSION_DENIED;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 171
+      171:  379:    FILETIME at = unixToFileTime(atSec, atNs);
+call    0 returned 171
+      171:  380:    FILETIME wt = unixToFileTime(mtSec, mtNs);
+call    0 returned 171
+      171:  381:    BOOL ok = SetFileTime(h, nullptr, &at, &wt);
+call    0 returned 171
+branch  1 taken 171 (fallthrough)
+branch  2 taken 0 (throw)
+      171:  382:    CloseHandle(h);
+call    0 returned 171
+branch  1 taken 171 (fallthrough)
+branch  2 taken 0 (throw)
+     171*:  383:    return ok ? E_OK : E_FILE_WRITE_FAIL;
+branch  0 taken 171 (fallthrough)
+branch  1 taken 0
+        -:  384:}
+        -:  385:
+        -:  386:/* --------------------------------------------------- 原生文件描述符 */
+function _ZN4DBKP8Platform10openNativeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEii called 1387 returned 100% blocks executed 77%
+     1387:  387:int openNative(const std::string& path, int flags, int mode) {
+     2774:  388:    std::wstring wp = Path::apiWide(path);
+call    0 returned 1387
+branch  1 taken 1387 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1387
+call    4 never executed
+    1387*:  389:    if (wp.empty()) return -1;
+call    0 returned 1387
+branch  1 taken 0 (fallthrough)
+branch  2 taken 1387
+     1387:  390:    return _wopen(wp.c_str(), flags, mode);
+call    0 returned 1387
+call    1 returned 1387
+branch  2 taken 1387 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  391:}
+        -:  392:
+function _ZN4DBKP8Platform10readNativeEiPvx called 1911 returned 100% blocks executed 83%
+     1911:  393:int64_t readNative(int fd, void* buf, int64_t bytes) {
+    1911*:  394:    unsigned int want = bytes > 0x40000000 ? 0x40000000u : unsigned(bytes);
+branch  0 taken 1911 (fallthrough)
+branch  1 taken 0
+     1911:  395:    int rc = _read(fd, buf, want);
+call    0 returned 1911
+     1911:  396:    return rc < 0 ? -1 : int64_t(rc);
+        -:  397:}
+        -:  398:
+function _ZN4DBKP8Platform11writeNativeEiPKvx called 2242 returned 100% blocks executed 83%
+     2242:  399:int64_t writeNative(int fd, const void* buf, int64_t bytes) {
+    2242*:  400:    unsigned int want = bytes > 0x40000000 ? 0x40000000u : unsigned(bytes);
+branch  0 taken 2242 (fallthrough)
+branch  1 taken 0
+     2242:  401:    int rc = _write(fd, buf, want);
+call    0 returned 2242
+     2242:  402:    return rc < 0 ? -1 : int64_t(rc);
+        -:  403:}
+        -:  404:
+function _ZN4DBKP8Platform10seekNativeEixi called 741 returned 100% blocks executed 100%
+      741:  405:int64_t seekNative(int fd, int64_t offset, int whence) {
+      741:  406:    __int64 p = _lseeki64(fd, offset, whence);
+call    0 returned 741
+      741:  407:    return p < 0 ? -1 : int64_t(p);
+        -:  408:}
+        -:  409:
+function _ZN4DBKP8Platform11closeNativeEi called 1380 returned 100% blocks executed 100%
+     1380:  410:int closeNative(int fd) { return _close(fd); }
+call    0 returned 1380
+        -:  411:
+function _ZN4DBKP8Platform11fsyncNativeEi called 562 returned 100% blocks executed 83%
+     562*:  412:int fsyncNative(int fd) { return _commit(fd) == 0 ? 0 : -1; }
+call    0 returned 562
+branch  1 taken 562 (fallthrough)
+branch  2 taken 0
+        -:  413:
+function _ZN4DBKP8Platform10fileSizeOfEi called 0 returned 0% blocks executed 0%
+    #####:  414:int64_t fileSizeOf(int fd) {
+    #####:  415:    __int64 cur = _lseeki64(fd, 0, SEEK_CUR);
+call    0 never executed
+    #####:  416:    __int64 end = _lseeki64(fd, 0, SEEK_END);
+call    0 never executed
+    #####:  417:    _lseeki64(fd, cur, SEEK_SET);
+call    0 never executed
+    #####:  418:    return end;
+        -:  419:}
+        -:  420:
+        -:  421:/* ------------------------------------------------- 跨进程文件锁（F4） */
+function _ZN4DBKP8Platform11tryLockFileEi called 100 returned 100% blocks executed 90%
+      100:  422:ErrCode tryLockFile(int fd) {
+        -:  423:    /* LockFileEx 锁的是"文件句柄"而非进程：同进程两个句柄、跨进程句柄
+        -:  424:       都会互相冲突，正好同时满足清单要求的"进程内 + 跨进程"两层锁。
+        -:  425:       FAIL_IMMEDIATELY：拿不到立刻返回，绝不阻塞 UI/守护线程。 */
+      100:  426:    HANDLE h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+call    0 returned 100
+branch  1 taken 100 (fallthrough)
+branch  2 taken 0 (throw)
+     100*:  427:    if (h == INVALID_HANDLE_VALUE) return E_FILE_OPEN_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 100
+        -:  428:    OVERLAPPED ov;
+      100:  429:    std::memset(&ov, 0, sizeof(ov));
+        -:  430:    /* 锁 1 字节偏移 0：整文件独占。解锁/关闭句柄时系统自动释放。 */
+      100:  431:    if (LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+call    0 returned 100
+branch  1 taken 100 (fallthrough)
+branch  2 taken 0 (throw)
+      100:  432:                   0, 1, 0, &ov))
+branch  0 taken 98 (fallthrough)
+branch  1 taken 2
+       98:  433:        return E_OK;
+        2:  434:    return E_BUSY;
+        -:  435:}
+        -:  436:
+function _ZN4DBKP8Platform10unlockFileEi called 3 returned 100% blocks executed 86%
+        3:  437:void unlockFile(int fd) {
+        3:  438:    HANDLE h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+       3*:  439:    if (h == INVALID_HANDLE_VALUE) return;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3
+        -:  440:    OVERLAPPED ov;
+        3:  441:    std::memset(&ov, 0, sizeof(ov));
+        3:  442:    UnlockFileEx(h, 0, 1, 0, &ov);
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  443:}
+        -:  444:
+function _ZN4DBKP8Platform12truncateFileEix called 92 returned 100% blocks executed 83%
+       92:  445:ErrCode truncateFile(int fd, int64_t size) {
+      92*:  446:    return _chsize_s(fd, size) == 0 ? E_OK : E_FILE_WRITE_FAIL;
+call    0 returned 92
+branch  1 taken 92 (fallthrough)
+branch  2 taken 0
+        -:  447:}
+        -:  448:
+        -:  449:/* ------------------------------------------------------------- 能力查询 */
+function _ZN4DBKP8Platform15supportsSymlinkEv called 1 returned 100% blocks executed 100%
+        1:  450:bool supportsSymlink()    { return true;   /* 需开发者模式或管理员权限 */ }
+function _ZN4DBKP8Platform16supportsHardlinkEv called 0 returned 0% blocks executed 0%
+    #####:  451:bool supportsHardlink()   { return true; }
+function _ZN4DBKP8Platform12supportsFifoEv called 0 returned 0% blocks executed 0%
+    #####:  452:bool supportsFifo()       { return false; }
+function _ZN4DBKP8Platform18supportsDeviceNodeEv called 0 returned 0% blocks executed 0%
+    #####:  453:bool supportsDeviceNode() { return false; }
+function _ZN4DBKP8Platform13supportsOwnerEv called 393 returned 100% blocks executed 100%
+      393:  454:bool supportsOwner()      { return false; }
+function _ZN4DBKP8Platform16supportsNanoTimeEv called 0 returned 0% blocks executed 0%
+    #####:  455:bool supportsNanoTime()   { return true; }
+        -:  456:
+        -:  457:/* Windows 侧没有 POSIX 属主概念：统一返回不支持，过滤器会自动降级为"不按名字过滤" */
+function _ZN4DBKP8Platform9uidToNameEjRNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  458:ErrCode uidToName(uint32_t, std::string& name) { name.clear(); return E_UNSUPPORTED_FEATURE; }
+call    0 never executed
+function _ZN4DBKP8Platform9nameToUidERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERj called 0 returned 0% blocks executed 0%
+    #####:  459:ErrCode nameToUid(const std::string&, uint32_t& uid) { uid = 0; return E_UNSUPPORTED_FEATURE; }
+        -:  460:
+function _ZN4DBKP8Platform6osNameB5cxx11Ev called 0 returned 0% blocks executed 0%
+    #####:  461:std::string osName() { return "Windows"; }
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  462:
+        -:  463:} /* namespace Platform */
+        -:  464:} /* namespace DBKP */
+        -:  465:
+        -:  466:#endif /* DBKP_OS_WINDOWS */
+        -:  467:
+        -:  468:
+        -:  469:

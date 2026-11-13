@@ -1,0 +1,340 @@
+        -:    0:Source:src/Utils/SimpleFile.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/SimpleFile.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/SimpleFile.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  SimpleFile.cpp  -- CSimpleFile 实现（路径统一按 UTF-8 交给平台层打开）
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Utils/SimpleFile.h"
+        -:    5:
+        -:    6:#include <cerrno>
+        -:    7:#include <cstring>
+        -:    8:#include <vector>
+        -:    9:
+        -:   10:#include "Platform/FS.h"
+        -:   11:
+        -:   12:namespace DBKP {
+        -:   13:
+function _ZN4DBKPL13toNativeFlagsENS_11CSimpleFile8OpenModeE called 1387 returned 100% blocks executed 75%
+     1387:   14:static int toNativeFlags(CSimpleFile::OpenMode mode) {
+     1387:   15:    int flags = 0;
+     1387:   16:    switch (mode) {
+branch  0 taken 812
+branch  1 taken 475
+branch  2 taken 0
+branch  3 taken 0
+branch  4 taken 100
+branch  5 taken 0
+      812:   17:    case CSimpleFile::MODE_READ:         flags = O_RDONLY; break;
+      475:   18:    case CSimpleFile::MODE_WRITE_NEW:    flags = O_WRONLY | O_CREAT | O_TRUNC; break;
+    #####:   19:    case CSimpleFile::MODE_WRITE_APPEND: flags = O_WRONLY | O_CREAT | O_APPEND; break;
+    #####:   20:    case CSimpleFile::MODE_READ_WRITE:   flags = O_RDWR | O_CREAT | O_TRUNC; break;
+      100:   21:    case CSimpleFile::MODE_READ_WRITE_CREATE: flags = O_RDWR | O_CREAT; break;
+        -:   22:    }
+        -:   23:#if defined(DBKP_OS_WINDOWS)
+     1387:   24:    flags |= O_BINARY;
+        -:   25:#endif
+     1387:   26:    return flags;
+        -:   27:}
+        -:   28:
+function _ZN4DBKP11CSimpleFileD2Ev called 1387 returned 100% blocks executed 100%
+     1387:   29:CSimpleFile::~CSimpleFile() {
+call    0 returned 1387
+     1387:   30:    if (m_fd >= 0) Platform::closeNative(m_fd);
+branch  0 taken 789 (fallthrough)
+branch  1 taken 598
+call    2 returned 789
+     1387:   31:}
+        -:   32:
+function _ZN4DBKP11CSimpleFile4openERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS0_8OpenModeE called 1387 returned 100% blocks executed 74%
+     1387:   33:ErrCode CSimpleFile::open(const std::string& path, OpenMode mode) {
+    1387*:   34:    if (m_fd >= 0) close();
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1387
+call    2 never executed
+     1387:   35:    int fd = Platform::openNative(path, toNativeFlags(mode), 0644);
+call    0 returned 1387
+call    1 returned 1387
+     1387:   36:    if (fd < 0) {
+branch  0 taken 7 (fallthrough)
+branch  1 taken 1380
+        7:   37:        if (errno == EACCES || errno == EPERM) return E_PERMISSION_DENIED;
+call    0 returned 7
+branch  1 taken 5 (fallthrough)
+branch  2 taken 2
+call    3 returned 5
+branch  4 taken 0 (fallthrough)
+branch  5 taken 5
+branch  6 taken 2 (fallthrough)
+branch  7 taken 5
+       5*:   38:        if (errno == ENOENT && mode == MODE_READ) return E_SOURCE_NOT_FOUND;
+call    0 returned 5
+branch  1 taken 5 (fallthrough)
+branch  2 taken 0
+branch  3 taken 5 (fallthrough)
+branch  4 taken 0
+branch  5 taken 5 (fallthrough)
+branch  6 taken 0
+    #####:   39:        if (errno == ENOSPC) return E_NOT_ENOUGH_SPACE;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   40:        return E_FILE_OPEN_FAIL;
+        -:   41:    }
+     1380:   42:    m_path = path;
+call    0 returned 1380
+     1380:   43:    m_fd   = fd;
+     1380:   44:    m_eof  = false;
+     1380:   45:    m_pos  = (mode == CSimpleFile::MODE_WRITE_APPEND)
+    1380*:   46:           ? Platform::seekNative(fd, 0, SEEK_END) : 0;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1380
+call    2 never executed
+     1380:   47:    return E_OK;
+        -:   48:}
+        -:   49:
+function _ZN4DBKP11CSimpleFile5closeEv called 595 returned 100% blocks executed 88%
+      595:   50:ErrCode CSimpleFile::close() {
+      595:   51:    if (m_fd < 0) return E_OK;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 591
+      591:   52:    int rc = Platform::closeNative(m_fd);
+call    0 returned 591
+      591:   53:    m_fd = -1;
+     591*:   54:    return rc == 0 ? E_OK : E_FILE_WRITE_FAIL;
+branch  0 taken 591 (fallthrough)
+branch  1 taken 0
+        -:   55:}
+        -:   56:
+function _ZN4DBKP11CSimpleFile5readNEPvx called 1288 returned 100% blocks executed 88%
+     1288:   57:ErrCode CSimpleFile::readN(void* buffer, int64_t bytes) {
+    1288*:   58:    if (m_fd < 0) return E_FILE_OPEN_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1288
+     1288:   59:    m_eof = false;
+     1288:   60:    uint8_t* p = static_cast<uint8_t*>(buffer);
+     1288:   61:    int64_t got = 0;
+     2534:   62:    while (got < bytes) {
+branch  0 taken 1291 (fallthrough)
+branch  1 taken 1243
+     1291:   63:        int64_t n = Platform::readNative(m_fd, p + got, bytes - got);
+call    0 returned 1291
+     1291:   64:        if (n < 0) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1290
+       1*:   65:            if (errno == EINTR) continue;
+call    0 returned 1
+branch  1 taken 0 (fallthrough)
+branch  2 taken 1
+        1:   66:            return E_FILE_READ_FAIL;
+        -:   67:        }
+     1290:   68:        if (n == 0) { m_eof = true; return E_FILE_READ_FAIL; }  /* 提前 EOF */
+branch  0 taken 44 (fallthrough)
+branch  1 taken 1246
+     1246:   69:        got += n;
+        -:   70:    }
+     1243:   71:    m_pos += got;
+     1243:   72:    return E_OK;
+        -:   73:}
+        -:   74:
+function _ZN4DBKP11CSimpleFile6writeNEPKvx called 2252 returned 100% blocks executed 50%
+     2252:   75:ErrCode CSimpleFile::writeN(const void* buffer, int64_t bytes) {
+    2252*:   76:    if (m_fd < 0) return E_FILE_OPEN_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2252
+     2252:   77:    const uint8_t* p = static_cast<const uint8_t*>(buffer);
+     2252:   78:    int64_t put = 0;
+     4494:   79:    while (put < bytes) {
+branch  0 taken 2242 (fallthrough)
+branch  1 taken 2252
+     2242:   80:        int64_t n = Platform::writeNative(m_fd, p + put, bytes - put);
+call    0 returned 2242
+     2242:   81:        if (n < 0) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2242
+    #####:   82:            if (errno == EINTR) continue;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   83:            return errno == ENOSPC ? E_NOT_ENOUGH_SPACE : E_FILE_WRITE_FAIL;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:   84:        }
+    2242*:   85:        if (n == 0) return E_FILE_WRITE_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2242
+     2242:   86:        put += n;
+        -:   87:    }
+     2252:   88:    m_pos += put;
+     2252:   89:    return E_OK;
+        -:   90:}
+        -:   91:
+function _ZN4DBKP11CSimpleFile7readAllERSt6vectorIhSaIhEEx called 303 returned 100% blocks executed 62%
+      303:   92:ErrCode CSimpleFile::readAll(std::vector<uint8_t>& out, int64_t limitBytes) {
+      303:   93:    out.clear();
+call    0 returned 303
+     303*:   94:    if (m_fd < 0) return E_FILE_OPEN_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 303
+      303:   95:    m_eof = false;
+      303:   96:    const int64_t CHUNK = 64 * 1024;
+      606:   97:    std::vector<uint8_t> buf;
+call    0 returned 303
+call    1 returned 303
+call    2 never executed
+      303:   98:    buf.resize(std::vector<uint8_t>::size_type(CHUNK));
+call    0 returned 303
+branch  1 taken 303 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   99:    for (;;) {
+      608:  100:        int64_t want = CHUNK;
+      608:  101:        if (limitBytes >= 0) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 608
+    #####:  102:            int64_t remain = limitBytes - int64_t(out.size());
+call    0 never executed
+    #####:  103:            if (remain <= 0) return E_NOT_ENOUGH_SPACE;
+branch  0 never executed
+branch  1 never executed
+    #####:  104:            if (want > remain) want = remain;
+branch  0 never executed
+branch  1 never executed
+        -:  105:        }
+      608:  106:        int64_t n = Platform::readNative(m_fd, buf.data(), want);
+call    0 returned 608
+call    1 returned 608
+branch  2 taken 608 (fallthrough)
+branch  3 taken 0 (throw)
+      608:  107:        if (n < 0) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 607
+       1*:  108:            if (errno == EINTR) continue;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 1
+        1:  109:            return E_FILE_READ_FAIL;
+        -:  110:        }
+      607:  111:        if (n == 0) { m_eof = true; break; }      /* 正常读到文件末尾 */
+branch  0 taken 302 (fallthrough)
+branch  1 taken 305
+      305:  112:        out.insert(out.end(), buf.begin(), buf.begin() + n);
+call    0 returned 305
+call    1 returned 305
+call    2 returned 305
+call    3 returned 305
+call    4 returned 305
+call    5 returned 305
+branch  6 taken 305 (fallthrough)
+branch  7 taken 0 (throw)
+      305:  113:        m_pos += n;
+     305*:  114:        if (limitBytes >= 0 && int64_t(out.size()) >= limitBytes) break;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 305
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 taken 0 (fallthrough)
+branch  6 taken 305
+      305:  115:    }
+      302:  116:    return E_OK;
+        -:  117:}
+        -:  118:
+function _ZN4DBKP11CSimpleFile8writeAllERKSt6vectorIhSaIhEE called 380 returned 100% blocks executed 100%
+      380:  119:ErrCode CSimpleFile::writeAll(const std::vector<uint8_t>& data) {
+      380:  120:    return writeN(data.data(), int64_t(data.size()));
+call    0 returned 380
+call    1 returned 380
+call    2 returned 380
+        -:  121:}
+        -:  122:
+function _ZN4DBKP11CSimpleFile8seekFileExi called 741 returned 100% blocks executed 71%
+      741:  123:ErrCode CSimpleFile::seekFile(int64_t offset, int whence) {
+     741*:  124:    if (m_fd < 0) return E_FILE_OPEN_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 741
+      741:  125:    int64_t pos = Platform::seekNative(m_fd, offset, whence);
+call    0 returned 741
+     741*:  126:    if (pos < 0) return E_FILE_READ_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 741
+      741:  127:    m_pos = pos;
+      741:  128:    m_eof = false;
+      741:  129:    return E_OK;
+        -:  130:}
+        -:  131:
+function _ZNK4DBKP11CSimpleFile4sizeERx called 0 returned 0% blocks executed 0%
+    #####:  132:ErrCode CSimpleFile::size(int64_t& outSize) const {
+    #####:  133:    if (m_fd < 0) return E_FILE_OPEN_FAIL;
+branch  0 never executed
+branch  1 never executed
+    #####:  134:    outSize = Platform::fileSizeOf(m_fd);
+call    0 never executed
+    #####:  135:    return outSize < 0 ? E_FILE_READ_FAIL : E_OK;
+branch  0 never executed
+branch  1 never executed
+        -:  136:}
+        -:  137:
+function _ZN4DBKP11CSimpleFile5flushEv called 562 returned 100% blocks executed 75%
+      562:  138:ErrCode CSimpleFile::flush() {
+     562*:  139:    if (m_fd < 0) return E_OK;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 562
+     562*:  140:    return Platform::fsyncNative(m_fd) == 0 ? E_OK : E_FILE_WRITE_FAIL;
+call    0 returned 562
+branch  1 taken 562 (fallthrough)
+branch  2 taken 0
+        -:  141:}
+        -:  142:
+function _ZN4DBKP11CSimpleFile9readWholeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERSt6vectorIhSaIhEE called 303 returned 100% blocks executed 75%
+      303:  143:ErrCode CSimpleFile::readWhole(const std::string& path, std::vector<uint8_t>& out) {
+      606:  144:    CSimpleFile f;
+call    0 returned 303
+call    1 returned 303
+call    2 never executed
+      303:  145:    ErrCode e = f.open(path, MODE_READ);
+call    0 returned 303
+branch  1 taken 303 (fallthrough)
+branch  2 taken 0 (throw)
+     303*:  146:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 303
+      303:  147:    return f.readAll(out);
+call    0 returned 303
+branch  1 taken 303 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  148:}
+        -:  149:
+function _ZN4DBKP11CSimpleFile10writeWholeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKSt6vectorIhSaIhEE called 380 returned 100% blocks executed 80%
+      380:  150:ErrCode CSimpleFile::writeWhole(const std::string& path, const std::vector<uint8_t>& data) {
+      760:  151:    CSimpleFile f;
+call    0 returned 380
+call    1 returned 380
+call    2 never executed
+      380:  152:    ErrCode e = f.open(path, MODE_WRITE_NEW);
+call    0 returned 380
+branch  1 taken 380 (fallthrough)
+branch  2 taken 0 (throw)
+     380*:  153:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 380
+      380:  154:    e = f.writeAll(data);
+call    0 returned 380
+branch  1 taken 380 (fallthrough)
+branch  2 taken 0 (throw)
+      380:  155:    DBKP_FAIL(e, f.flush());
+branch  0 taken 380 (fallthrough)
+branch  1 taken 0
+call    2 returned 380
+branch  3 taken 380 (fallthrough)
+branch  4 taken 0 (throw)
+      380:  156:    return f.close();
+call    0 returned 380
+branch  1 taken 380 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  157:}
+        -:  158:
+        -:  159:} /* namespace DBKP */

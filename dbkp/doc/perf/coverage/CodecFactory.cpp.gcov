@@ -1,0 +1,104 @@
+        -:    0:Source:src/Codec/CodecFactory.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/CodecFactory.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/CodecFactory.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  CodecFactory.cpp  -- 算法注册与工厂（AlgorithmFactory / CryptoFactory）
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Codec/Codecs.h"
+        -:    5:#include "Codec/DataCodec.h"
+        -:    6:
+        -:    7:#include "Crypto/Algorithms.h"
+        -:    8:
+        -:    9:namespace DBKP {
+        -:   10:
+function _ZN4DBKP18CompressionFactory6createENS_11AlgorithmIdE called 77 returned 100% blocks executed 94%
+       77:   11:IDataCodec* CompressionFactory::create(AlgorithmId id) {
+       77:   12:    switch (id) {
+branch  0 taken 2
+branch  1 taken 14
+branch  2 taken 35
+branch  3 taken 10
+branch  4 taken 14
+branch  5 taken 2
+        2:   13:    case ALG_NONE:    return nullptr;
+       14:   14:    case ALG_HUFFMAN: return new CHuffman();
+call    0 returned 14
+call    1 returned 14
+       35:   15:    case ALG_LZ77:    return new CLZ77();
+call    0 returned 35
+call    1 returned 35
+       10:   16:    case ALG_RLE:     return new CRle();
+call    0 returned 10
+call    1 returned 10
+       14:   17:    case ALG_LZHUFF:  return new CComboCodec();
+call    0 returned 14
+call    1 returned 14
+branch  2 taken 14 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+        2:   18:    default:          return nullptr;
+        -:   19:    }
+        -:   20:}
+        -:   21:
+function _ZN4DBKP18CompressionFactory11descriptionENS_11AlgorithmIdE called 4 returned 100% blocks executed 75%
+        4:   22:const char* CompressionFactory::description(AlgorithmId id) {
+        4:   23:    switch (id) {
+branch  0 taken 0
+branch  1 taken 1
+branch  2 taken 1
+branch  3 taken 1
+branch  4 taken 1
+branch  5 taken 0
+    #####:   24:    case ALG_NONE:    return "no compression";
+        1:   25:    case ALG_HUFFMAN: return "canonical Huffman, byte frequency table, <=24-bit codes";
+        1:   26:    case ALG_LZ77:    return "LZ77, 4096B window, 3..18 byte matches, hash-accelerated";
+        1:   27:    case ALG_RLE:     return "run-length coding with escape tokens";
+        1:   28:    case ALG_LZHUFF:  return "LZ77 followed by Huffman (two-stage pipeline)";
+    #####:   29:    default:          return "unknown";
+        -:   30:    }
+        -:   31:}
+        -:   32:
+function _ZN4DBKP13CryptoFactory6createENS_8CryptoIdERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhi called 123 returned 100% blocks executed 100%
+      123:   33:IDataCodec* CryptoFactory::create(CryptoId id, const std::string& password,
+        -:   34:                                  const uint8_t salt[16], int kdfRounds) {
+      123:   35:    switch (id) {
+branch  0 taken 2
+branch  1 taken 70
+branch  2 taken 17
+branch  3 taken 21
+branch  4 taken 11
+branch  5 taken 2
+        2:   36:    case CRY_NONE:       return nullptr;
+       70:   37:    case CRY_AES256_CBC: return NewAesCbcCodec(password, salt, kdfRounds);
+call    0 returned 70
+       17:   38:    case CRY_CHACHA20:   return NewChaCha20Codec(password, salt, kdfRounds);
+call    0 returned 17
+       21:   39:    case CRY_DESEDE_CBC: return NewDesEdEcbcCodec(password, salt, kdfRounds);
+call    0 returned 21
+       11:   40:    case CRY_XOR_TEST:   return newXorTestCodec(password);
+call    0 returned 11
+        2:   41:    default:             return nullptr;
+        -:   42:    }
+        -:   43:}
+        -:   44:
+function _ZN4DBKP13CryptoFactory11descriptionENS_8CryptoIdE called 2 returned 100% blocks executed 50%
+        2:   45:const char* CryptoFactory::description(CryptoId id) {
+        2:   46:    switch (id) {
+branch  0 taken 0
+branch  1 taken 1
+branch  2 taken 0
+branch  3 taken 0
+branch  4 taken 0
+branch  5 taken 1
+    #####:   47:    case CRY_NONE:       return "no encryption";
+        1:   48:    case CRY_AES256_CBC: return "self-implemented AES-256-CBC, PKCS#7 padding, SHA-256 KDF";
+    #####:   49:    case CRY_CHACHA20:   return "self-implemented ChaCha20 stream cipher, SHA-256 KDF";
+    #####:   50:    case CRY_DESEDE_CBC: return "self-implemented DES-EDE-CBC (3DES), PKCS#7 padding, SHA-256 KDF";
+    #####:   51:    case CRY_XOR_TEST:   return "test-only keystream cipher (NOT secure)";
+        1:   52:    default:             return "unknown";
+        -:   53:    }
+        -:   54:}
+        -:   55:
+        -:   56:} /* namespace DBKP */

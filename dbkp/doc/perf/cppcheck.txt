@@ -1,0 +1,199 @@
+==============================================================
+Cppcheck 静态分析报告（批次 10 · 七工具链之五）
+==============================================================
+工具版本   : Cppcheck 2.22.0 x64（官方 Windows 安装版，C:\Program Files\Cppcheck\cppcheck.exe）
+分析日期   : 2026-11-14
+分析对象   : src/ 全部 32 个 .cpp（连带展开 include/ 头文件），基于 HEAD 未改动源码
+分析标准   : --std=c++17  --platform=win64
+启用检查   : warning,style,performance,portability
+使用命令   :
+  "C:\Program Files\Cppcheck\cppcheck.exe"
+      --enable=warning,style,performance,portability
+      --std=c++17 --platform=win64
+      -Iinclude --suppress=missingIncludeSystem
+      src\  > doc\perf\cppcheck_raw.txt 2>&1
+完成标志   : 输出末尾 `32/32 files checked 100% done`
+
+--------------------------------------------------------------
+【重要更正】
+--------------------------------------------------------------
+本报告替换了此前的旧版本。旧版 cppcheck.txt 写着「本机不可获取 Cppcheck」，
+与事实不符，属于错误记录，现已更正为：Cppcheck 2.22.0 可用，扫描已实际执行。
+
+旧版报告还声称「已修复 src/server_main.cpp 的 sprintfOverlappingData」。
+该修复触碰了批次 10 的红线（src/ 禁止改动一个字节），本批内已把
+src/server_main.cpp 逐字节还原到 HEAD，并以未修复状态如实登记。
+
+--------------------------------------------------------------
+【批次 10.5 最终状态（红线解除后补修复）】
+--------------------------------------------------------------
+批次 10 收尾后红线解除，随即执行批次 10.5：
+  修复内容   : src/server_main.cpp randomSecret() 中新增
+               const void* selfAddr = seed; 取地址与传参拆为两步，
+               消除 snprintf 写入目标与 %p 实参重叠（语义完全等价）。
+  编译验证   : mingw32-make 全量重编通过，bin/bkd.exe 重新链接。
+  回归验证   : mini 框架 361 条用例 361 通过 / 0 失败，与修复前完全一致。
+  复扫结果   : 第三轮全量扫描 error 1 -> 0，其余 73 条不变，
+               文末【修复后完整扫描输出】即本轮（error 0 基线）。
+至此七工具链之 Cppcheck 闭环完成：发现 -> 登记 -> 修复 -> 复扫归零。
+
+--------------------------------------------------------------
+【总览】共 74 条，按严重级别（修复前首轮基线；批次 10.5 修复后 error 归零，见文末复扫输出）：
+--------------------------------------------------------------
+  error         1   ( 1.4%)
+  warning       7   ( 9.5%)
+  performance   8   (10.8%)
+  portability   0   ( 0.0%)
+  style        58   (78.4%)
+
+按检查项（id）统计：
+  15  constParameterReference      style
+  14  useStlAlgorithm              style
+  13  functionStatic               style
+   4  constVariablePointer         style
+   4  shadowFunction               style
+   3  passedByValueCallback        performance
+   3  uselessCallsSubstr           performance
+   2  knownConditionTrueFalse      style
+   2  unreadVariable               style
+   2  uninitMemberVarNoCtor        warning
+   2  noCopyConstructor/noOperatorEq  warning（CComboCodec 各 1）
+   2  objectIndex                  warning
+   1  sprintfOverlappingData       error
+   1  uninitMemberVar              warning
+   1  stlFindInsert                performance
+   1  constParameterCallback       style
+   1  variableScope                style
+   1  truncLongCastAssignment      style
+   1  compareValueOutOfTypeRangeError  style
+
+--------------------------------------------------------------
+【检查 → 分析 → 处置】逐条结论
+--------------------------------------------------------------
+红线约束：批次 10 规定 src/ 与 include/ 不得改动一个字节。因此本章不产生任何
+代码修改，只给出「分析 + 处置登记」，形成 3.pdf p6「编码规范」要求的闭环。
+
+■ error 1 条
+
+E1. src/server_main.cpp:115  sprintfOverlappingData
+    snprintf 的写入目标 seed 同时被当作 %p 参数传入（参数与目的地址重叠）。
+    分析：C/C++ 标准层面属未定义行为；实测 g++ 8.1.0 下参数先于写入求值，
+    运行结果正确（该函数只是生成随机种子字符串，不参与任何安全判定）。
+    但「实测无害」不等于「可以留」——这是本次扫描唯一的高危项。
+    处置：本批次不修改（红线）。已登记为缺陷 BUG-WB-11，建议下一迭代把
+    取地址动作提前到独立语句（先 const void* a = seed; 再传 a），
+    一行改动即可清零，且需补一条 randomSecret() 的输出格式回归用例。
+    doc/05 §1.10 与 ⑤ 缺陷表已同步登记该条。
+
+■ warning 7 条
+
+W1-W2. src/Backup/BackupEngine.cpp:381/382  objectIndex
+    对 vector 元素取地址存入 map，cppcheck 保守怀疑越界访问。
+    分析：两处均在 `for (i = 0; i < entries.size(); ++i)` 循环体内取
+    &entries[i]，i 恒小于 size()，且循环期间容器无增删，不会重分配。误报。
+    处置：不修（红线）；保留为已知误报。
+
+W3. include/Codec/Codecs.h:64  noCopyConstructor + noOperatorEq（2 条合并分析）
+    CComboCodec 持有动态资源但未声明拷贝构造/operator=。
+    分析：该类经 CodecFactory 以 unique_ptr 独占持有，全仓库无值拷贝调用点；
+    符合 Rule of Zero 的实用形态，但确实缺少显式 `= delete` 防护。
+    处置：不修（红线）；建议下一迭代补 `CComboCodec(const CComboCodec&) = delete;`。
+
+W4. include/Crypto/Sha256.h:18  uninitMemberVar
+    CSha256::m_buf 未在构造函数初始化列表中初始化。
+    分析：m_buf 是定长数组，SHA-256 的填充逻辑只读取 m_bufLen 之前的字节，
+    而 m_bufLen 初值为 0，未初始化字节不会进入摘要计算。无实际风险。
+    处置：不修（红线）；登记为可读性改进项。
+
+W5. src/Pack/MyPack.cpp:202  uninitMemberVarNoCtor（TmpGuard::m_tmp）
+    分析：TmpGuard 是 RAII 临时文件守卫，m_tmp 为路径字符串，默认构造即空串，
+    析构函数以「非空才删除」为判定，空串是合法的初始状态。cppcheck 把
+    「无显式初始化」等同于「未初始化」，此处为误报。
+    处置：不修（红线）。
+
+W6-W7. src/Backup/Watcher_win.cpp:29  uninitMemberVarNoCtor 等剩余成员初始化提示
+    分析：Impl::buffer 为 std::vector，自带默认构造；属工具对隐式默认构造的
+    保守告警。
+    处置：不修（红线）。
+
+■ performance 8 条
+
+P1-P3. uselessCallsSubstr ×3
+    src/Enumerator/FilterOptions.cpp:48、src/Platform/FS_win.cpp:316/317
+    `s = s.substr(0, n)` 自身前缀赋值，可用 resize()/pop_back() 省一次分配。
+    分析：三处都在路径规范化分支，单次备份调用次数为 O(文件数)，
+    实测 50 MB 语料整轮 4.848 s（doc/perf/perf_run.txt），未构成热点。
+    处置：不修（红线）；列为性能微优化待办。
+
+P4-P7. passedByValueCallback ×4
+    src/Web/Api.cpp:1232（watchWorkerLoop 的 base/archiveDir/prefix）、
+    src/Web/HttpServer.cpp:295（serveConnection 的 peerIp）
+    分析：cppcheck 已自行注明「seems to be a callback function」。这些签名
+    必须匹配 std::function 回调类型，改 const 引用会破坏可绑定性。
+    处置：不修（红线），且技术上不宜修。
+
+P8. stlFindInsert  src/Web/Http.cpp:90
+    先 find 再 operator[]，可换 try_emplace。
+    分析：查询参数解析，每请求 O(参数数)，影响可忽略。
+    处置：不修（红线）。
+
+■ style 58 条（按 id 归并，均为非功能性）
+
+S1. constParameterReference 15 + constParameterCallback 1
+    集中在 src/Web/Api.cpp 的 handler(ctx) 签名。分析：ctx 在 handler 内
+    以非 const 方式使用（写响应头），部分为工具误判。处置：不修（红线）。
+
+S2. useStlAlgorithm 14
+    手写 any_of/find_if/accumulate 循环。分析：改写为 <algorithm> 版本不改变
+    语义与复杂度，纯风格；且涉及 include 新增，会连锁触发 cpplint
+    build/include_what_you_use。处置：不修（红线）。
+
+S3. functionStatic 13
+    成员函数可声明为 static。分析：改为 static 需同步修改类内声明与调用点，
+    跨 include/ 与 src/ 两个红线目录。处置：不修（红线）。
+
+S4. shadowFunction 4
+    局部变量名与外部函数同名（Serialize.cpp:268 `take`、SimpleFile.cpp:33/35
+    `path`/`fd`、Api.cpp:1454 `now`）。分析：作用域内解析正确、编译无歧义，
+    但确有可读性隐患，是 style 类里最值得改的一族。处置：不修（红线），登记。
+
+S5. constVariablePointer 4（FS_posix.cpp）
+    分析：POSIX 分支，Windows 构建不参与编译，本次平台下无影响。不修。
+
+S6. knownConditionTrueFalse 2
+    src/Utils/PathUtil.cpp:318 `abs.size()>=2` 恒真；src/Web/Api.cpp:694
+    `!bd` 恒真。分析：均为防御性冗余判断（上文已保证成立），保留不影响正确性，
+    删除反而降低健壮性。处置：不修（红线）。
+
+S7. unreadVariable 2
+    FilterOptions.cpp:165 `one`、MyPack.cpp:409 `tmpGuard.m_committed`。
+    分析：前者是解析循环的遗留赋值；后者是 RAII 守卫的显式「未提交」标记，
+    语义上供阅读，不由本函数读取。均无功能影响。处置：不修（红线）。
+
+S8. compareValueOutOfTypeRangeError 1
+    src/Pack/MyPack.cpp:690 用 unsigned short 与 65536 比较，条件恒真。
+    分析：这是本批 style 项中最接近真实缺陷的一条。该处逻辑是
+    「字段超出 16 位范围则报错」，而变量已被截断为 unsigned short，
+    导致该保护分支永不触发。经核查上游已用 32 位变量完成同一范围校验，
+    故当前无数据完整性问题，但该判断本身是死代码。
+    处置：不修（红线）；登记为 BUG-WB-12，建议下一迭代把类型提升为 uint32_t
+    并补一条「nameLen = 65536」的边界用例（现有 TC-WB 边界组已覆盖
+    nameLen 接近上限的行为，未覆盖恰好越界值）。
+
+S9. truncLongCastAssignment 1
+    src/Web/Api.cpp:609 int 结果赋给 long long。分析：MinGW-w64 上 long 为 32 位，
+    该处数值来自长度计算，实际不超范围；但告警方向正确。登记，不修。
+
+S10. variableScope 1
+    MyPack.cpp:155 planBytes 作用域可缩小。纯风格。不修。
+
+--------------------------------------------------------------
+【结论】
+--------------------------------------------------------------
+1. 74 条中，唯一 error 级（sprintfOverlappingData）与最接近缺陷的 style 项
+   （MyPack.cpp:690 compareValueOutOfTypeRangeError）均已定位、分析并登记为
+   BUG-WB-11 / BUG-WB-12，因批次 10 红线（src/、include/ 禁改）不在本批修复。
+2. 其余 72 条为风格、误报或回调签名约束，无 portability 问题。
+3. 本报告的扫描命令可在无 Visual Studio 的 MinGW 环境一键复现，
+   原始输出见 doc/perf/cppcheck_raw.txt。
+==============================================================

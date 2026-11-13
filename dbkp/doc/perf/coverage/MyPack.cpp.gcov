@@ -1,0 +1,4190 @@
+        -:    0:Source:src/Pack/MyPack.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Pack/MyPack.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Pack/MyPack.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  MyPack.cpp  -- 归档写入/读取主体
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Pack/MyPack.h"
+        -:    5:
+        -:    6:#include <algorithm>
+        -:    7:#include <cstring>
+        -:    8:#include <ctime>
+        -:    9:#include <memory>
+        -:   10:
+        -:   11:#include "Common/Serialize.h"
+        -:   12:#include "Crypto/Algorithms.h"    /* F3：fillSalt 改走 fillRandom（系统 CSPRNG） */
+        -:   13:#include "Crypto/Sha256.h"
+        -:   14:#include "Platform/FS.h"
+        -:   15:#include "Utils/CRC64.h"
+        -:   16:#include "Utils/Logger.h"
+        -:   17:#include "Utils/PathUtil.h"
+        -:   18:
+        -:   19:namespace DBKP {
+        -:   20:
+        -:   21:namespace {
+        -:   22:
+function _ZN4DBKP12_GLOBAL__N_19blocksForEx called 533 returned 100% blocks executed 80%
+      533:   23:uint64_t blocksFor(int64_t bytes) {
+     533*:   24:    return bytes <= 0 ? 0 : uint64_t((bytes + BLOCK_SIZE - 1) / BLOCK_SIZE);
+branch  0 taken 533 (fallthrough)
+branch  1 taken 0
+        -:   25:}
+        -:   26:
+function _ZN4DBKP12_GLOBAL__N_15absOfERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 577 returned 100% blocks executed 77%
+      577:   27:std::string absOf(const std::string& root, const std::string& rel) {
+      577:   28:    if (rel == "." || rel.empty()) return root;
+call    0 returned 577
+branch  1 taken 500 (fallthrough)
+branch  2 taken 77
+call    3 returned 500
+branch  4 taken 0 (fallthrough)
+branch  5 taken 500
+branch  6 taken 77 (fallthrough)
+branch  7 taken 500
+call    8 returned 77
+      500:   29:    return Path::normalize(root + "/" + rel);
+call    0 returned 500
+call    1 returned 500
+branch  2 taken 500 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 500
+branch  5 taken 500 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 500
+call    8 returned 500
+call    9 never executed
+call   10 never executed
+        -:   30:}
+        -:   31:
+        -:   32:/* F3 修复：KDF salt 原为 time()+栈地址播种的 xorshift，与 fillRandom 同款弱随机。
+        -:   33: * 统一改走 fillRandom（Windows: BCryptGenRandom；POSIX: getrandom/urandom）。 */
+function _ZN4DBKP12_GLOBAL__N_18fillSaltEPh called 100 returned 100% blocks executed 100%
+      100:   34:void fillSalt(uint8_t salt[16]) {
+      100:   35:    fillRandom(salt, 16);
+call    0 returned 100
+      100:   36:}
+        -:   37:
+        -:   38:/** 由遍历结果生成头记录（含元数据标志位） */
+function _ZN4DBKP12_GLOBAL__N_110makeRecordERKNS_15EnumeratedEntryE called 389 returned 100% blocks executed 80%
+      389:   39:FileRecord makeRecord(const EnumeratedEntry& ent) {
+      389:   40:    FileRecord rec;
+call    0 returned 389
+      389:   41:    const Platform::FileInfo& fi = ent.info;
+      389:   42:    rec.path = ent.relPath;
+call    0 returned 389
+branch  1 taken 389 (fallthrough)
+branch  2 taken 0 (throw)
+      389:   43:    rec.type = fi.type;
+      389:   44:    rec.mode = fi.mode;
+      389:   45:    rec.uid  = fi.uid;
+      389:   46:    rec.gid  = fi.gid;
+      389:   47:    rec.mtimeSec = fi.mtimeSec;  rec.mtimeNSec = fi.mtimeNSec;
+      389:   48:    rec.atimeSec = fi.atimeSec;  rec.atimeNSec = fi.atimeNSec;
+      389:   49:    rec.ctimeSec = fi.ctimeSec;
+      389:   50:    rec.ino = fi.ino;
+     389*:   51:    rec.nlink = fi.nlink ? fi.nlink : 1;
+branch  0 taken 389 (fallthrough)
+branch  1 taken 0
+      389:   52:    rec.dev = fi.dev;
+      389:   53:    rec.majorNum = fi.majorNum;
+      389:   54:    rec.minorNum = fi.minorNum;
+      389:   55:    rec.size = fi.size;
+      389:   56:    rec.flags = static_cast<uint8_t>(RF_META_MODE | RF_META_TIME | RF_CRC_VALID);
+     389*:   57:    if (Platform::supportsOwner()) rec.flags = static_cast<uint8_t>(rec.flags | RF_META_UID);
+call    0 returned 389
+branch  1 taken 389 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 389
+      389:   58:    if (rec.type == FT_SYMLINK) rec.link = fi.linkTarget;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 387
+call    2 returned 2
+branch  3 taken 2 (fallthrough)
+branch  4 taken 0 (throw)
+      389:   59:    return rec;
+        -:   60:}
+        -:   61:
+        -:   62:} /* anonymous namespace */
+        -:   63:
+function _ZNK4DBKP7CMyPack8makeCompENS_11AlgorithmIdERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 195 returned 100% blocks executed 33%
+      195:   64:IDataCodec* CMyPack::makeComp(AlgorithmId id, std::string& errText) const {
+      195:   65:    if (id == ALG_NONE) return nullptr;
+branch  0 taken 154 (fallthrough)
+branch  1 taken 41
+       41:   66:    IDataCodec* c = CompressionFactory::create(id);
+call    0 returned 41
+      41*:   67:    if (!c) errText = std::string("unknown compression algorithm: ") + algorithmName(id);
+branch  0 taken 0 (fallthrough)
+branch  1 taken 41
+call    2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+       41:   68:    return c;
+        -:   69:}
+        -:   70:
+function _ZNK4DBKP7CMyPack10makeCryptoENS_8CryptoIdERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPKhiRS7_ called 142 returned 100% blocks executed 81%
+      142:   71:IDataCodec* CMyPack::makeCrypto(CryptoId id, const std::string& password,
+        -:   72:                                const uint8_t salt[16], int rounds,
+        -:   73:                                std::string& errText) const {
+      142:   74:    if (id == CRY_NONE || password.empty()) return nullptr;
+branch  0 taken 63 (fallthrough)
+branch  1 taken 79
+call    2 returned 63
+branch  3 taken 1 (fallthrough)
+branch  4 taken 62
+branch  5 taken 80 (fallthrough)
+branch  6 taken 62
+       62:   75:    IDataCodec* c = CryptoFactory::create(id, password, salt, rounds);
+call    0 returned 62
+       62:   76:    if (!c) errText = std::string("unknown crypto algorithm: ") + cryptoName(id);
+branch  0 taken 1 (fallthrough)
+branch  1 taken 61
+call    2 returned 1
+call    3 returned 1
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+call   11 returned 1
+call   12 returned 1
+call   13 returned 1
+call   14 never executed
+call   15 never executed
+       62:   77:    return c;
+        -:   78:}
+        -:   79:
+        -:   80:/* ------------------------------------------------------------ 打包 */
+function _ZN4DBKP7CMyPack4packERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RKNS_11PackOptionsE called 106 returned 100% blocks executed 64%
+      106:   81:ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePath,
+        -:   82:                      const PackOptions& opt) {
+      106:   83:    m_errorText.clear();
+call    0 returned 106
+      106:   84:    if (sourceDir.empty() || archivePath.empty()) return E_INVALID_PARAMETER;
+call    0 returned 106
+branch  1 taken 105 (fallthrough)
+branch  2 taken 1
+call    3 returned 105
+branch  4 taken 1 (fallthrough)
+branch  5 taken 104
+branch  6 taken 2 (fallthrough)
+branch  7 taken 104
+        -:   85:
+        -:   86:    /* ---------------- F4：原子写前置检查 ----------------
+        -:   87:       正式箱从头到尾不被就地改写：所有内容由 "<archive>.tmp" 承载，写完整、
+        -:   88:       校验通过后才 rename 替换正式名。tmp 同时就是"进行中"标记（F6b）：
+        -:   89:       启动时它还在，说明上次备份被打断/杀死，必须显式 --force 才继续。 */
+      208:   90:    const std::string tmpPath = archivePath + ".tmp";
+call    0 returned 104
+branch  1 taken 104 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 104
+call    4 never executed
+        -:   91:
+      104:   92:    if (Platform::exists(archivePath) == E_OK && !opt.force) {
+call    0 returned 104
+branch  1 taken 104 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 7 (fallthrough)
+branch  4 taken 97
+branch  5 taken 2 (fallthrough)
+branch  6 taken 5
+branch  7 taken 2 (fallthrough)
+branch  8 taken 102
+        2:   93:        m_errorText = "archive already exists: " + archivePath + " (use --force to overwrite)";
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+call    7 returned 2
+call    8 returned 2
+call    9 never executed
+        2:   94:        LOG_ERR(m_errorText);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+        2:   95:        return E_ALREADY_EXISTS;
+        -:   96:    }
+      102:   97:    if (Platform::exists(tmpPath) == E_OK && !opt.force) {
+call    0 returned 102
+branch  1 taken 102 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 7 (fallthrough)
+branch  4 taken 95
+branch  5 taken 2 (fallthrough)
+branch  6 taken 5
+branch  7 taken 2 (fallthrough)
+branch  8 taken 100
+        4:   98:        m_errorText = "previous backup incomplete (temp file present): " + tmpPath +
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+call    7 returned 2
+call    8 never executed
+        2:   99:                      " (use --force to discard it and retry)";
+call    0 returned 2
+        2:  100:        LOG_ERR(m_errorText);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+        2:  101:        return E_INCOMPLETE;
+        -:  102:    }
+        -:  103:
+      200:  104:    std::unique_ptr<IDataCodec> comp(makeComp(opt.comp, m_errorText));
+call    0 returned 100
+branch  1 taken 100 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 100
+call    4 returned 100
+call    5 never executed
+     100*:  105:    if (!comp && opt.comp != ALG_NONE) { LOG_ERR(m_errorText); return E_INVALID_PARAMETER; }
+call    0 returned 100
+branch  1 taken 79 (fallthrough)
+branch  2 taken 21
+branch  3 taken 0 (fallthrough)
+branch  4 taken 79
+branch  5 taken 0 (fallthrough)
+branch  6 taken 100
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+        -:  106:
+        -:  107:    uint8_t salt[16];
+      100:  108:    fillSalt(salt);
+call    0 returned 100
+branch  1 taken 100 (fallthrough)
+branch  2 taken 0 (throw)
+      100:  109:    const int kdfRounds = 4096;
+      100:  110:    if (opt.crypto != CRY_NONE && opt.password.empty()) {
+branch  0 taken 34 (fallthrough)
+branch  1 taken 66
+call    2 returned 34
+branch  3 taken 1 (fallthrough)
+branch  4 taken 33
+branch  5 taken 1 (fallthrough)
+branch  6 taken 99
+        1:  111:        LOG_ERR("crypto requested but no password given");
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+call   11 returned 1
+call   12 never executed
+call   13 never executed
+        1:  112:        return E_INVALID_PARAMETER;
+        -:  113:    }
+        -:  114:    std::unique_ptr<IDataCodec> crypto(
+      198:  115:        makeCrypto(opt.crypto, opt.password, salt, kdfRounds, m_errorText));
+call    0 returned 99
+branch  1 taken 99 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 99
+call    4 returned 99
+call    5 never executed
+       99:  116:    if (!crypto && opt.crypto != CRY_NONE) { LOG_ERR(m_errorText); return E_INVALID_PARAMETER; }
+call    0 returned 99
+branch  1 taken 67 (fallthrough)
+branch  2 taken 32
+branch  3 taken 1 (fallthrough)
+branch  4 taken 66
+branch  5 taken 1 (fallthrough)
+branch  6 taken 98
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+branch 11 taken 1 (fallthrough)
+branch 12 taken 0 (throw)
+        -:  117:    /* F5（反向检查）：给了口令却没要加密算法 —— 口令会被整个丢弃，产出的是
+        -:  118:       明文归档，用户却以为加密了。宁可失败，不做"假加密"。
+        -:  119:       注意只拦打包：解包/校验/比对拿到 -p 却不带算法是正常用法（算法记在
+        -:  120:       归档头里），不能在这里拒绝。 */
+       98:  121:    if (opt.crypto == CRY_NONE && !opt.password.empty()) {
+branch  0 taken 66 (fallthrough)
+branch  1 taken 32
+call    2 returned 66
+branch  3 taken 2 (fallthrough)
+branch  4 taken 64
+branch  5 taken 2 (fallthrough)
+branch  6 taken 96
+        -:  122:        m_errorText = "password given but no crypto algorithm (-c): refusing to write an "
+        2:  123:                      "unencrypted archive. Use -c aes256|chacha20|3des, or drop the password.";
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:  124:        LOG_ERR(m_errorText);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+        2:  125:        return E_INVALID_PARAMETER;
+        -:  126:    }
+        -:  127:
+        -:  128:    /* 1. 先序枚举（含根目录自身 "."）。
+        -:  129:       F9：归档目标（含 .tmp）若落在源目录内，必须从扫描中排除——否则下一轮
+        -:  130:       备份会把上一轮的箱装进箱里，体积逐轮膨胀且永远备不完。 */
+      192:  131:    CFileEnumerator enumerator;
+call    0 returned 96
+call    1 returned 96
+call    2 never executed
+        -:  132:    {
+      192:  133:        std::set<std::string> excluded;
+call    0 returned 96
+call    1 returned 96
+call    2 never executed
+      192:  134:        std::string canon;
+call    0 returned 96
+call    1 returned 96
+call    2 never executed
+      96*:  135:        if (DBKP_IS_ERR(Platform::canonicalPath(archivePath, canon))) canon = archivePath;
+call    0 returned 96
+branch  1 taken 96 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 96
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+       96:  136:        excluded.insert(Path::normalize(canon));
+call    0 returned 96
+branch  1 taken 96 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 96
+branch  4 taken 96 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 96
+call    7 never executed
+      96*:  137:        if (DBKP_IS_ERR(Platform::canonicalPath(tmpPath, canon))) canon = tmpPath;
+call    0 returned 96
+branch  1 taken 96 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 96
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+       96:  138:        excluded.insert(Path::normalize(canon));
+call    0 returned 96
+branch  1 taken 96 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 96
+branch  4 taken 96 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 96
+call    7 never executed
+       96:  139:        enumerator.setExcludedAbsPaths(excluded);
+call    0 returned 96
+branch  1 taken 96 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  140:    }
+      192:  141:    std::vector<EnumeratedEntry> entries;
+call    0 returned 96
+call    1 returned 96
+call    2 never executed
+       96:  142:    ErrCode e = enumerator.enumerateFiles(sourceDir, opt.filter, entries);
+call    0 returned 96
+branch  1 taken 96 (fallthrough)
+branch  2 taken 0 (throw)
+       96:  143:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 94
+        -:  144:
+        -:  145:    /* F8：一条都没扫到还"成功"，是最难查的假象。入口已拦语法（CLI 非零退出、
+        -:  146:       API 400），这里再兜一层：结果为空且用户没给 exclude 过滤时明确警告，
+        -:  147:       说明源目录本身是空的（或全被过滤规则挡掉了），别把它当成正常备份。 */
+       95:  148:    if (entries.empty() && opt.filter.excludePaths.empty() &&
+call    0 returned 94
+branch  1 taken 1 (fallthrough)
+branch  2 taken 93
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0
+branch  8 taken 1 (fallthrough)
+branch  9 taken 93
+        1:  149:        opt.filter.nameRejects.empty()) {
+call    0 returned 1
+        1:  150:        LOG_WARN("no entries matched under source dir: " + sourceDir +
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+call   13 returned 1
+call   14 never executed
+call   15 never executed
+        -:  151:                 " (source is empty or every entry was filtered out)");
+        -:  152:    }
+        -:  153:
+        -:  154:    /* 进度上报：枚举完成后就能算出总字节，前端立刻得到可信的百分比 */
+       94:  155:    uint64_t planBytes = 0;
+       94:  156:    if (opt.progress) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 90
+       24:  157:        for (size_t i = 0; i < entries.size(); ++i)
+call    0 returned 24
+branch  1 taken 20 (fallthrough)
+branch  2 taken 4
+       20:  158:            if (entries[i].info.type == FT_REGULAR)
+call    0 returned 20
+branch  1 taken 13 (fallthrough)
+branch  2 taken 7
+      13*:  159:                planBytes += static_cast<uint64_t>(entries[i].info.size < 0 ? 0 : entries[i].info.size);
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0
+call    3 returned 13
+        4:  160:        opt.progress->onStart(static_cast<int64_t>(entries.size()), planBytes);
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  161:    }
+        -:  162:
+      188:  163:    std::string absSource;
+call    0 returned 94
+call    1 returned 94
+call    2 never executed
+       94:  164:    if (DBKP_IS_ERR(Platform::canonicalPath(sourceDir, absSource)))
+call    0 returned 94
+branch  1 taken 94 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 94
+    #####:  165:        absSource = Path::normalize(sourceDir);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+        -:  166:
+        -:  167:    /* 2. 卷标占位，最后回填计数与 CRC —— 全部写进 tmp 文件。
+        -:  168:       打开顺序刻意设计为"无 O_TRUNC 打开 → 加跨进程独占锁 → 显式截断"：
+        -:  169:       两个进程同时备份同一目标时，后到者在锁上失败（E_BUSY），
+        -:  170:       绝不会出现互相将对方刚写的数据截掉的情况（F4 验收①）。
+        -:  171:       残留的旧 tmp 不需要先删：拿到锁后 truncate(0) 就把它洗干净了，
+        -:  172:       而"先删后开"在 Windows 上会连带删掉别人正在写的句柄，是错误做法。 */
+      188:  173:    CSimpleFile out;
+call    0 returned 94
+call    1 returned 94
+call    2 never executed
+       94:  174:    e = out.open(tmpPath, CSimpleFile::MODE_READ_WRITE_CREATE);
+call    0 returned 94
+branch  1 taken 94 (fallthrough)
+branch  2 taken 0 (throw)
+       94:  175:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 93
+        1:  176:        m_errorText = "cannot create archive temp: " + tmpPath;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+call    4 returned 1
+        1:  177:        LOG_ERR(m_errorText);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        1:  178:        return e;
+        -:  179:    }
+       93:  180:    e = Platform::tryLockFile(out.fd());
+call    0 returned 93
+call    1 returned 93
+branch  2 taken 93 (fallthrough)
+branch  3 taken 0 (throw)
+       93:  181:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 92
+        1:  182:        out.close();
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  183:        m_errorText = "archive is locked by another backup process: " + archivePath;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+call    4 returned 1
+        1:  184:        LOG_ERR(m_errorText);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        1:  185:        return e;
+        -:  186:    }
+       92:  187:    e = Platform::truncateFile(out.fd(), 0);
+call    0 returned 92
+call    1 returned 92
+branch  2 taken 92 (fallthrough)
+branch  3 taken 0 (throw)
+       92:  188:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 92
+    #####:  189:        Platform::unlockFile(out.fd());
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  190:        out.close();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  191:        Platform::removeFile(tmpPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  192:        m_errorText = "cannot reset archive temp: " + tmpPath;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  193:        LOG_ERR(m_errorText);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  194:        return e;
+        -:  195:    }
+        -:  196:
+        -:  197:    /* 安全垫：rename 提交之前任何提前 return（错误/取消）都清掉 tmp，
+        -:  198:       绝不在正式名旁留下残骸（F4/F6b 验收"正式名下无残骸"）。
+        -:  199:       Windows 上删除仍被句柄打开的文件会失败，所以先显式 close（幂等），
+        -:  200:       锁也随句柄关闭自动释放。 */
+        -:  201:    struct TmpGuard {
+        -:  202:        const std::string& m_tmp;
+        -:  203:        CSimpleFile* m_out;
+        -:  204:        bool m_committed = false;
+function _ZZN4DBKP7CMyPack4packERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RKNS_11PackOptionsEEN8TmpGuardD2Ev called 92 returned 100% blocks executed 100%
+        5:  205:        ~TmpGuard() {
+       92:  206:            if (m_committed) return;
+branch  0 taken 87 (fallthrough)
+branch  1 taken 5
+        5:  207:            m_out->close();
+call    0 returned 5
+        5:  208:            if (Platform::exists(m_tmp) == E_OK) Platform::removeFile(m_tmp);
+call    0 returned 5
+branch  1 taken 4 (fallthrough)
+branch  2 taken 1
+call    3 returned 4
+       92:  209:        }
+        -:  210:    };
+       92:  211:    TmpGuard tmpGuard = { tmpPath, &out };
+call    0 returned 92
+call    1 never executed
+        -:  212:
+      184:  213:    ArchiveHeader hdr;
+call    0 returned 92
+call    1 returned 92
+call    2 never executed
+       92:  214:    hdr.compAlg   = static_cast<uint8_t>(comp ? opt.comp : ALG_NONE);
+call    0 returned 92
+branch  1 taken 21 (fallthrough)
+branch  2 taken 71
+       92:  215:    hdr.cryptoAlg = static_cast<uint8_t>(crypto ? opt.crypto : CRY_NONE);
+call    0 returned 92
+branch  1 taken 32 (fallthrough)
+branch  2 taken 60
+       92:  216:    hdr.checksum  = static_cast<uint8_t>(opt.checksum);
+       92:  217:    hdr.createTime = static_cast<uint64_t>(std::time(nullptr));
+call    0 returned 92
+       92:  218:    hdr.sourcePath = absSource;
+call    0 returned 92
+branch  1 taken 92 (fallthrough)
+branch  2 taken 0 (throw)
+       92:  219:    hdr.comment    = opt.comment;
+call    0 returned 92
+branch  1 taken 92 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  220:    /* 卷标扩展块逐个追加，载荷起点随之后移：
+        -:  221:       sha256 多占一个 512B 摘要块；F10 加密箱再多占一个 512B 头部 HMAC 块。
+        -:  222:       这里必须一次性算出终值 —— 占位写与 finalize 重写都用同一个长度，
+        -:  223:       载荷才不会错位。 */
+       92:  224:    hdr.payloadOffset = BLOCK_SIZE
+       92:  225:                      + (opt.checksum == CHK_SHA256 ? BLOCK_SIZE : 0)
+branch  0 taken 3 (fallthrough)
+branch  1 taken 89
+       92:  226:                      + (opt.crypto   != CRY_NONE   ? BLOCK_SIZE : 0);
+branch  0 taken 32 (fallthrough)
+branch  1 taken 60
+       92:  227:    hdr.kdfRounds = static_cast<uint16_t>(kdfRounds);
+       92:  228:    std::memcpy(hdr.salt, salt, 16);
+        -:  229:
+      184:  230:    std::vector<uint8_t> block;
+call    0 returned 92
+call    1 returned 92
+call    2 never executed
+       92:  231:    if (opt.crypto != CRY_NONE) {
+branch  0 taken 32 (fallthrough)
+branch  1 taken 60
+        -:  232:        /* F10：占位写就要把 HMAC 块的位置撑开（否则载荷起点与实写长度错位），
+        -:  233:           先填 32 个零，finalize 阶段再补真值。 */
+       32:  234:        hdr.headerHmac.assign(ARCHIVE_HEADER_HMAC_SIZE, 0);
+call    0 returned 32
+branch  1 taken 32 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  235:    }
+       92:  236:    encodeArchiveHeader(hdr, block);
+call    0 returned 92
+branch  1 taken 92 (fallthrough)
+branch  2 taken 0 (throw)
+       92:  237:    e = out.writeN(block.data(), static_cast<int64_t>(block.size()));
+call    0 returned 92
+call    1 returned 92
+call    2 returned 92
+branch  3 taken 92 (fallthrough)
+branch  4 taken 0 (throw)
+       92:  238:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 92
+    #####:  239:        m_errorText = "write archive header failed";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  240:        LOG_ERR(m_errorText);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  241:        out.close();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  242:        Platform::removeFile(tmpPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  243:        return e;
+        -:  244:    }
+        -:  245:
+        -:  246:    /* 3. 逐条：数据块在前、头记录在后？ 统一为"头记录 + 数据块"，与讲义一致 */
+       92:  247:    m_inodeMap.clear();
+call    0 returned 92
+       92:  248:    uint64_t recordCount = 0, fileCount = 0, rawTotal = 0, storedTotal = 0;
+       92:  249:    uint64_t doneBytes = 0;
+       92:  250:    bool       canceled = false;
+      477:  251:    for (size_t i = 0; i < entries.size(); ++i) {
+call    0 returned 477
+branch  1 taken 389 (fallthrough)
+branch  2 taken 88
+      389:  252:        FileRecord rec = makeRecord(entries[i]);
+call    0 returned 389
+call    1 returned 389
+branch  2 taken 389 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 never executed
+      389:  253:        const Platform::FileInfo& fi = entries[i].info;
+call    0 returned 389
+      389:  254:        ++fileCount;
+        -:  255:
+      389:  256:        bool asHardLink = false;
+      389:  257:        if (opt.hardlinkDedupe && fi.type == FT_REGULAR && fi.nlink > 1 && fi.ino != 0) {
+branch  0 taken 389 (fallthrough)
+branch  1 taken 0
+branch  2 taken 198 (fallthrough)
+branch  3 taken 191
+branch  4 taken 2 (fallthrough)
+branch  5 taken 196
+branch  6 taken 2 (fallthrough)
+branch  7 taken 0
+        2:  258:            InodeKey key; key.dev = fi.dev; key.ino = fi.ino;
+        2:  259:            std::map<InodeKey, std::string>::const_iterator it = m_inodeMap.find(key);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+        2:  260:            if (it != m_inodeMap.end()) {
+call    0 returned 2
+call    1 returned 2
+call    2 returned 2
+branch  3 taken 1 (fallthrough)
+branch  4 taken 1
+        1:  261:                rec.type = FT_HARDLINK;
+        1:  262:                rec.link = it->second;
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0 (throw)
+        1:  263:                rec.flags = static_cast<uint8_t>(rec.flags & ~RF_CRC_VALID);
+        1:  264:                asHardLink = true;
+        -:  265:            } else {
+        1:  266:                m_inodeMap[key] = rec.path;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        1:  267:                rec.flags = static_cast<uint8_t>(rec.flags | RF_HARDLINK_SRC);
+        -:  268:            }
+        -:  269:        }
+        -:  270:
+      389:  271:        if (asHardLink) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 388
+        1:  272:            rec.size = 0; rec.storedSize = 0;
+        1:  273:            rec.flags = static_cast<uint8_t>(rec.flags & ~RF_CRC_VALID);
+        1:  274:            e = writeRecord(out, rec);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+      388:  275:        } else if (fi.type == FT_REGULAR && fi.size > 0) {
+branch  0 taken 197 (fallthrough)
+branch  1 taken 191
+branch  2 taken 189 (fallthrough)
+branch  3 taken 8
+      189:  276:            e = writeFileData(out, absOf(absSource, rec.path), rec, comp.get(), crypto.get(), opt);
+call    0 returned 189
+call    1 returned 189
+call    2 returned 189
+branch  3 taken 189 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 189
+branch  6 taken 189 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 189
+call    9 never executed
+        -:  277:        } else {
+        -:  278:            /* 目录 / 空文件 / 符号链接 / 特殊文件：无数据块 */
+      199:  279:            rec.storedSize = 0;
+      199:  280:            if (fi.type != FT_REGULAR) rec.size = 0;
+branch  0 taken 191 (fallthrough)
+branch  1 taken 8
+      199:  281:            if (fi.type == FT_DIR) rec.crc = 0;
+branch  0 taken 189 (fallthrough)
+branch  1 taken 10
+      199:  282:            e = writeRecord(out, rec);
+call    0 returned 199
+branch  1 taken 199 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  283:        }
+      389:  284:        if (DBKP_IS_ERR(e)) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 388
+        1:  285:            m_errorText = "failed packing: " + rec.path + " (" + errCodeToString(e) + ")";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+branch 13 taken 1 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 1
+call   16 returned 1
+call   17 returned 1
+call   18 returned 1
+call   19 returned 1
+call   20 never executed
+call   21 never executed
+call   22 never executed
+        1:  286:            LOG_ERR(m_errorText);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        1:  287:            return e;
+        -:  288:        }
+      388:  289:        ++recordCount;
+      388:  290:        rawTotal    += static_cast<uint64_t>(rec.size);
+      388:  291:        storedTotal += static_cast<uint64_t>(rec.storedSize);
+      388:  292:        if (opt.progress) {
+branch  0 taken 9 (fallthrough)
+branch  1 taken 379
+        9:  293:            if (fi.type == FT_REGULAR && !asHardLink && fi.size > 0)
+branch  0 taken 4 (fallthrough)
+branch  1 taken 5
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0
+        4:  294:                doneBytes += static_cast<uint64_t>(fi.size);
+        9:  295:            opt.progress->onProgress(static_cast<int64_t>(i + 1), doneBytes);
+call    0 returned 9
+branch  1 taken 9 (fallthrough)
+branch  2 taken 0 (throw)
+        9:  296:            if (opt.progress->canceled()) { canceled = true; break; }
+call    0 returned 9
+branch  1 taken 9 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 3 (fallthrough)
+branch  4 taken 6
+        -:  297:        }
+     385*:  298:        if ((i + 1) % 1024 == 0) LOG_INFO("packed " + std::to_string(i + 1) + " entries");
+branch  0 taken 0 (fallthrough)
+branch  1 taken 385
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+branch 12 never executed
+branch 13 never executed
+call   14 never executed
+branch 15 never executed
+branch 16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+        -:  299:    }
+        -:  300:
+        -:  301:    /* 取消：close 释放锁，tmpGuard 删掉半成品——正式名下的旧箱纹丝不动，
+        -:  302:       也绝不留一个"看起来成功"的归档（失败必须显式）。 */
+       91:  303:    if (canceled) {
+branch  0 taken 3 (fallthrough)
+branch  1 taken 88
+        3:  304:        out.close();
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+        3:  305:        m_errorText = "backup canceled by user";
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+        3:  306:        LOG_WARN(m_errorText);
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3
+branch  4 taken 3 (fallthrough)
+branch  5 taken 0 (throw)
+        3:  307:        return E_CANCELED;
+        -:  308:    }
+        -:  309:
+        -:  310:    /* 4. 回填卷标：条目数、原始/编码字节数、整段载荷 CRC（sha256 模式还要算整卷摘要） */
+       88:  311:    const int64_t endPos = out.tell();
+call    0 returned 88
+       88:  312:    const int64_t hdrBytes = static_cast<int64_t>(hdr.payloadOffset);
+       88:  313:    uint64_t payloadBytes = endPos > hdrBytes
+       88:  314:                          ? static_cast<uint64_t>(endPos - hdrBytes) : 0;
+branch  0 taken 87 (fallthrough)
+branch  1 taken 1
+       88:  315:    CRC64 payloadCrc;
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  316:    CSha256 payloadSha;
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  317:    const bool wantSha = hdr.checksum == CHK_SHA256;
+        -:  318:    {
+      176:  319:        std::vector<uint8_t> buf;
+call    0 returned 88
+call    1 returned 88
+call    2 never executed
+       88:  320:        buf.resize(64 * 1024);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  321:        out.seekTo(hdrBytes);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  322:        uint64_t done = 0;
+      181:  323:        while (done < payloadBytes) {
+branch  0 taken 93 (fallthrough)
+branch  1 taken 88
+        -:  324:            int64_t want = static_cast<int64_t>(
+       93:  325:                std::min<uint64_t>(payloadBytes - done, static_cast<uint64_t>(buf.size())));
+call    0 returned 93
+call    1 returned 93
+       93:  326:            ErrCode re = out.readN(buf.data(), want);
+call    0 returned 93
+call    1 returned 93
+branch  2 taken 93 (fallthrough)
+branch  3 taken 0 (throw)
+      93*:  327:            if (DBKP_IS_ERR(re)) { LOG_WARN("payload checksum pass incomplete"); break; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 93
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+       93:  328:            payloadCrc.update(buf.data(), static_cast<size_t>(want));
+call    0 returned 93
+call    1 returned 93
+branch  2 taken 93 (fallthrough)
+branch  3 taken 0 (throw)
+       93:  329:            if (wantSha) payloadSha.update(buf.data(), static_cast<size_t>(want));
+branch  0 taken 3 (fallthrough)
+branch  1 taken 90
+call    2 returned 3
+call    3 returned 3
+branch  4 taken 3 (fallthrough)
+branch  5 taken 0 (throw)
+       93:  330:            done += static_cast<uint64_t>(want);
+        -:  331:        }
+        -:  332:    }
+       88:  333:    hdr.payloadSize = payloadBytes;
+       88:  334:    hdr.payloadCrc  = payloadCrc.value();
+call    0 returned 88
+       88:  335:    if (wantSha) {
+branch  0 taken 3 (fallthrough)
+branch  1 taken 85
+        3:  336:        hdr.payloadDigest.resize(CSha256::kDigestSize);
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+        3:  337:        payloadSha.finish(hdr.payloadDigest.data());
+call    0 returned 3
+call    1 returned 3
+branch  2 taken 3 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  338:    }
+       88:  339:    hdr.rawSize     = rawTotal;
+       88:  340:    hdr.recordCount = recordCount;
+       88:  341:    hdr.fileCount   = fileCount;
+        -:  342:    /* F10：头部 HMAC。此刻头部各字段（含 payloadCrc / 摘要 / 条目数）都已是终值。
+        -:  343:       覆盖范围 = 头部前 headerSize 字节中"除 HMAC 块自身外"的全部内容，也就是
+        -:  344:       基础头 + 摘要块（若有）这段前缀；将来 F28 的 kdfRounds 扩展块也必须排在
+        -:  345:       HMAC 块之前落进这段前缀，否则它不受保护。
+        -:  346:       做法：先按"HMAC 块存在但内容为零"编出终局长度的头部图像（headerSize 字段
+        -:  347:       已是终值，前缀与真值版逐字节一致），用 macKey 对它的前 headerSize-512 字节
+        -:  348:       做 HMAC-SHA256，再填回真值重编一次整头。 */
+       88:  349:    if (opt.crypto != CRY_NONE) {
+branch  0 taken 32 (fallthrough)
+branch  1 taken 56
+        -:  350:        uint8_t encKey[32], macKey[32];
+       32:  351:        deriveCipherKeys(opt.password, hdr.salt, kdfRounds, encKey, macKey);
+call    0 returned 32
+branch  1 taken 32 (fallthrough)
+branch  2 taken 0 (throw)
+       32:  352:        hdr.headerHmac.assign(ARCHIVE_HEADER_HMAC_SIZE, 0);
+call    0 returned 32
+branch  1 taken 32 (fallthrough)
+branch  2 taken 0 (throw)
+       32:  353:        encodeArchiveHeader(hdr, block);
+call    0 returned 32
+branch  1 taken 32 (fallthrough)
+branch  2 taken 0 (throw)
+       32:  354:        const size_t covered = block.size() - BLOCK_SIZE;
+call    0 returned 32
+        -:  355:        uint8_t digest[CSha256::kDigestSize];
+       32:  356:        CSha256::hmac(macKey, sizeof(macKey), block.data(), covered, digest);
+call    0 returned 32
+call    1 returned 32
+branch  2 taken 32 (fallthrough)
+branch  3 taken 0 (throw)
+       32:  357:        hdr.headerHmac.assign(digest, digest + ARCHIVE_HEADER_HMAC_SIZE);
+call    0 returned 32
+branch  1 taken 32 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  358:    }
+       88:  359:    encodeArchiveHeader(hdr, block);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  360:    out.seekTo(0);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  361:    e = out.writeN(block.data(), static_cast<int64_t>(block.size()));
+call    0 returned 88
+call    1 returned 88
+call    2 returned 88
+branch  3 taken 88 (fallthrough)
+branch  4 taken 0 (throw)
+       88:  362:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 88
+    #####:  363:        m_errorText = "rewrite archive header failed";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  364:        LOG_ERR(m_errorText);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  365:        out.close();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  366:        Platform::removeFile(tmpPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  367:        return e;
+        -:  368:    }
+       88:  369:    ErrCode fe = out.flush();
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  370:    ErrCode ce = out.close();
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  371:    /* 锁随 close 释放；此后 tmp 已完整落盘，正式名仍未被动过 */
+       88:  372:    if (DBKP_IS_ERR(fe) || DBKP_IS_ERR(ce)) {
+branch  0 taken 88 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 88
+    #####:  373:        m_errorText = "failed to finalize archive temp: " + tmpPath;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  374:        LOG_ERR(m_errorText);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  375:        Platform::removeFile(tmpPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  376:        return DBKP_IS_ERR(fe) ? fe : ce;
+branch  0 never executed
+branch  1 never executed
+        -:  377:    }
+        -:  378:
+        -:  379:    /* 5. F4 提交前自校验：tmp 写完立刻按正式归档标准 verify 一遍，
+        -:  380:       校验不过绝不 rename——保证正式名下永远只有"完整且自洽"的箱。 */
+        -:  381:    {
+       88:  382:        ArchiveHeader vh;
+call    0 returned 88
+call    1 never executed
+       88:  383:        ErrCode ve = readHeader(tmpPath, vh);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  384:        if (DBKP_IS_ERR(ve)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 88
+    #####:  385:            m_errorText = "archive temp header invalid before commit";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  386:            LOG_ERR(m_errorText);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  387:            Platform::removeFile(tmpPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  388:            return ve;
+        -:  389:        }
+       88:  390:        ve = checkWholePayload(tmpPath, vh);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  391:        if (DBKP_IS_ERR(ve)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 88
+    #####:  392:            m_errorText = "archive temp failed self-verify before commit";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  393:            LOG_ERR(m_errorText);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  394:            Platform::removeFile(tmpPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  395:            return ve;
+        -:  396:        }
+        -:  397:    }
+        -:  398:
+        -:  399:    /* 6. 原子替换：MoveFileEx(REPLACE_EXISTING) / rename()。
+        -:  400:       崩溃/kill 只可能发生在 rename 前（旧箱完好）或 rename 后（新箱完好），
+        -:  401:       不存在"半新半旧"的中间态。 */
+       88:  402:    e = Platform::renameFile(tmpPath, archivePath);
+call    0 returned 88
+branch  1 taken 88 (fallthrough)
+branch  2 taken 0 (throw)
+       88:  403:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 87
+        1:  404:        m_errorText = "atomic rename failed: " + tmpPath + " -> " + archivePath;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 returned 1
+call   11 returned 1
+call   12 returned 1
+call   13 never executed
+call   14 never executed
+        1:  405:        LOG_ERR(m_errorText);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        1:  406:        Platform::removeFile(tmpPath);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  407:        return e;
+        -:  408:    }
+       87:  409:    tmpGuard.m_committed = true;   /* 提交成功，残骸清理责任解除 */
+        -:  410:
+       87:  411:    LOG_INFO("archive written: " + std::to_string(fileCount) + " entries, " +
+call    0 returned 87
+branch  1 taken 87 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 87
+branch  4 taken 87 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 87
+branch  7 taken 87 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 87
+branch 10 taken 87 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 87
+branch 13 taken 87 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 87
+branch 16 taken 87 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 87
+branch 19 taken 87 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 87
+branch 22 taken 87 (fallthrough)
+branch 23 taken 0 (throw)
+call   24 returned 87
+branch 25 taken 87 (fallthrough)
+branch 26 taken 0 (throw)
+call   27 returned 87
+branch 28 taken 87 (fallthrough)
+branch 29 taken 0 (throw)
+call   30 returned 87
+branch 31 taken 87 (fallthrough)
+branch 32 taken 0 (throw)
+call   33 returned 87
+branch 34 taken 87 (fallthrough)
+branch 35 taken 0 (throw)
+call   36 returned 87
+branch 37 taken 87 (fallthrough)
+branch 38 taken 0 (throw)
+call   39 returned 87
+branch 40 taken 87 (fallthrough)
+branch 41 taken 0 (throw)
+call   42 returned 87
+call   43 returned 87
+call   44 returned 87
+call   45 returned 87
+call   46 returned 87
+call   47 returned 87
+call   48 returned 87
+call   49 returned 87
+call   50 returned 87
+call   51 returned 87
+call   52 returned 87
+call   53 returned 87
+call   54 never executed
+call   55 never executed
+call   56 never executed
+call   57 never executed
+call   58 never executed
+call   59 never executed
+call   60 never executed
+call   61 never executed
+call   62 never executed
+call   63 never executed
+call   64 never executed
+call   65 never executed
+        -:  412:             std::to_string(rawTotal) + " -> " + std::to_string(storedTotal) +
+        -:  413:             " bytes (payload " + std::to_string(payloadBytes) + ")");
+       87:  414:    return E_OK;
+        -:  415:}
+        -:  416:
+        -:  417:/* ------------------------------------------------------------ 写一条记录 */
+function _ZN4DBKP7CMyPack11writeRecordERNS_11CSimpleFileERKNS_10FileRecordE called 388 returned 100% blocks executed 79%
+      388:  418:ErrCode CMyPack::writeRecord(CSimpleFile& out, const FileRecord& rec) {
+      776:  419:    std::vector<uint8_t> bytes;
+call    0 returned 388
+call    1 returned 388
+call    2 never executed
+      388:  420:    ErrCode e = encodeRecord(rec, bytes);
+call    0 returned 388
+branch  1 taken 388 (fallthrough)
+branch  2 taken 0 (throw)
+     388*:  421:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 388
+      388:  422:    return out.writeN(bytes.data(), static_cast<int64_t>(bytes.size()));
+call    0 returned 388
+call    1 returned 388
+call    2 returned 388
+branch  3 taken 388 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  423:}
+        -:  424:
+        -:  425:/* ------------------------------------------------------------ 写一个文件的数据区 */
+function _ZN4DBKP7CMyPack13writeFileDataERNS_11CSimpleFileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERNS_10FileRecordEPNS_10IDataCodecESE_RKNS_11PackOptionsE called 189 returned 100% blocks executed 60%
+      189:  426:ErrCode CMyPack::writeFileData(CSimpleFile& out, const std::string& absPath, FileRecord& rec,
+        -:  427:                               IDataCodec* comp, IDataCodec* crypto, const PackOptions& opt) {
+        -:  428:    /* 1. 读原始数据 */
+      378:  429:    std::vector<uint8_t> raw;
+call    0 returned 189
+call    1 returned 189
+call    2 never executed
+      189:  430:    ErrCode e = CSimpleFile::readWhole(absPath, raw);
+call    0 returned 189
+branch  1 taken 189 (fallthrough)
+branch  2 taken 0 (throw)
+      189:  431:    if (DBKP_IS_ERR(e)) { LOG_WARN("cannot read file content: " + absPath); return e; }
+branch  0 taken 1 (fallthrough)
+branch  1 taken 188
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+branch  9 taken 1 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 1
+call   12 never executed
+      188:  432:    rec.size = static_cast<int64_t>(raw.size());
+call    0 returned 188
+      188:  433:    rec.crc  = CRC64::compute(raw.data(), raw.size());
+call    0 returned 188
+call    1 returned 188
+call    2 returned 188
+branch  3 taken 188 (fallthrough)
+branch  4 taken 0 (throw)
+      188:  434:    rec.flags = static_cast<uint8_t>(rec.flags | RF_CRC_VALID);
+        -:  435:
+      188:  436:    const bool tooBig = static_cast<int64_t>(raw.size()) > opt.codecThreshold;
+call    0 returned 188
+      376:  437:    std::vector<uint8_t> payload = raw;
+call    0 returned 188
+branch  1 taken 188 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 188
+call    4 never executed
+      188:  438:    rec.compAlg = ALG_NONE;
+      188:  439:    rec.cryptoAlg = CRY_NONE;
+        -:  440:
+        -:  441:    /* 2. 先压缩 */
+      188:  442:    if (comp && !tooBig) {
+branch  0 taken 81 (fallthrough)
+branch  1 taken 107
+branch  2 taken 81 (fallthrough)
+branch  3 taken 0
+      162:  443:        std::vector<uint8_t> mid;
+call    0 returned 81
+call    1 returned 81
+call    2 never executed
+       81:  444:        ErrCode ce = comp->encode(payload, mid);
+call    0 returned 81
+branch  1 taken 81 (fallthrough)
+branch  2 taken 0 (throw)
+       81:  445:        if (DBKP_IS_ERR(ce)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 81
+    #####:  446:            LOG_WARN("compress failed for " + rec.path + ", store as-is");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+       81:  447:        } else if (mid.size() + BLOCK_SIZE >= payload.size()) {
+call    0 returned 81
+call    1 returned 81
+branch  2 taken 61 (fallthrough)
+branch  3 taken 20
+        -:  448:            /* 压缩后反而更大（已压缩数据/随机数据）：退回不压缩，省 CPU 也省空间 */
+       61:  449:            LOG_DEBUG("compression not profitable for " + rec.path);
+call    0 returned 61
+branch  1 taken 61 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 61
+branch  4 taken 61 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 61
+branch  7 taken 61 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 61
+call   10 never executed
+        -:  450:        } else {
+       20:  451:            payload.swap(mid);
+call    0 returned 20
+       20:  452:            rec.compAlg = static_cast<uint8_t>(opt.comp);
+        -:  453:        }
+        -:  454:    }
+        -:  455:    /* 3. 后加密 */
+      188:  456:    if (crypto) {
+branch  0 taken 79 (fallthrough)
+branch  1 taken 109
+       79:  457:        std::vector<uint8_t> enc;
+call    0 returned 79
+call    1 never executed
+       79:  458:        ErrCode ce = crypto->encode(payload, enc);
+call    0 returned 79
+branch  1 taken 79 (fallthrough)
+branch  2 taken 0 (throw)
+      79*:  459:        if (DBKP_IS_ERR(ce)) { LOG_ERR("encrypt failed for " + rec.path); return ce; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 79
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+       79:  460:        payload.swap(enc);
+call    0 returned 79
+       79:  461:        rec.cryptoAlg = static_cast<uint8_t>(opt.crypto);
+        -:  462:    }
+        -:  463:
+        -:  464:    /* 4. 写头记录（含 storedSize）再写 512B 对齐的数据块 */
+      188:  465:    rec.storedSize = static_cast<int64_t>(payload.size());
+call    0 returned 188
+      188:  466:    e = writeRecord(out, rec);
+call    0 returned 188
+branch  1 taken 188 (fallthrough)
+branch  2 taken 0 (throw)
+     188*:  467:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 188
+        -:  468:
+      188:  469:    const uint64_t blocks = blocksFor(rec.storedSize);
+call    0 returned 188
+      376:  470:    std::vector<uint8_t> block;
+call    0 returned 188
+call    1 returned 188
+call    2 never executed
+     1406:  471:    for (uint64_t b = 0; b < blocks; ++b) {
+branch  0 taken 1218 (fallthrough)
+branch  1 taken 188
+     1218:  472:        const size_t off = static_cast<size_t>(b * BLOCK_SIZE);
+        -:  473:        const size_t n = static_cast<size_t>(
+     1218:  474:            std::min<uint64_t>(BLOCK_SIZE, static_cast<uint64_t>(payload.size()) - off));
+call    0 returned 1218
+call    1 returned 1218
+     1218:  475:        block.assign(BLOCK_SIZE, 0);
+call    0 returned 1218
+branch  1 taken 1218 (fallthrough)
+branch  2 taken 0 (throw)
+     1218:  476:        if (n) std::memcpy(block.data(), payload.data() + off, n);
+branch  0 taken 1218 (fallthrough)
+branch  1 taken 0
+call    2 returned 1218
+call    3 returned 1218
+     1218:  477:        ErrCode we = out.writeN(block.data(), BLOCK_SIZE);
+call    0 returned 1218
+call    1 returned 1218
+branch  2 taken 1218 (fallthrough)
+branch  3 taken 0 (throw)
+    1218*:  478:        if (DBKP_IS_ERR(we)) return we;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1218
+        -:  479:    }
+      188:  480:    return E_OK;
+        -:  481:}
+        -:  482:
+        -:  483:/* ------------------------------------------------------------ 读数据区 */
+function _ZN4DBKP7CMyPack14readDataBlocksERNS_11CSimpleFileERKNS_10FileRecordERSt6vectorIhSaIhEEPNS_10IDataCodecESB_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERNS_13UnpackOptionsE called 160 returned 100% blocks executed 35%
+      160:  484:ErrCode CMyPack::readDataBlocks(CSimpleFile& in, const FileRecord& rec,
+        -:  485:                                std::vector<uint8_t>& rawOut,
+        -:  486:                                IDataCodec* comp, IDataCodec* crypto,
+        -:  487:                                const std::string& password, UnpackOptions& opt) {
+        -:  488:    DBKP_UNUSED(password);
+      160:  489:    const uint64_t blocks = blocksFor(rec.storedSize);
+call    0 returned 160
+      320:  490:    std::vector<uint8_t> enc;
+call    0 returned 160
+call    1 returned 160
+call    2 never executed
+      160:  491:    if (blocks) {
+branch  0 taken 160 (fallthrough)
+branch  1 taken 0
+      160:  492:        enc.resize(static_cast<size_t>(blocks * BLOCK_SIZE));
+call    0 returned 160
+branch  1 taken 160 (fallthrough)
+branch  2 taken 0 (throw)
+      160:  493:        ErrCode e = in.readN(enc.data(), static_cast<int64_t>(enc.size()));
+call    0 returned 160
+call    1 returned 160
+call    2 returned 160
+branch  3 taken 160 (fallthrough)
+branch  4 taken 0 (throw)
+     160*:  494:        if (DBKP_IS_ERR(e)) { LOG_ERR("archive truncated at: " + rec.path); return E_TRUNCATED_ARCHIVE; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 160
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+      160:  495:        if (rec.storedSize < static_cast<int64_t>(enc.size()))
+call    0 returned 160
+branch  1 taken 160 (fallthrough)
+branch  2 taken 0
+      160:  496:            enc.resize(static_cast<size_t>(rec.storedSize));
+call    0 returned 160
+branch  1 taken 160 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  497:    }
+        -:  498:
+      320:  499:    std::vector<uint8_t> work = enc;
+call    0 returned 160
+branch  1 taken 160 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 160
+call    4 never executed
+        -:  500:    /* 1. 解密（与打包顺序相反：先解密，后解压） */
+      160:  501:    if (rec.cryptoAlg != CRY_NONE) {
+branch  0 taken 68 (fallthrough)
+branch  1 taken 92
+      72*:  502:        if (!crypto) { LOG_ERR("archive is encrypted but no cipher available"); return E_CRYPTO_FAIL; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 68
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+       68:  503:        std::vector<uint8_t> plain;
+call    0 returned 68
+call    1 never executed
+       68:  504:        ErrCode e = crypto->decode(work, plain);
+call    0 returned 68
+branch  1 taken 68 (fallthrough)
+branch  2 taken 0 (throw)
+       68:  505:        if (DBKP_IS_ERR(e)) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 64
+        4:  506:            LOG_ERR("decrypt failed for " + rec.path + " (" + errCodeToString(e) + ")");
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+branch  7 taken 4 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 4
+branch 10 taken 4 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 4
+branch 13 taken 4 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 4
+branch 16 taken 4 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 4
+branch 19 taken 4 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 4
+call   22 returned 4
+call   23 returned 4
+call   24 returned 4
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+        4:  507:            return e;
+        -:  508:        }
+       64:  509:        work.swap(plain);
+call    0 returned 64
+        -:  510:    }
+        -:  511:    /* 2. 解压 */
+      156:  512:    if (rec.compAlg != ALG_NONE) {
+branch  0 taken 17 (fallthrough)
+branch  1 taken 139
+      17*:  513:        if (!comp) { LOG_ERR("archive is compressed but no codec available"); return E_COMPRESS_FAIL; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 17
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+       17:  514:        std::vector<uint8_t> plain;
+call    0 returned 17
+call    1 never executed
+       17:  515:        ErrCode e = comp->decode(work, plain);
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0 (throw)
+       17:  516:        if (DBKP_IS_ERR(e)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 17
+    #####:  517:            LOG_ERR("decompress failed for " + rec.path + " (" + errCodeToString(e) + ")");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+branch 19 never executed
+branch 20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+    #####:  518:            return e;
+        -:  519:        }
+       17:  520:        work.swap(plain);
+call    0 returned 17
+        -:  521:    }
+        -:  522:    /* 3. 校验原始数据 CRC64 */
+      156:  523:    if (rec.flags & RF_CRC_VALID) {
+branch  0 taken 154 (fallthrough)
+branch  1 taken 2
+      154:  524:        uint64_t got = CRC64::compute(work.data(), work.size());
+call    0 returned 154
+call    1 returned 154
+call    2 returned 154
+branch  3 taken 154 (fallthrough)
+branch  4 taken 0 (throw)
+      154:  525:        if (got != rec.crc) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 150
+        4:  526:            LOG_ERR("checksum mismatch: " + rec.path + " (expect " +
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+branch  7 taken 4 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 4
+branch 10 taken 4 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 4
+branch 13 taken 4 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 4
+branch 16 taken 4 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 4
+branch 19 taken 4 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 4
+branch 22 taken 4 (fallthrough)
+branch 23 taken 0 (throw)
+call   24 returned 4
+branch 25 taken 4 (fallthrough)
+branch 26 taken 0 (throw)
+call   27 returned 4
+branch 28 taken 4 (fallthrough)
+branch 29 taken 0 (throw)
+call   30 returned 4
+call   31 returned 4
+call   32 returned 4
+call   33 returned 4
+call   34 returned 4
+call   35 returned 4
+call   36 returned 4
+call   37 returned 4
+call   38 never executed
+call   39 never executed
+call   40 never executed
+call   41 never executed
+call   42 never executed
+call   43 never executed
+call   44 never executed
+call   45 never executed
+        -:  527:                    CRC64::toString(rec.crc) + ", got " + CRC64::toString(got) + ")");
+        4:  528:            ++opt.warnings;
+        4:  529:            return E_CHECKSUM_MISMATCH;
+        -:  530:        }
+        -:  531:        /* 记录里的 size 字段也要和解出来的长度对得上：只过 CRC 不卡 size，
+        -:  532:           篡改字段就只能靠整卷摘要拦（明文 sha256 归档的盲区之一） */
+      150:  533:        if (rec.size != static_cast<int64_t>(work.size())) {
+call    0 returned 150
+branch  1 taken 0 (fallthrough)
+branch  2 taken 150
+    #####:  534:            LOG_ERR("size field mismatch: " + rec.path + " (header says " +
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+branch 17 never executed
+branch 18 never executed
+call   19 never executed
+branch 20 never executed
+branch 21 never executed
+call   22 never executed
+branch 23 never executed
+branch 24 never executed
+call   25 never executed
+branch 26 never executed
+branch 27 never executed
+call   28 never executed
+branch 29 never executed
+branch 30 never executed
+call   31 never executed
+call   32 never executed
+call   33 never executed
+call   34 never executed
+call   35 never executed
+call   36 never executed
+call   37 never executed
+call   38 never executed
+call   39 never executed
+call   40 never executed
+call   41 never executed
+call   42 never executed
+call   43 never executed
+call   44 never executed
+call   45 never executed
+call   46 never executed
+        -:  535:                    std::to_string(rec.size) + ", decoded " + std::to_string(work.size()) + ")");
+    #####:  536:            ++opt.warnings;
+    #####:  537:            return E_CHECKSUM_MISMATCH;
+        -:  538:        }
+       2*:  539:    } else if (rec.storedSize == rec.size && rec.size != static_cast<int64_t>(work.size())) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+call    2 returned 2
+branch  3 taken 0 (fallthrough)
+branch  4 taken 2
+branch  5 taken 0 (fallthrough)
+branch  6 taken 2
+    #####:  540:        LOG_ERR("size mismatch: " + rec.path);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  541:        return E_CHECKSUM_MISMATCH;
+        -:  542:    }
+      152:  543:    rawOut.swap(work);
+call    0 returned 152
+      152:  544:    return E_OK;
+        -:  545:}
+        -:  546:
+        -:  547:/* ------------------------------------------------------------ 恢复一个条目 */
+function _ZN4DBKP7CMyPack12restoreEntryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_10FileRecordEPKSt6vectorIhSaIhEERNS_13UnpackOptionsERSC_IS9_SaIS9_EE called 290 returned 100% blocks executed 49%
+      290:  548:ErrCode CMyPack::restoreEntry(const std::string& targetDir, const FileRecord& rec,
+        -:  549:                              const std::vector<uint8_t>* data, UnpackOptions& opt,
+        -:  550:                              std::vector<FileRecord>& pendingDirs) {
+      290:  551:    if (rec.path != "." && !Path::isPathTraversalSafe(rec.path)) {
+call    0 returned 290
+branch  1 taken 238 (fallthrough)
+branch  2 taken 52
+call    3 returned 238
+branch  4 taken 238 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 9 (fallthrough)
+branch  7 taken 229
+branch  8 taken 9 (fallthrough)
+branch  9 taken 281
+        9:  552:        LOG_ERR("unsafe path in archive (refused): " + rec.path);
+call    0 returned 9
+branch  1 taken 9 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 9
+branch  4 taken 9 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 9
+branch  7 taken 9 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 9
+call   10 never executed
+        9:  553:        return E_INVALID_PARAMETER;
+        -:  554:    }
+      562:  555:    const std::string absPath = absOf(targetDir, rec.path);
+call    0 returned 281
+branch  1 taken 281 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 281
+call    4 never executed
+      562:  556:    const std::string parent  = Path::parentDir(absPath);
+call    0 returned 281
+branch  1 taken 281 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 281
+call    4 never executed
+        -:  557:
+      281:  558:    if (rec.type == FT_DIR) {
+branch  0 taken 131 (fallthrough)
+branch  1 taken 150
+      131:  559:        if (!opt.verifyOnly) {
+branch  0 taken 95 (fallthrough)
+branch  1 taken 36
+       95:  560:            ErrCode e = Platform::makeDirTree(absPath);
+call    0 returned 95
+branch  1 taken 95 (fallthrough)
+branch  2 taken 0 (throw)
+      95*:  561:            if (DBKP_IS_ERR(e) && e != E_ALREADY_EXISTS) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 95
+branch  2 never executed
+branch  3 never executed
+    #####:  562:                LOG_WARN("cannot create directory: " + absPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  563:                ++opt.warnings;
+        -:  564:            }
+       95:  565:            pendingDirs.push_back(rec);
+call    0 returned 95
+branch  1 taken 95 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  566:        }
+      131:  567:        return E_OK;
+        -:  568:    }
+        -:  569:
+      150:  570:    if (rec.type == FT_REGULAR) {
+branch  0 taken 139 (fallthrough)
+branch  1 taken 11
+      139:  571:        if (opt.verifyOnly) return E_OK;
+branch  0 taken 46 (fallthrough)
+branch  1 taken 93
+       93:  572:        if (!parent.empty()) Platform::makeDirTree(parent);
+call    0 returned 93
+branch  1 taken 93 (fallthrough)
+branch  2 taken 0
+call    3 returned 93
+branch  4 taken 93 (fallthrough)
+branch  5 taken 0 (throw)
+      186:  573:        CSimpleFile f;
+call    0 returned 93
+call    1 returned 93
+call    2 never executed
+       93:  574:        ErrCode e = f.open(absPath, CSimpleFile::MODE_WRITE_NEW);
+call    0 returned 93
+branch  1 taken 93 (fallthrough)
+branch  2 taken 0 (throw)
+       93:  575:        if (DBKP_IS_ERR(e)) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 92
+        1:  576:            LOG_WARN("cannot create file: " + absPath + " (" + errCodeToString(e) + ")");
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+branch 13 taken 1 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 1
+branch 16 taken 1 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 1
+branch 19 taken 1 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 1
+call   22 returned 1
+call   23 returned 1
+call   24 returned 1
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+        1:  577:            ++opt.warnings;
+        1:  578:            return e;
+        -:  579:        }
+       92:  580:        if (data && !data->empty()) {
+branch  0 taken 92 (fallthrough)
+branch  1 taken 0
+call    2 returned 92
+branch  3 taken 84 (fallthrough)
+branch  4 taken 8
+branch  5 taken 84 (fallthrough)
+branch  6 taken 8
+       84:  581:            e = f.writeN(data->data(), static_cast<int64_t>(data->size()));
+call    0 returned 84
+call    1 returned 84
+call    2 returned 84
+branch  3 taken 84 (fallthrough)
+branch  4 taken 0 (throw)
+      84*:  582:            if (DBKP_IS_ERR(e)) { LOG_ERR("write failed: " + absPath); return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 84
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+        -:  583:        }
+       92:  584:        ErrCode fe = f.flush();
+call    0 returned 92
+branch  1 taken 92 (fallthrough)
+branch  2 taken 0 (throw)
+       92:  585:        ErrCode ce = f.close();
+call    0 returned 92
+branch  1 taken 92 (fallthrough)
+branch  2 taken 0 (throw)
+      92*:  586:        if (DBKP_IS_ERR(fe) || DBKP_IS_ERR(ce)) return E_FILE_WRITE_FAIL;
+branch  0 taken 92 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 92
+       92:  587:        applyMetadata(absPath, rec, opt, true);
+call    0 returned 92
+branch  1 taken 92 (fallthrough)
+branch  2 taken 0 (throw)
+       92:  588:        return E_OK;
+        -:  589:    }
+        -:  590:
+       11:  591:    if (rec.type == FT_SYMLINK) {
+branch  0 taken 5 (fallthrough)
+branch  1 taken 6
+        5:  592:        if (opt.verifyOnly) return E_OK;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 4
+        -:  593:        /* F1 修法第 4 点（F21）：归档里的 link 目标同样是不可信输入。
+        -:  594:           绝对路径（"C:/x"、"/x"、"\\server\x"）或含 ".." 的相对值一旦照建，
+        -:  595:           还原出的链接就能把后续读写引到目标目录之外。path 字段早就有
+        -:  596:           isPathTraversalSafe 把关，link 字段以前是"任意值照建"。 */
+        4:  597:        if (!Path::isPathTraversalSafe(rec.link)) {
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 3 (fallthrough)
+branch  4 taken 1
+        3:  598:            LOG_ERR("unsafe link target in archive (refused): " + rec.path +
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3
+branch  4 taken 3 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 3
+branch  7 taken 3 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 3
+branch 10 taken 3 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 3
+branch 13 taken 3 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 3
+call   16 returned 3
+call   17 returned 3
+call   18 never executed
+call   19 never executed
+call   20 never executed
+        -:  599:                    " -> " + rec.link);
+        3:  600:            ++opt.warnings;
+        3:  601:            return E_INVALID_PARAMETER;
+        -:  602:        }
+        1:  603:        if (!parent.empty()) Platform::makeDirTree(parent);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        1:  604:        if (!Platform::supportsSymlink()) {
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 1
+    #####:  605:            LOG_WARN("symbolic links unsupported here, skip: " + rec.path);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  606:            ++opt.warnings;
+    #####:  607:            return E_OK;
+        -:  608:        }
+        1:  609:        ErrCode e = Platform::makeSymlink(rec.link, absPath);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  610:        if (DBKP_IS_ERR(e)) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+        1:  611:            LOG_WARN("cannot create symlink " + rec.path + " -> " + rec.link +
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+branch 13 taken 1 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 1
+branch 16 taken 1 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 1
+branch 19 taken 1 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 1
+branch 22 taken 1 (fallthrough)
+branch 23 taken 0 (throw)
+call   24 returned 1
+branch 25 taken 1 (fallthrough)
+branch 26 taken 0 (throw)
+call   27 returned 1
+call   28 returned 1
+call   29 returned 1
+call   30 returned 1
+call   31 returned 1
+call   32 returned 1
+call   33 never executed
+call   34 never executed
+call   35 never executed
+call   36 never executed
+call   37 never executed
+call   38 never executed
+        -:  612:                     " (" + errCodeToString(e) + ")");
+        1:  613:            ++opt.warnings;
+        -:  614:        } else {
+        -:  615:            /* 讲义缺陷修复：符号链接元数据不能作用到目标文件上 */
+    #####:  616:            applyMetadata(absPath, rec, opt, false);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  617:        }
+        1:  618:        return E_OK;
+        -:  619:    }
+        -:  620:
+        6:  621:    if (rec.type == FT_HARDLINK) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 4
+       2*:  622:        if (opt.verifyOnly) return E_OK;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+        2:  623:        if (!parent.empty()) Platform::makeDirTree(parent);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+        2:  624:        ErrCode e = Platform::makeHardLink(absOf(targetDir, rec.link), absPath);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+call    7 never executed
+        2:  625:        if (DBKP_IS_ERR(e)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+    #####:  626:            LOG_WARN("cannot recreate hard link " + rec.path + " -> " + rec.link +
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+branch 19 never executed
+branch 20 never executed
+call   21 never executed
+branch 22 never executed
+branch 23 never executed
+call   24 never executed
+branch 25 never executed
+branch 26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+call   31 never executed
+call   32 never executed
+call   33 never executed
+call   34 never executed
+call   35 never executed
+call   36 never executed
+call   37 never executed
+call   38 never executed
+        -:  627:                     " (" + errCodeToString(e) + ")");
+    #####:  628:            ++opt.warnings;
+        -:  629:        }
+        2:  630:        return E_OK;
+        -:  631:    }
+        -:  632:
+        -:  633:    /* 特殊文件：FIFO / 块设备 / 字符设备 / 套接字 */
+       4*:  634:    if (opt.verifyOnly) return E_OK;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+        4:  635:    if (!parent.empty()) Platform::makeDirTree(parent);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+        4:  636:    if (rec.type == FT_FIFO) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 3
+        1:  637:        ErrCode e = Platform::makeFifo(absPath, rec.mode);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  638:        if (e == E_UNSUPPORTED_FEATURE) LOG_WARN("FIFO unsupported, skip: " + rec.path);
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+branch  9 taken 1 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 1
+call   12 never executed
+    #####:  639:        else if (DBKP_IS_ERR(e)) LOG_WARN("cannot create FIFO: " + rec.path);
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+    #####:  640:        else applyMetadata(absPath, rec, opt, true);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        3:  641:    } else if (rec.type == FT_BLOCK || rec.type == FT_CHAR) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 1
+        2:  642:        ErrCode e = Platform::makeDeviceNode(absPath, rec.type, rec.majorNum, rec.minorNum, rec.mode);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+       2*:  643:        if (e == E_PERMISSION_DENIED) LOG_WARN("need root for device node: " + rec.path);
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+        2:  644:        else if (e == E_UNSUPPORTED_FEATURE) LOG_WARN("device node unsupported: " + rec.path);
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+call    2 returned 2
+branch  3 taken 2 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 2
+branch  6 taken 2 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 2
+branch  9 taken 2 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 2
+call   12 never executed
+    #####:  645:        else if (DBKP_IS_ERR(e)) LOG_WARN("cannot create device node: " + rec.path);
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+       2*:  646:        else applyMetadata(absPath, rec, opt, true);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        1:  647:    } else if (rec.type == FT_SOCKET) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+        1:  648:        LOG_WARN("unix socket cannot be restored faithfully: " + rec.path);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 never executed
+        1:  649:        Platform::makeSocketPlaceholder(absPath);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  650:    }
+        4:  651:    return E_OK;
+        -:  652:}
+        -:  653:
+        -:  654:/* ------------------------------------------------------------ 元数据恢复 */
+function _ZN4DBKP7CMyPack13applyMetadataERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_10FileRecordERNS_13UnpackOptionsEb called 181 returned 100% blocks executed 32%
+      181:  655:ErrCode CMyPack::applyMetadata(const std::string& absPath, const FileRecord& rec,
+        -:  656:                               UnpackOptions& opt, bool followSymlink) {
+      181:  657:    if (!opt.restoreMeta) return E_OK;
+branch  0 taken 6 (fallthrough)
+branch  1 taken 175
+      175:  658:    if (rec.flags & RF_META_TIME) {
+branch  0 taken 162 (fallthrough)
+branch  1 taken 13
+      486:  659:        ErrCode e = Platform::setTimes(absPath, rec.mtimeSec, rec.mtimeNSec,
+      162:  660:                                       rec.atimeSec, rec.atimeNSec, followSymlink);
+call    0 returned 162
+branch  1 taken 162 (fallthrough)
+branch  2 taken 0 (throw)
+     162*:  661:        if (DBKP_IS_ERR(e)) LOG_DEBUG("restore times failed: " + absPath);
+branch  0 taken 0 (fallthrough)
+branch  1 taken 162
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+        -:  662:    }
+      175:  663:    if (rec.flags & RF_META_MODE) {
+branch  0 taken 162 (fallthrough)
+branch  1 taken 13
+      162:  664:        ErrCode e = Platform::setMode(absPath, rec.mode);
+call    0 returned 162
+branch  1 taken 162 (fallthrough)
+branch  2 taken 0 (throw)
+     162*:  665:        if (DBKP_IS_ERR(e)) LOG_DEBUG("restore mode failed: " + absPath);
+branch  0 taken 0 (fallthrough)
+branch  1 taken 162
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+        -:  666:    }
+      175:  667:    if (rec.flags & RF_META_UID) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 175
+    #####:  668:        ErrCode e = Platform::setOwner(absPath, rec.uid, rec.gid);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  669:        if (DBKP_IS_ERR(e) && e != E_UNSUPPORTED_FEATURE)
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  670:            LOG_DEBUG("restore owner failed: " + absPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+        -:  671:    }
+      175:  672:    return E_OK;
+        -:  673:}
+        -:  674:
+        -:  675:/* ------------------------------------------------------------ 读取卷标 */
+function _ZN4DBKP7CMyPack12readHeaderAtERNS_11CSimpleFileERNS_13ArchiveHeaderE called 299 returned 100% blocks executed 85%
+      299:  676:ErrCode CMyPack::readHeaderAt(CSimpleFile& in, ArchiveHeader& hdr) {
+      598:  677:    std::vector<uint8_t> block;
+call    0 returned 299
+call    1 returned 299
+call    2 never executed
+      299:  678:    block.resize(BLOCK_SIZE);
+call    0 returned 299
+branch  1 taken 299 (fallthrough)
+branch  2 taken 0 (throw)
+     299*:  679:    if (DBKP_IS_ERR(in.seekTo(0))) return E_TRUNCATED_ARCHIVE;
+call    0 returned 299
+branch  1 taken 299 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 299
+      299:  680:    ErrCode e = in.readN(block.data(), BLOCK_SIZE);
+call    0 returned 299
+call    1 returned 299
+branch  2 taken 299 (fallthrough)
+branch  3 taken 0 (throw)
+      299:  681:    if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 298
+        -:  682:    /* 卷标之后的扩展区按 headerSize 逐块读进来：
+        -:  683:       第二块 = sha256 整卷摘要块，第三块 = F10 头部 HMAC 块。
+        -:  684:       必须先确认第一块魔数正常再决定读扩展块：否则遇到非归档文件时，
+        -:  685:       第 6 字节的 headerSize 会读成随机大值（例如 'zz' = 31354），于是
+        -:  686:       去读第二块并在 EOF 处失败，把“这不是归档”误报成 E_TRUNCATED_ARCHIVE。 */
+      596:  687:    std::vector<uint8_t> ext;
+call    0 returned 298
+call    1 returned 298
+call    2 never executed
+      298:  688:    if (readLE32(block.data()) == ARCHIVE_MAGIC) {
+call    0 returned 298
+call    1 returned 298
+branch  2 taken 298 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 292 (fallthrough)
+branch  5 taken 6
+      292:  689:        const uint16_t hs = readLE16(block.data() + 6);
+call    0 returned 292
+call    1 returned 292
+branch  2 taken 292 (fallthrough)
+branch  3 taken 0 (throw)
+      292:  690:        if (hs > BLOCK_SIZE && (hs % BLOCK_SIZE) == 0 && hs <= 64 * 1024) {
+branch  0 taken 112 (fallthrough)
+branch  1 taken 180
+branch  2 taken 111 (fallthrough)
+branch  3 taken 1
+      111:  691:            ext.resize(static_cast<size_t>(hs) - BLOCK_SIZE);
+call    0 returned 111
+branch  1 taken 111 (fallthrough)
+branch  2 taken 0 (throw)
+      111:  692:            if (DBKP_IS_ERR(in.readN(ext.data(), static_cast<int64_t>(ext.size()))))
+call    0 returned 111
+call    1 returned 111
+call    2 returned 111
+branch  3 taken 111 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 0 (fallthrough)
+branch  6 taken 111
+    #####:  693:                return E_TRUNCATED_ARCHIVE;
+        -:  694:        }
+        -:  695:    }
+      298:  696:    return decodeArchiveHeader(block.data(), hdr, ext.empty() ? nullptr : ext.data());
+call    0 returned 298
+branch  1 taken 187 (fallthrough)
+branch  2 taken 111
+call    3 returned 111
+call    4 returned 298
+call    5 returned 298
+branch  6 taken 298 (fallthrough)
+branch  7 taken 0 (throw)
+        -:  697:}
+        -:  698:
+function _ZN4DBKP7CMyPack10readHeaderERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERNS_13ArchiveHeaderE called 189 returned 100% blocks executed 83%
+      189:  699:ErrCode CMyPack::readHeader(const std::string& archivePath, ArchiveHeader& hdr) {
+      378:  700:    CSimpleFile in;
+call    0 returned 189
+call    1 returned 189
+call    2 never executed
+      189:  701:    ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
+call    0 returned 189
+branch  1 taken 189 (fallthrough)
+branch  2 taken 0 (throw)
+      189:  702:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 187
+      187:  703:    return readHeaderAt(in, hdr);
+call    0 returned 187
+branch  1 taken 187 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  704:}
+        -:  705:
+        -:  706:/* -------------------------------------------------------- 整卷校验辅助 */
+function _ZN4DBKP7CMyPack17checkWholePayloadERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_13ArchiveHeaderE called 177 returned 100% blocks executed 57%
+      177:  707:ErrCode CMyPack::checkWholePayload(const std::string& archivePath, const ArchiveHeader& hdr) {
+        -:  708:    /* F6b：payloadSize==0 但记录区声称有条目——这是"空壳箱"（半成品/人造残骸），
+        -:  709:       以前直接返回 E_OK 让 verify 绿灯通过，现在必须拒绝。
+        -:  710:       判据取 recordCount 与 fileCount 任一非零：正常备份哪怕源目录为空，
+        -:  711:       也至少有根目录 "." 一条记录，两者同时为 0 的箱只可能是空卷标。 */
+      177:  712:    if (hdr.payloadSize == 0 && (hdr.recordCount != 0 || hdr.fileCount != 0)) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 173
+branch  2 taken 2 (fallthrough)
+branch  3 taken 2
+branch  4 taken 0 (fallthrough)
+branch  5 taken 2
+        2:  713:        LOG_ERR("archive declares " + std::to_string(hdr.recordCount) +
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 2
+branch 10 taken 2 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 2
+branch 13 taken 2 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 2
+call   16 returned 2
+call   17 returned 2
+call   18 never executed
+call   19 never executed
+call   20 never executed
+        -:  714:                " record(s) but carries an empty payload (incomplete archive)");
+        2:  715:        return E_TRUNCATED_ARCHIVE;
+        -:  716:    }
+      175:  717:    if (hdr.checksum == CHK_NONE || hdr.payloadSize == 0) return E_OK;
+branch  0 taken 175 (fallthrough)
+branch  1 taken 0
+branch  2 taken 2 (fallthrough)
+branch  3 taken 173
+      346:  718:    CSimpleFile in;
+call    0 returned 173
+call    1 returned 173
+call    2 never executed
+      173:  719:    ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
+call    0 returned 173
+branch  1 taken 173 (fallthrough)
+branch  2 taken 0 (throw)
+     173*:  720:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 173
+     173*:  721:    if (DBKP_IS_ERR(in.seekTo(static_cast<int64_t>(hdr.payloadOffset)))) return E_TRUNCATED_ARCHIVE;
+call    0 returned 173
+branch  1 taken 173 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 173
+      173:  722:    CRC64 crc;
+call    0 returned 173
+branch  1 taken 173 (fallthrough)
+branch  2 taken 0 (throw)
+      173:  723:    CSha256 sha;
+call    0 returned 173
+branch  1 taken 173 (fallthrough)
+branch  2 taken 0 (throw)
+      173:  724:    const bool useSha = hdr.checksum == CHK_SHA256;
+     173*:  725:    if (useSha && hdr.payloadDigest.size() != CSha256::kDigestSize) {
+branch  0 taken 6 (fallthrough)
+branch  1 taken 167
+call    2 returned 6
+branch  3 taken 0 (fallthrough)
+branch  4 taken 6
+branch  5 taken 0 (fallthrough)
+branch  6 taken 173
+        -:  726:        /* 旧版 sha256 归档只存了个标志字节，摘要从未落盘：检不出任何记录区篡改。
+        -:  727:           这里明说而不是静默跳过，避免用户把“选了 sha256”当成已经有保护。 */
+    #####:  728:        LOG_ERR("archive declares sha256 but carries no digest (written by an older "
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+        -:  729:                "version); re-create it to get whole-volume protection");
+    #####:  730:        return E_INVALID_HEADER_RECORD;
+        -:  731:    }
+      346:  732:    std::vector<uint8_t> buf;
+call    0 returned 173
+call    1 returned 173
+call    2 never executed
+      173:  733:    buf.resize(64 * 1024);
+call    0 returned 173
+branch  1 taken 173 (fallthrough)
+branch  2 taken 0 (throw)
+      173:  734:    uint64_t done = 0;
+      357:  735:    while (done < hdr.payloadSize) {
+branch  0 taken 187 (fallthrough)
+branch  1 taken 170
+      187:  736:        const int64_t want = static_cast<int64_t>(std::min<uint64_t>(
+      187:  737:            hdr.payloadSize - done, static_cast<uint64_t>(buf.size())));
+call    0 returned 187
+call    1 returned 187
+      187:  738:        ErrCode re = in.readN(buf.data(), want);
+call    0 returned 187
+call    1 returned 187
+branch  2 taken 187 (fallthrough)
+branch  3 taken 0 (throw)
+      187:  739:        if (DBKP_IS_ERR(re)) {
+branch  0 taken 3 (fallthrough)
+branch  1 taken 184
+        3:  740:            LOG_ERR("archive truncated during checksum pass");
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3
+call    4 returned 3
+branch  5 taken 3 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 3
+branch  8 taken 3 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 3
+call   11 returned 3
+call   12 never executed
+call   13 never executed
+        3:  741:            return E_TRUNCATED_ARCHIVE;
+        -:  742:        }
+      184:  743:        crc.update(buf.data(), static_cast<size_t>(want));
+call    0 returned 184
+call    1 returned 184
+branch  2 taken 184 (fallthrough)
+branch  3 taken 0 (throw)
+      184:  744:        if (useSha) sha.update(buf.data(), static_cast<size_t>(want));
+branch  0 taken 6 (fallthrough)
+branch  1 taken 178
+call    2 returned 6
+call    3 returned 6
+branch  4 taken 6 (fallthrough)
+branch  5 taken 0 (throw)
+      184:  745:        done += static_cast<uint64_t>(want);
+        -:  746:    }
+      170:  747:    if (useSha) {
+branch  0 taken 6 (fallthrough)
+branch  1 taken 164
+        -:  748:        uint8_t digest[CSha256::kDigestSize];
+        6:  749:        sha.finish(digest);
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0 (throw)
+        6:  750:        if (std::memcmp(digest, hdr.payloadDigest.data(), CSha256::kDigestSize) != 0) {
+call    0 returned 6
+branch  1 taken 1 (fallthrough)
+branch  2 taken 5
+        1:  751:            LOG_ERR("payload sha256 mismatch: expect " + CSha256::toHex(hdr.payloadDigest.data()) +
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+branch 11 taken 1 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 1
+branch 14 taken 1 (fallthrough)
+branch 15 taken 0 (throw)
+call   16 returned 1
+branch 17 taken 1 (fallthrough)
+branch 18 taken 0 (throw)
+call   19 returned 1
+branch 20 taken 1 (fallthrough)
+branch 21 taken 0 (throw)
+call   22 returned 1
+call   23 returned 1
+call   24 returned 1
+call   25 returned 1
+call   26 returned 1
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+call   31 never executed
+        -:  752:                    ", got " + CSha256::toHex(digest));
+        1:  753:            return E_CHECKSUM_MISMATCH;
+        -:  754:        }
+        5:  755:        LOG_DEBUG("payload sha256 verified: " + CSha256::toHex(digest));
+call    0 returned 5
+branch  1 taken 5 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 5
+branch  4 taken 5 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 5
+branch  7 taken 5 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 5
+branch 10 taken 5 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 5
+call   13 returned 5
+call   14 never executed
+call   15 never executed
+        -:  756:    } else {
+      164:  757:        if (crc.value() != hdr.payloadCrc) {
+call    0 returned 164
+branch  1 taken 11 (fallthrough)
+branch  2 taken 153
+       11:  758:            LOG_ERR("payload checksum mismatch: expect " + CRC64::toString(hdr.payloadCrc) +
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 11
+call    4 returned 11
+branch  5 taken 11 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 11
+branch  8 taken 11 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 11
+branch 11 taken 11 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 11
+branch 14 taken 11 (fallthrough)
+branch 15 taken 0 (throw)
+call   16 returned 11
+branch 17 taken 11 (fallthrough)
+branch 18 taken 0 (throw)
+call   19 returned 11
+branch 20 taken 11 (fallthrough)
+branch 21 taken 0 (throw)
+call   22 returned 11
+call   23 returned 11
+call   24 returned 11
+call   25 returned 11
+call   26 returned 11
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+call   31 never executed
+        -:  759:                    ", got " + CRC64::toString(crc.value()));
+       11:  760:            return E_CHECKSUM_MISMATCH;
+        -:  761:        }
+      153:  762:        LOG_DEBUG("payload crc64 verified: " + CRC64::toString(crc.value()));
+call    0 returned 153
+branch  1 taken 153 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 153
+call    4 returned 153
+branch  5 taken 153 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 153
+branch  8 taken 153 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 153
+branch 11 taken 153 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 153
+call   14 returned 153
+call   15 never executed
+call   16 never executed
+        -:  763:    }
+      158:  764:    return E_OK;
+        -:  765:}
+        -:  766:
+        -:  767:/* ---------------------------------------------- F10：卷标头部 HMAC 校验 */
+function _ZN4DBKP7CMyPack15checkHeaderHmacERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_13ArchiveHeaderES8_Ri called 20 returned 100% blocks executed 46%
+       20:  768:ErrCode CMyPack::checkHeaderHmac(const std::string& archivePath, const ArchiveHeader& hdr,
+        -:  769:                                 const std::string& password, int& badCount) {
+        -:  770:    /* 非加密箱没有共享密钥可推，按清单口径维持现状：不写不验，行为逐字节不变。 */
+       20:  771:    if (hdr.cryptoAlg == CRY_NONE) return E_OK;
+branch  0 taken 6 (fallthrough)
+branch  1 taken 14
+       14:  772:    if (hdr.headerHmac.empty()) {
+call    0 returned 14
+branch  1 taken 2 (fallthrough)
+branch  2 taken 12
+        -:  773:        /* 旧格式加密箱（本批之前产出的），头部没有任何 HMAC 保护 —— 只提示，不判失败，
+        -:  774:           否则老箱一夜之间全部 verify 不过，用户会被吓到。 */
+        2:  775:        LOG_WARN("旧格式归档，头部无 HMAC 保护");
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+call    4 returned 2
+branch  5 taken 2 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 2
+branch  8 taken 2 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 2
+call   11 returned 2
+call   12 never executed
+call   13 never executed
+        2:  776:        return E_OK;
+        -:  777:    }
+       24:  778:    CSimpleFile in;
+call    0 returned 12
+call    1 returned 12
+call    2 never executed
+       12:  779:    ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
+call    0 returned 12
+branch  1 taken 12 (fallthrough)
+branch  2 taken 0 (throw)
+      12*:  780:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 12
+       12:  781:    const size_t headerSize = hdr.headerSize;
+       12:  782:    if (headerSize < BLOCK_SIZE || (headerSize % BLOCK_SIZE) != 0) {
+branch  0 taken 12 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 12
+    #####:  783:        LOG_ERR("归档头部校验失败，可能被篡改（headerSize 非法）");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:  784:        ++badCount;
+    #####:  785:        return E_HEADER_TAMPERED;
+        -:  786:    }
+       24:  787:    std::vector<uint8_t> head;
+call    0 returned 12
+call    1 returned 12
+call    2 never executed
+       12:  788:    head.resize(headerSize);
+call    0 returned 12
+branch  1 taken 12 (fallthrough)
+branch  2 taken 0 (throw)
+      24*:  789:    if (DBKP_IS_ERR(in.seekTo(0)) ||
+call    0 returned 12
+branch  1 taken 12 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 12 (fallthrough)
+branch  4 taken 0
+branch  5 taken 0 (fallthrough)
+branch  6 taken 12
+       12:  790:        DBKP_IS_ERR(in.readN(head.data(), static_cast<int64_t>(headerSize)))) {
+call    0 returned 12
+call    1 returned 12
+branch  2 taken 12 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 0 (fallthrough)
+branch  5 taken 12
+    #####:  791:        LOG_ERR("archive truncated during header hmac pass");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:  792:        return E_TRUNCATED_ARCHIVE;
+        -:  793:    }
+       12:  794:    in.close();
+call    0 returned 12
+branch  1 taken 12 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  795:
+        -:  796:    /* HMAC 块的位置：基础头之后，若带 sha256 摘要块则再往后一块。 */
+       12:  797:    const size_t hmacOff = BLOCK_SIZE + (hdr.checksum == CHK_SHA256 ? BLOCK_SIZE : 0);
+branch  0 taken 2 (fallthrough)
+branch  1 taken 10
+       12:  798:    if (headerSize < hmacOff + BLOCK_SIZE) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 12
+    #####:  799:        LOG_ERR("归档头部校验失败，可能被篡改（HMAC 块越界）");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:  800:        ++badCount;
+    #####:  801:        return E_HEADER_TAMPERED;
+        -:  802:    }
+        -:  803:    /* 块自身只有"幻数 + 32B HMAC"有意义，其余 476B 必须全零。
+        -:  804:       填充区被改写同样算篡改（否则改这些字节能躲过所有校验）。 */
+       12:  805:    if (readLE32(head.data() + hmacOff) != ARCHIVE_HEADER_HMAC_TAG) {
+call    0 returned 12
+call    1 returned 12
+branch  2 taken 12 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 0 (fallthrough)
+branch  5 taken 12
+    #####:  806:        LOG_ERR("归档头部校验失败，可能被篡改（HMAC 块幻数不符）");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:  807:        ++badCount;
+    #####:  808:        return E_HEADER_TAMPERED;
+        -:  809:    }
+     4074:  810:    for (size_t i = hmacOff + 4 + ARCHIVE_HEADER_HMAC_SIZE; i < hmacOff + BLOCK_SIZE; ++i) {
+branch  0 taken 4066 (fallthrough)
+branch  1 taken 8
+     4066:  811:        if (head[i] != 0) {
+call    0 returned 4066
+branch  1 taken 4 (fallthrough)
+branch  2 taken 4062
+        4:  812:            LOG_ERR("归档头部校验失败，可能被篡改（HMAC 块填充区被改写）");
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 returned 4
+branch  5 taken 4 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 4
+branch  8 taken 4 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 4
+call   11 returned 4
+call   12 never executed
+call   13 never executed
+        4:  813:            ++badCount;
+        4:  814:            return E_HEADER_TAMPERED;
+        -:  815:        }
+        -:  816:    }
+        -:  817:    /* 覆盖范围 = 头部前 headerSize 字节中除 HMAC 块自身外的全部内容。
+        -:  818:       HMAC 块恒为最后一块，所以"块之前的前缀"正是这一段，与打包端逐字节一致。 */
+        -:  819:    uint8_t encKey[32], macKey[32];
+       8*:  820:    deriveCipherKeys(password, hdr.salt, hdr.kdfRounds ? hdr.kdfRounds : 4096, encKey, macKey);
+branch  0 taken 8 (fallthrough)
+branch  1 taken 0
+call    2 returned 8
+branch  3 taken 8 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  821:    uint8_t digest[CSha256::kDigestSize];
+        8:  822:    CSha256::hmac(macKey, sizeof(macKey), head.data(), hmacOff, digest);
+call    0 returned 8
+call    1 returned 8
+branch  2 taken 8 (fallthrough)
+branch  3 taken 0 (throw)
+        8:  823:    if (std::memcmp(digest, hdr.headerHmac.data(), ARCHIVE_HEADER_HMAC_SIZE) != 0) {
+call    0 returned 8
+branch  1 taken 4 (fallthrough)
+branch  2 taken 4
+        4:  824:        LOG_ERR("归档头部校验失败，可能被篡改");
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 returned 4
+branch  5 taken 4 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 4
+branch  8 taken 4 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 4
+call   11 returned 4
+call   12 never executed
+call   13 never executed
+        4:  825:        ++badCount;
+        4:  826:        return E_HEADER_TAMPERED;
+        -:  827:    }
+        4:  828:    LOG_DEBUG("archive header hmac verified");
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 returned 4
+branch  5 taken 4 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 4
+branch  8 taken 4 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 4
+call   11 returned 4
+call   12 never executed
+call   13 never executed
+        4:  829:    return E_OK;
+        -:  830:}
+        -:  831:
+        -:  832:/* ------------------------------------------------------------ 解包 */
+function _ZN4DBKP7CMyPack6unpackERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RNS_13UnpackOptionsE called 90 returned 100% blocks executed 59%
+       90:  833:ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targetDir,
+        -:  834:                        UnpackOptions& opt) {
+       90:  835:    m_errorText.clear();
+call    0 returned 90
+       90:  836:    opt.warnings = 0;
+       90:  837:    if (archivePath.empty() || targetDir.empty()) return E_INVALID_PARAMETER;
+call    0 returned 90
+branch  1 taken 89 (fallthrough)
+branch  2 taken 1
+call    3 returned 89
+branch  4 taken 0 (fallthrough)
+branch  5 taken 89
+branch  6 taken 1 (fallthrough)
+branch  7 taken 89
+        -:  838:
+      178:  839:    CSimpleFile in;
+call    0 returned 89
+call    1 returned 89
+call    2 never executed
+       89:  840:    ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
+call    0 returned 89
+branch  1 taken 89 (fallthrough)
+branch  2 taken 0 (throw)
+       89:  841:    if (DBKP_IS_ERR(e)) { m_errorText = "cannot open archive: " + archivePath; return e; }
+branch  0 taken 3 (fallthrough)
+branch  1 taken 86
+call    2 returned 3
+branch  3 taken 3 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 3
+call    6 returned 3
+        -:  842:
+      172:  843:    ArchiveHeader hdr;
+call    0 returned 86
+call    1 returned 86
+call    2 never executed
+       86:  844:    e = readHeaderAt(in, hdr);
+call    0 returned 86
+branch  1 taken 86 (fallthrough)
+branch  2 taken 0 (throw)
+       86:  845:    if (DBKP_IS_ERR(e)) { m_errorText = "not a dbkp archive"; return e; }
+branch  0 taken 3 (fallthrough)
+branch  1 taken 83
+call    2 returned 3
+branch  3 taken 3 (fallthrough)
+branch  4 taken 0 (throw)
+       83:  846:    if (hdr.version != ARCHIVE_VERSION) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 82
+        1:  847:        LOG_ERR("unsupported archive version " + std::to_string(hdr.version));
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+call   13 returned 1
+call   14 never executed
+call   15 never executed
+        1:  848:        return E_INVALID_HEADER_RECORD;
+        -:  849:    }
+       82:  850:    if (hdr.compAlg >= ALG_COUNT || hdr.cryptoAlg >= CRY_COUNT) {
+branch  0 taken 81 (fallthrough)
+branch  1 taken 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 80
+        2:  851:        LOG_ERR("corrupted archive header");
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+call    4 returned 2
+branch  5 taken 2 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 2
+branch  8 taken 2 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 2
+call   11 returned 2
+call   12 never executed
+call   13 never executed
+        2:  852:        return E_INVALID_HEADER_RECORD;
+        -:  853:    }
+        -:  854:
+      160:  855:    std::string errText;
+call    0 returned 80
+call    1 returned 80
+call    2 never executed
+      160:  856:    std::unique_ptr<IDataCodec> comp(makeComp(static_cast<AlgorithmId>(hdr.compAlg), errText));
+call    0 returned 80
+branch  1 taken 80 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 80
+call    4 returned 80
+call    5 never executed
+       80:  857:    std::unique_ptr<IDataCodec> crypto;
+call    0 returned 80
+call    1 never executed
+       80:  858:    if (hdr.cryptoAlg != CRY_NONE) {
+branch  0 taken 32 (fallthrough)
+branch  1 taken 48
+       32:  859:        if (opt.password.empty()) {
+call    0 returned 32
+branch  1 taken 4 (fallthrough)
+branch  2 taken 28
+        4:  860:            m_errorText = "archive is encrypted, --password is required";
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  861:            LOG_ERR(m_errorText);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+        4:  862:            return E_WRONG_PASSWORD;
+        -:  863:        }
+      28*:  864:        crypto.reset(makeCrypto(static_cast<CryptoId>(hdr.cryptoAlg), opt.password,
+call    0 returned 28
+branch  1 taken 28 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 28
+       28:  865:                                hdr.salt, hdr.kdfRounds ? hdr.kdfRounds : 4096, errText));
+branch  0 taken 28 (fallthrough)
+branch  1 taken 0
+      28*:  866:        if (!crypto) { LOG_ERR(errText); return E_INVALID_PARAMETER; }
+call    0 returned 28
+branch  1 taken 0 (fallthrough)
+branch  2 taken 28
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+        -:  867:    }
+        -:  868:
+        -:  869:    /* 落盘前先过整卷校验（crc64/sha256）：以前只有 verify 命令会查，
+        -:  870:       restore 对“记录区被改”完全无感（文件名/时间篡改能静默还原成功）。 */
+       76:  871:    if (!opt.verifyOnly && !opt.skipPayloadVerify) {
+branch  0 taken 52 (fallthrough)
+branch  1 taken 24
+branch  2 taken 51 (fallthrough)
+branch  3 taken 1
+       51:  872:        ErrCode ce = checkWholePayload(archivePath, hdr);
+call    0 returned 51
+branch  1 taken 51 (fallthrough)
+branch  2 taken 0 (throw)
+       51:  873:        if (DBKP_IS_ERR(ce)) {
+branch  0 taken 3 (fallthrough)
+branch  1 taken 48
+        3:  874:            m_errorText = "archive failed whole-volume integrity check, restore refused";
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+        3:  875:            LOG_ERR(m_errorText + " (" + errCodeToString(ce) + ")");
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3
+branch  4 taken 3 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 3
+branch  7 taken 3 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 3
+branch 10 taken 3 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 3
+branch 13 taken 3 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 3
+branch 16 taken 3 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 3
+call   19 returned 3
+call   20 returned 3
+call   21 never executed
+call   22 never executed
+call   23 never executed
+        3:  876:            return ce;
+        -:  877:        }
+        -:  878:    }
+        -:  879:
+        -:  880:    /* 目标目录：不存在则创建；存在且非空需要 --force（对应错误码 2） */
+       73:  881:    if (!opt.verifyOnly) {
+branch  0 taken 49 (fallthrough)
+branch  1 taken 24
+       49:  882:        if (DBKP_IS_ERR(Platform::exists(targetDir))) {
+call    0 returned 49
+branch  1 taken 49 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 39 (fallthrough)
+branch  4 taken 10
+       39:  883:            e = Platform::makeDirTree(targetDir);
+call    0 returned 39
+branch  1 taken 39 (fallthrough)
+branch  2 taken 0 (throw)
+       39:  884:            if (DBKP_IS_ERR(e)) { m_errorText = "cannot create target: " + targetDir; return e; }
+branch  0 taken 1 (fallthrough)
+branch  1 taken 38
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 1
+call    6 returned 1
+       10:  885:        } else if (!Platform::isDirectory(targetDir)) {
+call    0 returned 10
+branch  1 taken 10 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 9
+        1:  886:            LOG_ERR("target is not a directory: " + targetDir);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 never executed
+        1:  887:            return E_INVALID_PARAMETER;
+        9:  888:        } else if (!opt.overwrite) {
+branch  0 taken 5 (fallthrough)
+branch  1 taken 4
+        5:  889:            ErrCode emptyErr = Platform::assertDirEmpty(targetDir);
+call    0 returned 5
+branch  1 taken 5 (fallthrough)
+branch  2 taken 0 (throw)
+        5:  890:            if (DBKP_IS_ERR(emptyErr)) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 3
+        2:  891:                m_errorText = "target directory is not empty: " + targetDir;
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+call    4 returned 2
+        2:  892:                LOG_ERR(m_errorText + " (use --force to overwrite)");
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 2
+call   10 never executed
+        2:  893:                return E_DESTINATION_NOT_EMPTY;
+        -:  894:            }
+        -:  895:        }
+        -:  896:    }
+        -:  897:
+       69:  898:    int64_t cur = static_cast<int64_t>(hdr.payloadOffset);
+       69:  899:    if (hdr.payloadOffset != BLOCK_SIZE) {
+branch  0 taken 25 (fallthrough)
+branch  1 taken 44
+       25:  900:        e = in.seekTo(static_cast<int64_t>(hdr.payloadOffset));
+call    0 returned 25
+branch  1 taken 25 (fallthrough)
+branch  2 taken 0 (throw)
+      25*:  901:        if (DBKP_IS_ERR(e)) return E_TRUNCATED_ARCHIVE;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 25
+       25:  902:        cur = static_cast<int64_t>(hdr.payloadOffset);
+        -:  903:    }
+        -:  904:    /* readHeaderAt 已把文件游标移到卷标之后；载荷紧跟卷标，无需再定位 */
+      138:  905:    std::vector<uint8_t> block;
+call    0 returned 69
+call    1 returned 69
+call    2 never executed
+       69:  906:    block.resize(BLOCK_SIZE);
+call    0 returned 69
+branch  1 taken 69 (fallthrough)
+branch  2 taken 0 (throw)
+      138:  907:    const int64_t payloadEnd = hdr.payloadSize > 0
+       69:  908:        ? static_cast<int64_t>(hdr.payloadOffset + hdr.payloadSize) : -1;
+branch  0 taken 68 (fallthrough)
+branch  1 taken 1
+        -:  909:
+      138:  910:    CRecordReader reader;
+call    0 returned 69
+call    1 returned 69
+call    2 never executed
+      138:  911:    std::vector<FileRecord> pendingDirs;
+call    0 returned 69
+call    1 returned 69
+call    2 never executed
+       69:  912:    int64_t  entries = 0;
+       69:  913:    uint64_t rdone   = 0;
+       69:  914:    bool       rcancel = false;
+       69:  915:    if (opt.progress)
+branch  0 taken 2 (fallthrough)
+branch  1 taken 67
+        4:  916:        opt.progress->onStart(static_cast<int64_t>(hdr.fileCount),
+        2:  917:                              static_cast<uint64_t>(hdr.rawSize > 0 ? hdr.rawSize : 0));
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  918:    for (;;) {
+      348:  919:        if (payloadEnd >= 0 && cur >= payloadEnd) break;
+branch  0 taken 347 (fallthrough)
+branch  1 taken 1
+branch  2 taken 47 (fallthrough)
+branch  3 taken 300
+      301:  920:        e = in.readN(block.data(), BLOCK_SIZE);
+call    0 returned 301
+call    1 returned 301
+branch  2 taken 301 (fallthrough)
+branch  3 taken 0 (throw)
+      301:  921:        if (DBKP_IS_ERR(e)) break;                    /* 正常到达文件尾 */
+branch  0 taken 1 (fallthrough)
+branch  1 taken 300
+      300:  922:        cur += BLOCK_SIZE;
+      300:  923:        ErrCode pe = reader.pushBlock(block.data());
+call    0 returned 300
+call    1 returned 300
+branch  2 taken 300 (fallthrough)
+branch  3 taken 0 (throw)
+      300:  924:        if (DBKP_IS_ERR(pe)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 300
+    #####:  925:            m_errorText = "invalid record at offset " + std::to_string(cur - BLOCK_SIZE);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+    #####:  926:            LOG_ERR(m_errorText + " (" + errCodeToString(pe) + ")");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+      20*:  927:            return pe;
+        -:  928:        }
+      300:  929:        if (!reader.hasRecord()) continue;             /* 扩展记录尚未闭合 */
+call    0 returned 300
+branch  1 taken 3 (fallthrough)
+branch  2 taken 297
+      297:  930:        FileRecord rec = reader.take();
+call    0 returned 297
+branch  1 taken 297 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        -:  931:
+      297:  932:        std::vector<uint8_t> data;
+call    0 returned 297
+call    1 never executed
+      297:  933:        if (rec.type == FT_REGULAR && rec.storedSize > 0) {
+branch  0 taken 155 (fallthrough)
+branch  1 taken 142
+branch  2 taken 147 (fallthrough)
+branch  3 taken 8
+      147:  934:            e = readDataBlocks(in, rec, data, comp.get(), crypto.get(), opt.password, opt);
+call    0 returned 147
+call    1 returned 147
+call    2 returned 147
+branch  3 taken 147 (fallthrough)
+branch  4 taken 0 (throw)
+      147:  935:            cur += static_cast<int64_t>(blocksFor(rec.storedSize) * BLOCK_SIZE);
+call    0 returned 147
+      147:  936:            if (DBKP_IS_ERR(e)) {
+branch  0 taken 7 (fallthrough)
+branch  1 taken 140
+        7:  937:                if (e == E_CHECKSUM_MISMATCH) LOG_ERR("restore aborted at corrupted file: " + rec.path);
+branch  0 taken 3 (fallthrough)
+branch  1 taken 4
+call    2 returned 3
+branch  3 taken 3 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 3
+branch  6 taken 3 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 3
+branch  9 taken 3 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 3
+call   12 never executed
+        7:  938:                return e;
+        -:  939:            }
+        -:  940:        }
+      290:  941:        ErrCode re = restoreEntry(targetDir, rec,
+call    0 returned 290
+branch  1 taken 290 (fallthrough)
+branch  2 taken 0 (throw)
+      290:  942:                                  rec.type == FT_REGULAR ? &data : nullptr, opt, pendingDirs);
+branch  0 taken 148 (fallthrough)
+branch  1 taken 142
+      290:  943:        if (DBKP_IS_ERR(re)) { m_errorText = "restore failed: " + rec.path; return re; }
+branch  0 taken 13 (fallthrough)
+branch  1 taken 277
+call    2 returned 13
+branch  3 taken 13 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 13
+call    6 returned 13
+      277:  944:        ++entries;
+      277:  945:        if (opt.progress) {
+branch  0 taken 7 (fallthrough)
+branch  1 taken 270
+        7:  946:            if (rec.type == FT_REGULAR && rec.size > 0)
+branch  0 taken 4 (fallthrough)
+branch  1 taken 3
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0
+        4:  947:                rdone += static_cast<uint64_t>(rec.size);
+        7:  948:            opt.progress->onProgress(entries, rdone);
+call    0 returned 7
+branch  1 taken 7 (fallthrough)
+branch  2 taken 0 (throw)
+        7:  949:            if (opt.progress->canceled()) { rcancel = true; break; }
+call    0 returned 7
+branch  1 taken 7 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 6
+        -:  950:        }
+     276*:  951:        if ((entries % 1024) == 0) LOG_INFO("restored " + std::to_string(entries) + " entries");
+branch  0 taken 0 (fallthrough)
+branch  1 taken 276
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+branch 12 never executed
+branch 13 never executed
+call   14 never executed
+branch 15 never executed
+branch 16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+      279:  952:    }
+        -:  953:
+        -:  954:    /* 取消：不再回填目录元数据，明确返回失败，前端据此显示"已取消" */
+       49:  955:    if (rcancel) {
+branch  0 taken 1
+branch  1 taken 48
+        1:  956:        m_errorText = "restore canceled by user";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  957:        LOG_WARN(m_errorText);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        1:  958:        return E_CANCELED;
+        -:  959:    }
+        -:  960:
+        -:  961:    /* 目录 mtime 最后、逆序恢复（修复讲义已知缺陷：父目录时间被子项顶新） */
+      137:  962:    for (size_t i = pendingDirs.size(); i-- > 0;) {
+call    0 returned 48
+branch  1 taken 89 (fallthrough)
+branch  2 taken 48
+       89:  963:        applyMetadata(absOf(targetDir, pendingDirs[i].path), pendingDirs[i], opt, true);
+call    0 returned 89
+call    1 returned 89
+call    2 returned 89
+branch  3 taken 89 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 89
+branch  6 taken 89 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 89
+call    9 never executed
+        -:  964:    }
+        -:  965:
+       48:  966:    if (payloadEnd >= 0 && cur != payloadEnd) {
+branch  0 taken 47 (fallthrough)
+branch  1 taken 1
+branch  2 taken 0 (fallthrough)
+branch  3 taken 47
+    #####:  967:        LOG_WARN("archive length mismatch: read " + std::to_string(cur) +
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+branch 19 never executed
+branch 20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+        -:  968:                 ", header says " + std::to_string(payloadEnd));
+    #####:  969:        ++opt.warnings;
+        -:  970:    }
+       48:  971:    LOG_INFO(std::string(opt.verifyOnly ? "verified " : "restored ") +
+call    0 returned 48
+branch  1 taken 48 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 48
+branch  4 taken 48 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 48
+branch  7 taken 21 (fallthrough)
+branch  8 taken 27
+call    9 returned 48
+branch 10 taken 48 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 48
+branch 13 taken 48 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 48
+branch 16 taken 48 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 48
+branch 19 taken 48 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 48
+branch 22 taken 48 (fallthrough)
+branch 23 taken 0 (throw)
+call   24 returned 48
+call   25 returned 48
+call   26 returned 48
+call   27 returned 48
+call   28 returned 48
+call   29 returned 48
+call   30 never executed
+call   31 never executed
+call   32 never executed
+call   33 never executed
+call   34 never executed
+call   35 never executed
+        -:  972:             std::to_string(entries) + " entries into " + targetDir);
+       48:  973:    return E_OK;
+        -:  974:}
+        -:  975:
+        -:  976:/* ------------------------------------------------------------ 仅列出记录 */
+function _ZN4DBKP7CMyPack4listERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERSt6vectorINS_10FileRecordESaISA_EE called 26 returned 100% blocks executed 69%
+       26:  977:ErrCode CMyPack::list(const std::string& archivePath, std::vector<FileRecord>& recs) {
+       26:  978:    recs.clear();
+call    0 returned 26
+       52:  979:    CSimpleFile in;
+call    0 returned 26
+call    1 returned 26
+call    2 never executed
+       26:  980:    ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
+call    0 returned 26
+branch  1 taken 26 (fallthrough)
+branch  2 taken 0 (throw)
+      26*:  981:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 26
+       52:  982:    ArchiveHeader hdr;
+call    0 returned 26
+call    1 returned 26
+call    2 never executed
+       26:  983:    e = readHeaderAt(in, hdr);
+call    0 returned 26
+branch  1 taken 26 (fallthrough)
+branch  2 taken 0 (throw)
+      26*:  984:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 26
+      26*:  985:    if (hdr.payloadOffset != BLOCK_SIZE && DBKP_IS_ERR(in.seekTo(static_cast<int64_t>(hdr.payloadOffset))))
+branch  0 taken 4 (fallthrough)
+branch  1 taken 22
+call    2 returned 4
+branch  3 taken 4 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 0 (fallthrough)
+branch  6 taken 4
+branch  7 taken 0 (fallthrough)
+branch  8 taken 26
+    #####:  986:        return E_TRUNCATED_ARCHIVE;
+        -:  987:
+       52:  988:    CRecordReader reader;
+call    0 returned 26
+call    1 returned 26
+call    2 never executed
+       52:  989:    std::vector<uint8_t> block;
+call    0 returned 26
+call    1 returned 26
+call    2 never executed
+       26:  990:    block.resize(BLOCK_SIZE);
+call    0 returned 26
+branch  1 taken 26 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  991:    for (;;) {
+       94:  992:        e = in.readN(block.data(), BLOCK_SIZE);
+call    0 returned 94
+call    1 returned 94
+branch  2 taken 94 (fallthrough)
+branch  3 taken 0 (throw)
+       94:  993:        if (DBKP_IS_ERR(e)) break;
+branch  0 taken 26 (fallthrough)
+branch  1 taken 68
+       68:  994:        ErrCode pe = reader.pushBlock(block.data());
+call    0 returned 68
+call    1 returned 68
+branch  2 taken 68 (fallthrough)
+branch  3 taken 0 (throw)
+      68*:  995:        if (DBKP_IS_ERR(pe)) return pe;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 68
+      68*:  996:        if (!reader.hasRecord()) continue;
+call    0 returned 68
+branch  1 taken 0 (fallthrough)
+branch  2 taken 68
+       68:  997:        FileRecord rec = reader.take();
+call    0 returned 68
+branch  1 taken 68 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+       68:  998:        recs.push_back(rec);
+call    0 returned 68
+branch  1 taken 68 (fallthrough)
+branch  2 taken 0 (throw)
+       68:  999:        if (rec.type == FT_REGULAR && rec.storedSize > 0) {
+branch  0 taken 39 (fallthrough)
+branch  1 taken 29
+branch  2 taken 38 (fallthrough)
+branch  3 taken 1
+       38: 1000:            ErrCode se = in.seekFile(static_cast<int64_t>(blocksFor(rec.storedSize) * BLOCK_SIZE),
+call    0 returned 38
+call    1 returned 38
+branch  2 taken 38 (fallthrough)
+branch  3 taken 0 (throw)
+       38: 1001:                                     SEEK_CUR);
+      38*: 1002:            if (DBKP_IS_ERR(se)) return E_TRUNCATED_ARCHIVE;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 38
+        -: 1003:        }
+       68: 1004:    }
+       26: 1005:    return E_OK;
+        -: 1006:}
+        -: 1007:
+        -: 1008:/* ------------------------------------------------------------ 统计 */
+function _ZN4DBKP7CMyPack4statERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERNS_13ArchiveHeaderERNS_11ArchiveStatE called 6 returned 100% blocks executed 84%
+        6: 1009:ErrCode CMyPack::stat(const std::string& archivePath, ArchiveHeader& hdr, ArchiveStat& st) {
+        6: 1010:    ErrCode e = readHeader(archivePath, hdr);
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0 (throw)
+       6*: 1011:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 6
+       12: 1012:    std::vector<FileRecord> recs;
+call    0 returned 6
+call    1 returned 6
+call    2 never executed
+        6: 1013:    e = list(archivePath, recs);
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0 (throw)
+       6*: 1014:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 6
+        6: 1015:    st = ArchiveStat();
+call    0 returned 6
+       39: 1016:    for (size_t i = 0; i < recs.size(); ++i) {
+call    0 returned 39
+branch  1 taken 33 (fallthrough)
+branch  2 taken 6
+       33: 1017:        const FileRecord& r = recs[i];
+call    0 returned 33
+       33: 1018:        switch (r.type) {
+branch  0 taken 16
+branch  1 taken 11
+branch  2 taken 2
+branch  3 taken 4
+       16: 1019:        case FT_REGULAR:   ++st.fileCount; break;
+       11: 1020:        case FT_DIR:       ++st.dirCount; break;
+        2: 1021:        case FT_SYMLINK:
+        2: 1022:        case FT_HARDLINK:  ++st.linkCount; break;
+        4: 1023:        default:           ++st.specialCount; break;
+        -: 1024:        }
+       33: 1025:        st.rawBytes   += r.size;
+       33: 1026:        st.storedBytes += r.storedSize;
+        -: 1027:    }
+        6: 1028:    return E_OK;
+        -: 1029:}
+        -: 1030:
+        -: 1031:/* ------------------------------------------------------------ 校验 */
+function _ZN4DBKP7CMyPack6verifyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_Ri called 41 returned 100% blocks executed 64%
+       41: 1032:ErrCode CMyPack::verify(const std::string& archivePath, const std::string& password, int& badCount) {
+       41: 1033:    badCount = 0;
+        -: 1034:    /* F6b：正式箱旁边若还留着 .tmp，说明上一次备份没有走到 rename 提交
+        -: 1035:       （被打断/杀死/崩溃）。tmp 即天然进行中标记，这里只报告不删除，
+        -: 1036:       删除责任在 pack --force，避免两套清理机制互相误删。 */
+       41: 1037:    if (Platform::exists(archivePath + ".tmp") == E_OK) {
+call    0 returned 41
+branch  1 taken 41 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 41
+branch  4 taken 41 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 41
+branch  7 taken 2 (fallthrough)
+branch  8 taken 39
+call    9 never executed
+        2: 1038:        LOG_ERR("temp file present next to archive, previous backup did not finish: " +
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 2
+branch 10 taken 2 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 2
+call   13 returned 2
+call   14 never executed
+call   15 never executed
+        -: 1039:                archivePath + ".tmp");
+        2: 1040:        ++badCount;
+        2: 1041:        return E_INCOMPLETE;
+        -: 1042:    }
+       78: 1043:    ArchiveHeader hdr;
+call    0 returned 39
+call    1 returned 39
+call    2 never executed
+       39: 1044:    ErrCode e = readHeader(archivePath, hdr);
+call    0 returned 39
+branch  1 taken 39 (fallthrough)
+branch  2 taken 0 (throw)
+       39: 1045:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 38
+        -: 1046:
+        -: 1047:    /* 1) 整段载荷校验（crc64 或 sha256）：任何单字节损坏（含记录区）都会在这里暴露 */
+       38: 1048:    ErrCode pe = checkWholePayload(archivePath, hdr);
+call    0 returned 38
+branch  1 taken 38 (fallthrough)
+branch  2 taken 0 (throw)
+       38: 1049:    if (DBKP_IS_ERR(pe)) { ++badCount; return pe; }
+branch  0 taken 14 (fallthrough)
+branch  1 taken 24
+        -: 1050:
+        -: 1051:    /* 2) 逐条解码并校验每个文件的 CRC64（不落盘） */
+       48: 1052:    UnpackOptions opt;
+call    0 returned 24
+call    1 returned 24
+call    2 never executed
+       24: 1053:    opt.verifyOnly = true;
+       24: 1054:    opt.restoreMeta = false;
+       24: 1055:    opt.password = password;
+call    0 returned 24
+branch  1 taken 24 (fallthrough)
+branch  2 taken 0 (throw)
+       24: 1056:    ErrCode ue = unpack(archivePath, ".", opt);
+call    0 returned 24
+call    1 returned 24
+branch  2 taken 24 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 24
+branch  5 taken 24 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 24
+call    8 returned 24
+call    9 never executed
+call   10 never executed
+       24: 1057:    if (DBKP_IS_ERR(ue)) { ++badCount; return ue; }
+branch  0 taken 4 (fallthrough)
+branch  1 taken 20
+        -: 1058:
+        -: 1059:    /* 3) F10：头部 HMAC。必须排在 1)/2) 之后 —— 口令错则 macKey 错，
+        -: 1060:       头部 HMAC 必然不匹配，若先验头就会把"口令不对"误报成"卷标被篡改"。
+        -: 1061:       走到这里说明载荷校验已通过，此时的不匹配才真的是离线改过头部。 */
+       20: 1062:    return checkHeaderHmac(archivePath, hdr, password, badCount);
+call    0 returned 20
+branch  1 taken 20 (fallthrough)
+branch  2 taken 0 (throw)
+        -: 1063:}
+        -: 1064:
+        -: 1065:/* ---------------------------------------------- 归档 vs 原始目录 差异对比 */
+function _ZN4DBKP7CMyPack17compareWithSourceERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_S8_Ri called 16 returned 100% blocks executed 70%
+       16: 1066:ErrCode CMyPack::compareWithSource(const std::string& archivePath, const std::string& sourceDir,
+        -: 1067:                                   const std::string& password, int& diffCount) {
+       16: 1068:    diffCount = 0;
+       32: 1069:    ArchiveHeader hdr;
+call    0 returned 16
+call    1 returned 16
+call    2 never executed
+       16: 1070:    ErrCode e = readHeader(archivePath, hdr);
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+       16: 1071:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 15
+        -: 1072:
+       30: 1073:    std::string errText;
+call    0 returned 15
+call    1 returned 15
+call    2 never executed
+       30: 1074:    std::unique_ptr<IDataCodec> comp(makeComp(static_cast<AlgorithmId>(hdr.compAlg), errText));
+call    0 returned 15
+branch  1 taken 15 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 15
+call    4 returned 15
+call    5 never executed
+        -: 1075:    std::unique_ptr<IDataCodec> crypto(
+       15: 1076:        makeCrypto(static_cast<CryptoId>(hdr.cryptoAlg), password, hdr.salt,
+       30: 1077:                   hdr.kdfRounds ? hdr.kdfRounds : 4096, errText));
+branch  0 taken 2 (fallthrough)
+branch  1 taken 13
+call    2 returned 15
+branch  3 taken 15 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 15
+call    6 returned 15
+call    7 never executed
+       15: 1078:    if (hdr.cryptoAlg != CRY_NONE && !crypto) { LOG_ERR(errText); return E_INVALID_PARAMETER; }
+branch  0 taken 2 (fallthrough)
+branch  1 taken 13
+call    2 returned 2
+branch  3 taken 1 (fallthrough)
+branch  4 taken 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 14
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+branch 11 taken 1 (fallthrough)
+branch 12 taken 0 (throw)
+        -: 1079:
+       28: 1080:    std::vector<FileRecord> recs;
+call    0 returned 14
+call    1 returned 14
+call    2 never executed
+       14: 1081:    e = list(archivePath, recs);
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+      14*: 1082:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 14
+        -: 1083:
+        -: 1084:    /* 逐个回源比对：类型、长度、CRC（数据需要重新读一遍归档，故用完整遍历） */
+       28: 1085:    CSimpleFile in;
+call    0 returned 14
+call    1 returned 14
+call    2 never executed
+       14: 1086:    e = in.open(archivePath, CSimpleFile::MODE_READ);
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+      14*: 1087:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 14
+       28: 1088:    std::vector<uint8_t> block;
+call    0 returned 14
+call    1 returned 14
+call    2 never executed
+       14: 1089:    block.resize(BLOCK_SIZE);
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+       14: 1090:    in.seekTo(static_cast<int64_t>(hdr.payloadOffset));
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+        -: 1091:
+       28: 1092:    CRecordReader reader;
+call    0 returned 14
+call    1 returned 14
+call    2 never executed
+       28: 1093:    UnpackOptions dummy;
+call    0 returned 14
+call    1 returned 14
+call    2 never executed
+        -: 1094:    for (;;) {
+       31: 1095:        e = in.readN(block.data(), BLOCK_SIZE);
+call    0 returned 31
+call    1 returned 31
+branch  2 taken 31 (fallthrough)
+branch  3 taken 0 (throw)
+       31: 1096:        if (DBKP_IS_ERR(e)) break;
+branch  0 taken 14 (fallthrough)
+branch  1 taken 17
+       17: 1097:        ErrCode pe = reader.pushBlock(block.data());
+call    0 returned 17
+call    1 returned 17
+branch  2 taken 17 (fallthrough)
+branch  3 taken 0 (throw)
+      17*: 1098:        if (DBKP_IS_ERR(pe)) return pe;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 17
+      20*: 1099:        if (!reader.hasRecord()) continue;
+call    0 returned 17
+branch  1 taken 0 (fallthrough)
+branch  2 taken 17
+       17: 1100:        FileRecord rec = reader.take();
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        -: 1101:
+       17: 1102:        std::vector<uint8_t> data;
+call    0 returned 17
+call    1 never executed
+       17: 1103:        if (rec.type == FT_REGULAR && rec.storedSize > 0) {
+branch  0 taken 14 (fallthrough)
+branch  1 taken 3
+branch  2 taken 13 (fallthrough)
+branch  3 taken 1
+       13: 1104:            ErrCode de = readDataBlocks(in, rec, data, comp.get(), crypto.get(), password, dummy);
+call    0 returned 13
+call    1 returned 13
+call    2 returned 13
+branch  3 taken 13 (fallthrough)
+branch  4 taken 0 (throw)
+       13: 1105:            if (DBKP_IS_ERR(de)) { ++diffCount; continue; }
+branch  0 taken 1 (fallthrough)
+branch  1 taken 12
+        -: 1106:        }
+       16: 1107:        const std::string absPath = absOf(sourceDir, rec.path);
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+       16: 1108:        Platform::FileInfo fi;
+call    0 returned 16
+call    1 never executed
+       16: 1109:        ErrCode ge = Platform::getInfo(absPath, fi, rec.type != FT_SYMLINK);
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+       16: 1110:        if (DBKP_IS_ERR(ge)) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 14
+        2: 1111:            LOG_WARN("compare: missing in source: " + rec.path);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 2
+call   10 never executed
+        2: 1112:            ++diffCount;
+        2: 1113:            continue;
+        -: 1114:        }
+       14: 1115:        if (fi.type != rec.type && !(rec.type == FT_HARDLINK)) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 12
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0
+        2: 1116:            LOG_WARN("compare: type differs: " + rec.path);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 2
+call   10 never executed
+        2: 1117:            ++diffCount;
+        -: 1118:        }
+       14: 1119:        if (rec.type == FT_REGULAR) {
+branch  0 taken 11 (fallthrough)
+branch  1 taken 3
+       11: 1120:            if (static_cast<int64_t>(data.size()) != fi.size) {
+call    0 returned 11
+branch  1 taken 2 (fallthrough)
+branch  2 taken 9
+        2: 1121:                LOG_WARN("compare: size differs: " + rec.path);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 2
+call   10 never executed
+        2: 1122:                ++diffCount;
+        9: 1123:            } else if (CRC64::compute(data.data(), data.size()) != rec.crc) {
+call    0 returned 9
+call    1 returned 9
+call    2 returned 9
+branch  3 taken 9 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 1 (fallthrough)
+branch  6 taken 8
+        1: 1124:                LOG_WARN("compare: content differs: " + rec.path);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 never executed
+        1: 1125:                ++diffCount;
+        -: 1126:            }
+        3: 1127:        } else if (rec.type == FT_SYMLINK && fi.linkTarget != rec.link) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 2
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+branch  5 taken 1 (fallthrough)
+branch  6 taken 2
+        1: 1128:            LOG_WARN("compare: symlink target differs: " + rec.path);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 never executed
+        1: 1129:            ++diffCount;
+        -: 1130:        }
+       17: 1131:    }
+       14: 1132:    LOG_INFO("compare finished with " + std::to_string(diffCount) + " difference(s)");
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 14
+branch  4 taken 14 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 14
+branch  7 taken 14 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 14
+branch 10 taken 14 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 14
+branch 13 taken 14 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 14
+call   16 returned 14
+call   17 returned 14
+call   18 never executed
+call   19 never executed
+call   20 never executed
+       14: 1133:    return E_OK;
+        -: 1134:}
+        -: 1135:
+        -: 1136:} /* namespace DBKP */
+        -: 1137:
+        -: 1138:
+        -: 1139:
+        -: 1140:
+        -: 1141:
+        -: 1142:

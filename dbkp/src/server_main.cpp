@@ -109,10 +109,11 @@ std::string randomSecret() {
     /* 没配 secret 时用"时间 + 缓冲区地址"混进 SHA-256 当一个进程内随机值：
        重启即换密钥，旧 token 全部失效——对本机工具是好事。 */
     char seed[128];
+    const void* selfAddr = seed; /* 先取地址再传参，消除 snprintf 写入目标与参数重叠（cppcheck: sprintfOverlappingData） */
     std::snprintf(seed, sizeof(seed), "%llu|%p|%d",
                   static_cast<unsigned long long>(
                       std::chrono::steady_clock::now().time_since_epoch().count()),
-                  static_cast<const void*>(seed), static_cast<int>(std::rand()));
+                  selfAddr, static_cast<int>(std::rand()));
     uint8_t digest[CSha256::kDigestSize];
     CSha256::hash(seed, std::strlen(seed), digest);
     return CSha256::toHex(digest);

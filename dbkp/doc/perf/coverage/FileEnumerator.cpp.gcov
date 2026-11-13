@@ -1,0 +1,571 @@
+        -:    0:Source:src/Enumerator/FileEnumerator.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Enumerator/FileEnumerator.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Enumerator/FileEnumerator.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  FileEnumerator.cpp  -- 先序递归遍历 + 自定义过滤 + 环检测
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Enumerator/FileEnumerator.h"
+        -:    5:
+        -:    6:#include <algorithm>
+        -:    7:
+        -:    8:#include "Utils/Logger.h"
+        -:    9:#include "Utils/PathUtil.h"
+        -:   10:
+        -:   11:namespace DBKP {
+        -:   12:
+function _ZNK4DBKP15CFileEnumerator10isExcludedERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 447 returned 100% blocks executed 77%
+      447:   13:bool CFileEnumerator::isExcluded(const std::string& absPath) const {
+      447:   14:    if (m_excludedAbs.empty()) return false;
+call    0 returned 447
+branch  1 taken 120 (fallthrough)
+branch  2 taken 327
+        -:   15:#if defined(DBKP_OS_WINDOWS)
+        -:   16:    /* Windows 文件系统不区分大小写：判重时做大小写无关比较 */
+      974:   17:    for (std::set<std::string>::const_iterator it = m_excludedAbs.begin();
+call    0 returned 327
+     1621:   18:         it != m_excludedAbs.end(); ++it) {
+call    0 returned 974
+call    1 returned 974
+branch  2 taken 650 (fallthrough)
+branch  3 taken 324
+call    4 returned 647
+      650:   19:        if (Path::iequals(Path::normalize(*it), Path::normalize(absPath))) return true;
+call    0 returned 650
+branch  1 taken 650 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 650
+call    4 returned 650
+branch  5 taken 650 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 650
+branch  8 taken 650 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 650
+call   11 returned 650
+branch 12 taken 3 (fallthrough)
+branch 13 taken 647
+call   14 never executed
+call   15 never executed
+        -:   20:    }
+      324:   21:    return false;
+        -:   22:#else
+        -:   23:    return m_excludedAbs.count(Path::normalize(absPath)) != 0;
+        -:   24:#endif
+        -:   25:}
+        -:   26:
+function _ZN4DBKP15CFileEnumerator14enumerateFilesERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_13FilterOptionsERSt6vectorINS_15EnumeratedEntryESaISD_EE called 118 returned 100% blocks executed 58%
+      118:   27:ErrCode CFileEnumerator::enumerateFiles(const std::string& rootPath,
+        -:   28:                                       const FilterOptions& filter,
+        -:   29:                                       std::vector<EnumeratedEntry>& out) {
+      118:   30:    resetCounters();
+call    0 returned 118
+      118:   31:    m_visitedDirs.clear();
+call    0 returned 118
+      118:   32:    m_rootDevValid = false;
+        -:   33:
+      236:   34:    Platform::FileInfo rootInfo;
+call    0 returned 118
+call    1 returned 118
+call    2 never executed
+      118:   35:    ErrCode e = Platform::getInfo(rootPath, rootInfo, true);
+call    0 returned 118
+branch  1 taken 118 (fallthrough)
+branch  2 taken 0 (throw)
+      118:   36:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 3 (fallthrough)
+branch  1 taken 115
+        3:   37:        LOG_ERR("cannot access source: " + rootPath + " (" + errCodeToString(e) + ")");
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3
+branch  4 taken 3 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 3
+branch  7 taken 3 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 3
+branch 10 taken 3 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 3
+branch 13 taken 3 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 3
+branch 16 taken 3 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 3
+branch 19 taken 3 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 3
+call   22 returned 3
+call   23 returned 3
+call   24 returned 3
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+        3:   38:        return E_SOURCE_NOT_FOUND;
+        -:   39:    }
+      115:   40:    if (rootInfo.type != FT_DIR) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 114
+        1:   41:        LOG_ERR("source is not a directory: " + rootPath);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+call   10 never executed
+        1:   42:        return E_INVALID_PARAMETER;
+        -:   43:    }
+        -:   44:
+      114:   45:    std::string absRoot;
+call    0 returned 114
+call    1 never executed
+     114*:   46:    if (DBKP_IS_ERR(Platform::canonicalPath(rootPath, absRoot))) absRoot = Path::normalize(rootPath);
+call    0 returned 114
+branch  1 taken 114 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 114
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+call    9 never executed
+      114:   47:    m_visitedDirs.insert(absRoot);
+call    0 returned 114
+branch  1 taken 114 (fallthrough)
+branch  2 taken 0 (throw)
+      114:   48:    m_rootDev = rootInfo.dev;
+      114:   49:    m_rootDevValid = true;
+        -:   50:
+        -:   51:    /* 根目录本身作为 "." 入档（与讲义一致），还原时对应用户指定的目标目录；
+        -:   52:       但根目录同样要接受过滤条件（例如 --type -D 时不应留下任何目录条目）。 */
+      114:   53:    if (filter.includeDirs && filter.pass(".", rootInfo)) {
+branch  0 taken 113 (fallthrough)
+branch  1 taken 1
+call    2 returned 113
+call    3 returned 113
+branch  4 taken 113 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 113
+branch  7 taken 113 (fallthrough)
+branch  8 taken 0 (throw)
+branch  9 taken 107 (fallthrough)
+branch 10 taken 6
+branch 11 taken 113 (fallthrough)
+branch 12 taken 1
+call   13 returned 113
+branch 14 taken 113 (fallthrough)
+branch 15 taken 1
+call   16 returned 113
+branch 17 taken 107 (fallthrough)
+branch 18 taken 7
+branch 19 never executed
+branch 20 never executed
+call   21 never executed
+branch 22 never executed
+branch 23 never executed
+call   24 never executed
+      214:   54:        EnumeratedEntry root;
+call    0 returned 107
+call    1 returned 107
+call    2 never executed
+      107:   55:        root.relPath = ".";
+call    0 returned 107
+branch  1 taken 107 (fallthrough)
+branch  2 taken 0 (throw)
+      107:   56:        root.info    = rootInfo;
+call    0 returned 107
+branch  1 taken 107 (fallthrough)
+branch  2 taken 0 (throw)
+      107:   57:        out.push_back(root);
+call    0 returned 107
+branch  1 taken 107 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   58:    }
+      114:   59:    return traverseDir(absRoot, ".", filter, out, 0);
+call    0 returned 114
+call    1 returned 114
+branch  2 taken 114 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 114
+branch  5 taken 114 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 114
+call    8 returned 114
+call    9 returned 114
+call   10 never executed
+call   11 never executed
+        -:   60:}
+        -:   61:
+function _ZN4DBKP15CFileEnumerator11traverseDirERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RKNS_13FilterOptionsERSt6vectorINS_15EnumeratedEntryESaISD_EEi called 254 returned 100% blocks executed 48%
+      254:   62:ErrCode CFileEnumerator::traverseDir(const std::string& absDir,
+        -:   63:                                     const std::string& relDir,
+        -:   64:                                     const FilterOptions& filter,
+        -:   65:                                     std::vector<EnumeratedEntry>& out,
+        -:   66:                                     int depth) {
+      508:   67:    std::vector<Platform::DirEntry> items;
+call    0 returned 254
+call    1 returned 254
+call    2 never executed
+      254:   68:    ErrCode e = Platform::listDir(absDir, items);
+call    0 returned 254
+branch  1 taken 254 (fallthrough)
+branch  2 taken 0 (throw)
+      254:   69:    if (DBKP_IS_ERR(e)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 254
+    #####:   70:        LOG_WARN("cannot list directory: " + absDir + " (" + errCodeToString(e) + ")");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+branch 19 never executed
+branch 20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+    #####:   71:        ++m_errors;
+    #####:   72:        return m_strict ? e : E_OK;
+branch  0 never executed
+branch  1 never executed
+        -:   73:    }
+        -:   74:
+      701:   75:    for (size_t i = 0; i < items.size(); ++i) {
+call    0 returned 701
+branch  1 taken 447 (fallthrough)
+branch  2 taken 254
+      447:   76:        const Platform::DirEntry& de = items[i];
+call    0 returned 447
+      447:   77:        const std::string absChild = absDir + "/" + de.name;
+call    0 returned 447
+branch  1 taken 447 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 447
+branch  4 taken 447 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 never executed
+      138:   78:        const std::string relChild = (relDir == "." || relDir.empty())
+call    0 returned 138
+branch  1 taken 0 (fallthrough)
+branch  2 taken 138
+      585:   79:                                   ? de.name : relDir + "/" + de.name;
+call    0 returned 447
+branch  1 taken 138 (fallthrough)
+branch  2 taken 309
+call    3 returned 309
+branch  4 taken 309 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 138
+branch  7 taken 138 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 138
+branch 10 taken 138 (fallthrough)
+branch 11 taken 0 (throw)
+branch 12 taken 138 (fallthrough)
+branch 13 taken 309
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+        -:   80:
+        -:   81:        /* F9：归档目标（dest / dest.tmp）落在源目录内时必须整体跳过——
+        -:   82:           既不入档也不下探，否则"箱里套箱"每轮体积翻倍、永远备不完。 */
+      447:   83:        if (isExcluded(absChild)) {
+call    0 returned 447
+branch  1 taken 447 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 3 (fallthrough)
+branch  4 taken 444
+        3:   84:            LOG_INFO("excluded (archive target inside source): " + relChild);
+call    0 returned 3
+branch  1 taken 3 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3
+branch  4 taken 3 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 3
+branch  7 taken 3 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 3
+call   10 never executed
+        3:   85:            ++m_filtered;
+        3:   86:            continue;
+        -:   87:        }
+        -:   88:
+      444:   89:        Platform::FileInfo fi;
+call    0 returned 444
+call    1 never executed
+      444:   90:        ErrCode ge = Platform::getInfo(absChild, fi, false);   /* 关键：不跟随链接 */
+call    0 returned 444
+branch  1 taken 444 (fallthrough)
+branch  2 taken 0 (throw)
+     444*:   91:        if (DBKP_IS_ERR(ge)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 444
+    #####:   92:            LOG_WARN("cannot stat: " + absChild + " (" + errCodeToString(ge) + ")");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+branch 19 never executed
+branch 20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+    #####:   93:            ++m_errors;
+    #####:   94:            if (m_strict) return ge;
+branch  0 never executed
+branch  1 never executed
+    #####:   95:            continue;
+        -:   96:        }
+      444:   97:        ++m_scanned;
+        -:   98:
+      444:   99:        const bool isDir = (fi.type == FT_DIR);
+     444*:  100:        const bool crossDeviceOk = !(filter.noCrossDevice && m_rootDevValid &&
+branch  0 taken 0 (fallthrough)
+branch  1 taken 444
+branch  2 never executed
+branch  3 never executed
+    #####:  101:                                     fi.dev != m_rootDev);
+branch  0 never executed
+branch  1 never executed
+      444:  102:        const bool depthOk = !(filter.maxDepth >= 0 && depth + 1 > filter.maxDepth);
+branch  0 taken 28 (fallthrough)
+branch  1 taken 416
+branch  2 taken 20 (fallthrough)
+branch  3 taken 8
+        -:  103:        /* --max-depth 采用与 `find -maxdepth` 相同的口径：根目录下的条目是第 1 层。
+        -:  104:         * 深度既要能拦住"下探"，也要拦住条目本身，否则第 2 层的文件会被入档，
+        -:  105:         * 而它所在的目录又不会被继续下探，产生一个"看着空却没备全"的结构。 */
+      444:  106:        const bool included = crossDeviceOk && depthOk && filter.pass(relChild, fi);
+branch  0 taken 444 (fallthrough)
+branch  1 taken 0
+branch  2 taken 436 (fallthrough)
+branch  3 taken 8
+call    4 returned 436
+branch  5 taken 436 (fallthrough)
+branch  6 taken 0 (throw)
+branch  7 taken 395 (fallthrough)
+branch  8 taken 41
+        -:  107:        /* 目录即使自身不入档，也可能需要下探：名称/尺寸/时间不应剪枝 */
+      145:  108:        const bool canDescend = isDir && crossDeviceOk && depthOk &&
+branch  0 taken 145 (fallthrough)
+branch  1 taken 0
+branch  2 taken 141 (fallthrough)
+branch  3 taken 4
+      729:  109:                                filter.passForTraversal(relChild, fi) &&
+branch  0 taken 145 (fallthrough)
+branch  1 taken 299
+call    2 returned 141
+branch  3 taken 141 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 140 (fallthrough)
+branch  6 taken 1
+      140:  110:                                filter.passTraversal(relChild);
+call    0 returned 140
+branch  1 taken 140 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 140 (fallthrough)
+branch  4 taken 0
+        -:  111:
+      444:  112:        if (!included) {
+branch  0 taken 49 (fallthrough)
+branch  1 taken 395
+       49:  113:            ++m_filtered;
+       49:  114:            LOG_DEBUG("filtered: " + relChild);
+call    0 returned 49
+branch  1 taken 49 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 49
+branch  4 taken 49 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 49
+branch  7 taken 49 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 49
+call   10 never executed
+       49:  115:            if (!canDescend) continue;
+branch  0 taken 38 (fallthrough)
+branch  1 taken 11
+     395*:  116:        } else if (isDir && !filter.includeDirs) {
+branch  0 taken 129 (fallthrough)
+branch  1 taken 266
+branch  2 taken 0 (fallthrough)
+branch  3 taken 129
+        -:  117:            /* 目录条目本身不入档，但仍需下探 */
+        -:  118:        } else {
+      790:  119:            EnumeratedEntry ent;
+call    0 returned 395
+call    1 returned 395
+call    2 never executed
+      395:  120:            ent.relPath = relChild;
+call    0 returned 395
+branch  1 taken 395 (fallthrough)
+branch  2 taken 0 (throw)
+      395:  121:            ent.info    = fi;
+call    0 returned 395
+branch  1 taken 395 (fallthrough)
+branch  2 taken 0 (throw)
+      395:  122:            out.push_back(ent);
+call    0 returned 395
+branch  1 taken 395 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  123:        }
+        -:  124:
+      406:  125:        bool descend = canDescend;
+      406:  126:        if (!isDir && fi.type == FT_SYMLINK && filter.followSymlinks && !fi.linkTarget.empty()) {
+branch  0 taken 266 (fallthrough)
+branch  1 taken 140
+branch  2 taken 3 (fallthrough)
+branch  3 taken 263
+branch  4 taken 1 (fallthrough)
+branch  5 taken 2
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0
+branch  9 taken 1 (fallthrough)
+branch 10 taken 405
+        2:  127:            std::string real;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        1:  128:            if (DBKP_IS_ERR(Platform::canonicalPath(absChild, real))) {
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 1
+    #####:  129:                LOG_DEBUG("dangling symlink: " + relChild);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+        1:  130:            } else if (m_visitedDirs.count(real)) {
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+        1:  131:                LOG_WARN("symlink loop skipped: " + relChild + " -> " + real);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+branch 13 taken 1 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 1
+call   16 returned 1
+call   17 returned 1
+call   18 never executed
+call   19 never executed
+call   20 never executed
+        1:  132:                ++m_skipped;
+        -:  133:            } else {
+    #####:  134:                Platform::FileInfo tfi;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  135:                if (DBKP_IS_ERR(Platform::getInfo(absChild, tfi, true)) || tfi.type != FT_DIR) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+        -:  136:                    /* 指向文件的链接无需下探 */
+        -:  137:                } else {
+    #####:  138:                    m_visitedDirs.insert(real);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  139:                    descend = depthOk;
+        -:  140:                }
+        -:  141:            }
+        -:  142:        }
+        -:  143:
+      406:  144:        if (descend) {
+branch  0 taken 140 (fallthrough)
+branch  1 taken 266
+      140:  145:            ErrCode sub = traverseDir(absChild, relChild, filter, out, depth + 1);
+call    0 returned 140
+branch  1 taken 140 (fallthrough)
+branch  2 taken 0 (throw)
+     140*:  146:            if (m_strict && DBKP_IS_ERR(sub)) return sub;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 140
+branch  2 never executed
+branch  3 never executed
+        -:  147:        }
+        -:  148:    }
+      254:  149:    return E_OK;
+        -:  150:}
+        -:  151:
+        -:  152:} /* namespace DBKP */

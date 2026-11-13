@@ -1,0 +1,552 @@
+        -:    0:Source:src/Codec/LZ77.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/LZ77.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/LZ77.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  LZ77.cpp  -- 滑动窗口 LZ77（4096B 窗口 / 3..18 字节匹配），从零实现
+        -:    3: *
+        -:    4: *  令牌编码：每 8 个令牌前置 1 个控制字节（bit=1 表示匹配项）
+        -:    5: *    字面量 : 1 字节
+        -:    6: *    匹配项 : 2 字节 = off_low | (off_high<<4)|(len-3) —— 12bit 偏移 + 4bit 长度
+        -:    7: *  压缩无收益时（flags bit0 = 1）整段原样存储，保证解码端行为一致。
+        -:    8: * ==========================================================================*/
+        -:    9:#include "Codec/Codecs.h"
+        -:   10:
+        -:   11:#include <cstring>
+        -:   12:
+        -:   13:namespace DBKP {
+        -:   14:
+function _ZN4DBKP5CLZ776encodeERKSt6vectorIhSaIhEERS3_ called 85 returned 100% blocks executed 86%
+       85:   15:ErrCode CLZ77::encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+       85:   16:    const size_t n = in.size();
+call    0 returned 85
+      170:   17:    std::vector<uint8_t> body;
+call    0 returned 85
+call    1 returned 85
+call    2 never executed
+       85:   18:    body.reserve(n + n / 8 + 16);
+call    0 returned 85
+branch  1 taken 85 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   19:
+      170:   20:    std::vector<size_t> head(1u << kWindowBits, n);      /* 3 字节哈希 -> 最近位置 */
+call    0 returned 85
+call    1 returned 85
+branch  2 taken 85 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 85
+call    5 never executed
+        -:   21:    struct H {
+function _ZZN4DBKP5CLZ776encodeERKSt6vectorIhSaIhEERS3_EN1H2ofEhhh called 7091761 returned 100% blocks executed 100%
+  7091761:   22:        static size_t of(uint8_t a, uint8_t b, uint8_t c) {
+  7091761:   23:            unsigned h = (unsigned(a) * 0x9E3779B1u) ^ (unsigned(b) * 0x85EBCA77u) ^ unsigned(c);
+  7091761:   24:            return (h >> 8) & ((1u << 12) - 1u);
+        -:   25:        }
+        -:   26:    };
+        -:   27:
+       85:   28:    uint8_t ctrl = 0;
+       85:   29:    std::vector<uint8_t> pend;                 /* 当前控制字节的尾数 */
+call    0 returned 85
+call    1 never executed
+       85:   30:    int items = 0;
+        -:   31:    auto flushGroup = [&]() {
+        -:   32:        if (items == 0) return;
+        -:   33:        body.push_back(ctrl);
+        -:   34:        body.insert(body.end(), pend.begin(), pend.end());
+        -:   35:        ctrl = 0; pend.clear(); items = 0;
+       85:   36:    };
+        -:   37:    auto emitLiteral = [&](uint8_t b) {
+        -:   38:        ctrl = static_cast<uint8_t>(ctrl & ~(1u << items));
+        -:   39:        pend.push_back(b);
+        -:   40:        if (++items == kNumLitPerCtrl) flushGroup();
+       85:   41:    };
+        -:   42:    auto emitMatch = [&](size_t len, size_t off) {
+        -:   43:        ctrl = static_cast<uint8_t>(ctrl | (1u << items));
+        -:   44:        pend.push_back(static_cast<uint8_t>(off & 0xFF));
+        -:   45:        pend.push_back(static_cast<uint8_t>(((off >> 8) & 0x0F) | ((len - kMinMatch) << 4)));
+        -:   46:        if (++items == kNumLitPerCtrl) flushGroup();
+       85:   47:    };
+        -:   48:
+       85:   49:    size_t i = 0;
+  2280201:   50:    while (i < n) {
+branch  0 taken 2280116 (fallthrough)
+branch  1 taken 85
+  2280116:   51:        size_t bestLen = 0, bestOff = 0;
+  2280116:   52:        if (i + 2 < n) {
+branch  0 taken 2280014 (fallthrough)
+branch  1 taken 102
+  2280014:   53:            const size_t cand = head[H::of(in[i], in[i + 1], in[i + 2])];
+call    0 returned 2280014
+call    1 returned 2280014
+call    2 returned 2280014
+call    3 returned 2280014
+call    4 returned 2280014
+  2280014:   54:            if (cand < i && (i - cand) < static_cast<size_t>(kWindowSize)) {
+branch  0 taken 2254233 (fallthrough)
+branch  1 taken 25781
+branch  2 taken 1506105 (fallthrough)
+branch  3 taken 748128
+  1506105:   55:                size_t len = 0;
+        -:   56:                /* cand+len 允许越过 i：解码端逐字节复制，语义一致 */
+  8556042:   57:                while (len < static_cast<size_t>(kMaxMatch) && i + len < n &&
+branch  0 taken 4203738 (fallthrough)
+branch  1 taken 148594
+branch  2 taken 4203710 (fallthrough)
+branch  3 taken 28
+branch  4 taken 2846227 (fallthrough)
+branch  5 taken 1506105
+  7049937:   58:                       in[cand + len] == in[i + len]) ++len;
+call    0 returned 4203710
+call    1 returned 4203710
+branch  2 taken 2846227 (fallthrough)
+branch  3 taken 1357483
+  1506105:   59:                if (len >= static_cast<size_t>(kMinMatch)) { bestLen = len; bestOff = i - cand; }
+branch  0 taken 150148 (fallthrough)
+branch  1 taken 1355957
+        -:   60:            }
+        -:   61:        }
+  2280116:   62:        if (bestLen >= static_cast<size_t>(kMinMatch)) {
+branch  0 taken 150148 (fallthrough)
+branch  1 taken 2129968
+   150148:   63:            emitMatch(bestLen, bestOff);
+call    0 returned 150148
+branch  1 taken 150148 (fallthrough)
+branch  2 taken 0 (throw)
+  2832089:   64:            for (size_t k = 0; k < bestLen; ++k) {
+branch  0 taken 2681941 (fallthrough)
+branch  1 taken 150148
+  2681941:   65:                if (i + k + 2 < n) head[H::of(in[i + k], in[i + k + 1], in[i + k + 2])] = i + k;
+branch  0 taken 2681881 (fallthrough)
+branch  1 taken 60
+call    2 returned 2681881
+call    3 returned 2681881
+call    4 returned 2681881
+call    5 returned 2681881
+call    6 returned 2681881
+        -:   66:            }
+   150148:   67:            i += bestLen;
+        -:   68:        } else {
+  2129968:   69:            emitLiteral(in[i]);
+call    0 returned 2129968
+call    1 returned 2129968
+branch  2 taken 2129968 (fallthrough)
+branch  3 taken 0 (throw)
+  2129968:   70:            if (i + 2 < n) head[H::of(in[i], in[i + 1], in[i + 2])] = i;
+branch  0 taken 2129866 (fallthrough)
+branch  1 taken 102
+call    2 returned 2129866
+call    3 returned 2129866
+call    4 returned 2129866
+call    5 returned 2129866
+call    6 returned 2129866
+  2129968:   71:            ++i;
+        -:   72:        }
+        -:   73:    }
+       85:   74:    flushGroup();
+call    0 returned 85
+branch  1 taken 85 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   75:
+       85:   76:    out.clear();
+call    0 returned 85
+       85:   77:    const uint8_t flags = body.size() >= n ? 1 : 0;
+call    0 returned 85
+branch  1 taken 54 (fallthrough)
+branch  2 taken 31
+       85:   78:    Codec::putHeader(out, static_cast<uint16_t>(CODEC_MAGIC_LZ & 0xFFFFu), 1, flags,
+call    0 returned 85
+branch  1 taken 85 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   79:                     static_cast<uint64_t>(n));
+       85:   80:    if (flags) out.insert(out.end(), in.begin(), in.end());
+branch  0 taken 54 (fallthrough)
+branch  1 taken 31
+call    2 returned 54
+call    3 returned 54
+call    4 returned 54
+call    5 returned 54
+call    6 returned 54
+branch  7 taken 54 (fallthrough)
+branch  8 taken 0 (throw)
+       31:   81:    else       out.insert(out.end(), body.begin(), body.end());
+call    0 returned 31
+call    1 returned 31
+call    2 returned 31
+call    3 returned 31
+call    4 returned 31
+branch  5 taken 31 (fallthrough)
+branch  6 taken 0 (throw)
+      170:   82:    return E_OK;
+call    0 returned 85
+        -:   83:}
+        -:   84:
+function _ZN4DBKP5CLZ776decodeERKSt6vectorIhSaIhEERS3_ called 416 returned 100% blocks executed 88%
+      416:   85:ErrCode CLZ77::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+      416:   86:    uint8_t ver = 0, flags = 0;
+      416:   87:    uint64_t rawLen = 0;
+      416:   88:    size_t start = 0;
+      416:   89:    if (!Codec::readHeader(in, static_cast<uint16_t>(CODEC_MAGIC_LZ & 0xFFFFu),
+call    0 returned 416
+branch  1 taken 416 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 416
+    #####:   90:                           ver, flags, rawLen, start)) return E_COMPRESS_FAIL;
+     416*:   91:    if (ver != 1) return E_COMPRESS_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 416
+     416*:   92:    if (rawLen > (1ull << 40)) return E_COMPRESS_FAIL;         /* 防御异常头 */
+branch  0 taken 0 (fallthrough)
+branch  1 taken 416
+        -:   93:
+      416:   94:    if (flags & 1) {                                           /* 存储模式 */
+branch  0 taken 10 (fallthrough)
+branch  1 taken 406
+      10*:   95:        if (in.size() - start < rawLen) return E_TRUNCATED_ARCHIVE;
+call    0 returned 10
+branch  1 taken 0 (fallthrough)
+branch  2 taken 10
+       10:   96:        out.assign(in.begin() + start, in.begin() + start + static_cast<size_t>(rawLen));
+call    0 returned 10
+call    1 returned 10
+call    2 returned 10
+call    3 returned 10
+call    4 returned 10
+call    5 returned 10
+branch  6 taken 10 (fallthrough)
+branch  7 taken 0 (throw)
+      10*:   97:        return out.size() == rawLen ? E_OK : E_COMPRESS_FAIL;
+call    0 returned 10
+branch  1 taken 10 (fallthrough)
+branch  2 taken 0
+        -:   98:    }
+        -:   99:
+      406:  100:    out.clear();
+call    0 returned 406
+      406:  101:    out.reserve(static_cast<size_t>(rawLen));
+call    0 returned 406
+branch  1 taken 406 (fallthrough)
+branch  2 taken 0 (throw)
+      406:  102:    size_t p = start;
+    58078:  103:    while (out.size() < static_cast<size_t>(rawLen)) {
+call    0 returned 58078
+branch  1 taken 57875 (fallthrough)
+branch  2 taken 203
+   57875*:  104:        if (p >= in.size()) return E_TRUNCATED_ARCHIVE;
+call    0 returned 57875
+branch  1 taken 0 (fallthrough)
+branch  2 taken 57875
+    57875:  105:        const uint8_t ctrl = in[p++];
+call    0 returned 57875
+   518176:  106:        for (int bit = 0; bit < kNumLitPerCtrl && out.size() < static_cast<size_t>(rawLen); ++bit) {
+branch  0 taken 460704 (fallthrough)
+branch  1 taken 57472
+call    2 returned 460704
+branch  3 taken 460504 (fallthrough)
+branch  4 taken 200
+branch  5 taken 460504 (fallthrough)
+branch  6 taken 57672
+   460504:  107:            if (ctrl & (1u << bit)) {
+branch  0 taken 455426 (fallthrough)
+branch  1 taken 5078
+   455426:  108:                if (p + 2 > in.size()) return E_TRUNCATED_ARCHIVE;
+call    0 returned 455426
+branch  1 taken 1 (fallthrough)
+branch  2 taken 455425
+   455425:  109:                const size_t off = size_t(in[p]) | (size_t(in[p + 1] & 0x0F) << 8);
+call    0 returned 455425
+call    1 returned 455425
+   455425:  110:                const size_t len = size_t(in[p + 1] >> 4) + kMinMatch;
+call    0 returned 455425
+   455425:  111:                p += 2;
+   455425:  112:                if (off == 0 || off > out.size()) return E_COMPRESS_FAIL;
+branch  0 taken 455425 (fallthrough)
+branch  1 taken 0
+call    2 returned 455425
+branch  3 taken 21 (fallthrough)
+branch  4 taken 455404
+branch  5 taken 21 (fallthrough)
+branch  6 taken 455404
+  8629701:  113:                for (size_t k = 0; k < len && out.size() < static_cast<size_t>(rawLen); ++k) {
+branch  0 taken 8174297 (fallthrough)
+branch  1 taken 455404
+call    2 returned 8174297
+branch  3 taken 8174297 (fallthrough)
+branch  4 taken 0
+branch  5 taken 8174297 (fallthrough)
+branch  6 taken 455404
+  8174297:  114:                    out.push_back(out[out.size() - off]);
+call    0 returned 8174297
+call    1 returned 8174297
+call    2 returned 8174297
+branch  3 taken 8174297 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  115:                }
+        -:  116:            } else {
+     5078:  117:                if (p >= in.size()) return E_TRUNCATED_ARCHIVE;
+call    0 returned 5078
+branch  1 taken 181 (fallthrough)
+branch  2 taken 4897
+     4897:  118:                out.push_back(in[p++]);
+call    0 returned 4897
+call    1 returned 4897
+branch  2 taken 4897 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  119:            }
+        -:  120:        }
+        -:  121:    }
+     203*:  122:    return out.size() == static_cast<size_t>(rawLen) ? E_OK : E_COMPRESS_FAIL;
+call    0 returned 203
+branch  1 taken 203 (fallthrough)
+branch  2 taken 0
+        -:  123:}
+        -:  124:
+        -:  125:/* ------------------------------------------------------------------ RLE */
+        -:  126:namespace {
+        -:  127:
+function _ZN4DBKP12_GLOBAL__N_19rleRunLenERKSt6vectorIhSaIhEEy called 1179346 returned 100% blocks executed 100%
+  1179346:  128:size_t rleRunLen(const std::vector<uint8_t>& in, size_t i) {
+  1179346:  129:    size_t r = 1;
+  2231431:  130:    while (r < 255 && i + r < in.size() && in[i + r] == in[i]) ++r;
+branch  0 taken 2227312 (fallthrough)
+branch  1 taken 4119
+call    2 returned 2227312
+branch  3 taken 2227296 (fallthrough)
+branch  4 taken 16
+call    5 returned 2227296
+call    6 returned 2227296
+branch  7 taken 1052085 (fallthrough)
+branch  8 taken 1175211
+branch  9 taken 1052085 (fallthrough)
+branch 10 taken 1179346
+  1179346:  131:    return r;
+        -:  132:}
+        -:  133:
+        -:  134:} /* anonymous namespace */
+        -:  135:
+function _ZN4DBKP4CRle6encodeERKSt6vectorIhSaIhEERS3_ called 17 returned 100% blocks executed 93%
+       17:  136:ErrCode CRle::encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+       17:  137:    out.clear();
+call    0 returned 17
+       17:  138:    Codec::putHeader(out, static_cast<uint16_t>(CODEC_MAGIC_RLE & 0xFFFFu), 2, 0,
+call    0 returned 17
+       17:  139:                     static_cast<uint64_t>(in.size()));
+call    0 returned 17
+        -:  140:    /* v2 令牌：0x00 + [len 1..255] + len 个字面量；0x01 + [count 4..255] + 重复字节
+        -:  141:       —— 老实现每个字面量要 2 字节，随机数据会膨胀一倍，这里最坏只多 0.4% */
+       17:  142:    size_t i = 0;
+     8740:  143:    while (i < in.size()) {
+call    0 returned 8740
+branch  1 taken 8723 (fallthrough)
+branch  2 taken 17
+     8723:  144:        const size_t run = rleRunLen(in, i);
+call    0 returned 8723
+     8723:  145:        if (run >= 4) {
+branch  0 taken 4123 (fallthrough)
+branch  1 taken 4600
+     4123:  146:            out.push_back(0x01);
+call    0 returned 4123
+branch  1 taken 4123 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+     4123:  147:            out.push_back(static_cast<uint8_t>(run));
+call    0 returned 4123
+branch  1 taken 4123 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+     4123:  148:            out.push_back(in[i]);
+call    0 returned 4123
+call    1 returned 4123
+     4123:  149:            i += run;
+     4123:  150:            continue;
+        -:  151:        }
+     4600:  152:        const size_t head = out.size();
+call    0 returned 4600
+     4600:  153:        out.push_back(0x00);
+call    0 returned 4600
+branch  1 taken 4600 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+     4600:  154:        out.push_back(0);
+call    0 returned 4600
+branch  1 taken 4600 (fallthrough)
+branch  2 taken 0 (throw)
+  1175222:  155:        while (i < in.size() && out.size() - head - 2 < 255) {
+call    0 returned 1175222
+branch  1 taken 1175211 (fallthrough)
+branch  2 taken 11
+call    3 returned 1175211
+branch  4 taken 1170623 (fallthrough)
+branch  5 taken 4588
+branch  6 taken 1170623 (fallthrough)
+branch  7 taken 4599
+  1170623:  156:            const size_t rr = rleRunLen(in, i);
+call    0 returned 1170623
+  1170623:  157:            if (rr >= 4 && out.size() > head + 2) break;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1170622
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+branch  5 taken 1 (fallthrough)
+branch  6 taken 1170622
+  1170622:  158:            out.push_back(in[i]);
+call    0 returned 1170622
+call    1 returned 1170622
+  1170622:  159:            ++i;
+        -:  160:        }
+     4600:  161:        out[head + 1] = static_cast<uint8_t>(out.size() - head - 2);
+call    0 returned 4600
+call    1 returned 4600
+        -:  162:    }
+       17:  163:    return E_OK;
+        -:  164:}
+        -:  165:
+function _ZN4DBKP4CRle6decodeERKSt6vectorIhSaIhEERS3_ called 11 returned 100% blocks executed 81%
+       11:  166:ErrCode CRle::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+       11:  167:    uint8_t ver = 0, flags = 0;
+       11:  168:    uint64_t rawLen = 0;
+       11:  169:    size_t start = 0;
+       11:  170:    if (!Codec::readHeader(in, static_cast<uint16_t>(CODEC_MAGIC_RLE & 0xFFFFu),
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 11
+    #####:  171:                           ver, flags, rawLen, start)) return E_COMPRESS_FAIL;
+      11*:  172:    if ((ver != 1 && ver != 2) || flags != 0) return E_COMPRESS_FAIL;
+branch  0 taken 11 (fallthrough)
+branch  1 taken 0
+branch  2 taken 11 (fallthrough)
+branch  3 taken 0
+branch  4 taken 0 (fallthrough)
+branch  5 taken 11
+      11*:  173:    if (rawLen > (1ull << 40)) return E_COMPRESS_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 11
+       11:  174:    out.clear();
+call    0 returned 11
+       11:  175:    out.reserve(static_cast<size_t>(rawLen));
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+       11:  176:    size_t p = start;
+     8672:  177:    while (out.size() < static_cast<size_t>(rawLen)) {
+call    0 returned 8672
+branch  1 taken 8661 (fallthrough)
+branch  2 taken 11
+    8661*:  178:        if (p >= in.size()) return E_TRUNCATED_ARCHIVE;
+call    0 returned 8661
+branch  1 taken 0 (fallthrough)
+branch  2 taken 8661
+     8661:  179:        const uint8_t tag = in[p++];
+call    0 returned 8661
+     8661:  180:        if (tag == 0x00) {
+branch  0 taken 4538 (fallthrough)
+branch  1 taken 4123
+    4538*:  181:            if (p >= in.size()) return E_TRUNCATED_ARCHIVE;
+call    0 returned 4538
+branch  1 taken 0 (fallthrough)
+branch  2 taken 4538
+     4538:  182:            const size_t len = in[p++];
+call    0 returned 4538
+    4538*:  183:            if (len == 0 || p + len > in.size()) return E_COMPRESS_FAIL;
+branch  0 taken 4538 (fallthrough)
+branch  1 taken 0
+call    2 returned 4538
+branch  3 taken 0 (fallthrough)
+branch  4 taken 4538
+branch  5 taken 0 (fallthrough)
+branch  6 taken 4538
+     4538:  184:            const size_t remain = static_cast<size_t>(rawLen) - out.size();
+call    0 returned 4538
+     4538:  185:            const size_t take = len < remain ? len : remain;
+branch  0 taken 4533 (fallthrough)
+branch  1 taken 5
+  1160525:  186:            for (size_t k = 0; k < take; ++k) out.push_back(in[p++]);
+branch  0 taken 1155987 (fallthrough)
+branch  1 taken 4538
+call    2 returned 1155987
+call    3 returned 1155987
+branch  4 taken 1155987 (fallthrough)
+branch  5 taken 0 (throw)
+     4538:  187:            p += len - take;                  /* 提前填满时也要跳过剩余字节 */
+     4123:  188:        } else if (tag == 0x01) {
+branch  0 taken 4123 (fallthrough)
+branch  1 taken 0
+    4123*:  189:            if (p + 1 >= in.size()) return E_TRUNCATED_ARCHIVE;
+call    0 returned 4123
+branch  1 taken 0 (fallthrough)
+branch  2 taken 4123
+     4123:  190:            const size_t count = in[p++];
+call    0 returned 4123
+     4123:  191:            const uint8_t b = in[p++];
+call    0 returned 4123
+    4123*:  192:            if (count == 0) return E_COMPRESS_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4123
+  1054699:  193:            for (size_t k = 0; k < count && out.size() < static_cast<size_t>(rawLen); ++k) {
+branch  0 taken 1050576 (fallthrough)
+branch  1 taken 4123
+call    2 returned 1050576
+branch  3 taken 1050576 (fallthrough)
+branch  4 taken 0
+branch  5 taken 1050576 (fallthrough)
+branch  6 taken 4123
+  1050576:  194:                out.push_back(b);
+call    0 returned 1050576
+branch  1 taken 1050576 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  195:            }
+        -:  196:        } else {
+    #####:  197:            return E_COMPRESS_FAIL;
+        -:  198:        }
+        -:  199:    }
+      11*:  200:    return out.size() == static_cast<size_t>(rawLen) ? E_OK : E_COMPRESS_FAIL;
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0
+        -:  201:}
+        -:  202:
+        -:  203:/* ------------------------------------------------------------ LZ77+Huffman */
+function _ZN4DBKP11CComboCodec6encodeERKSt6vectorIhSaIhEERS3_ called 24 returned 100% blocks executed 75%
+       24:  204:ErrCode CComboCodec::encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+       48:  205:    std::vector<uint8_t> mid;
+call    0 returned 24
+call    1 returned 24
+call    2 never executed
+       24:  206:    ErrCode e = m_inner->encode(in, mid);
+call    0 returned 24
+branch  1 taken 24 (fallthrough)
+branch  2 taken 0 (throw)
+      24*:  207:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 24
+       24:  208:    return m_outer->encode(mid, out);
+call    0 returned 24
+branch  1 taken 24 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  209:}
+        -:  210:
+function _ZN4DBKP11CComboCodec6decodeERKSt6vectorIhSaIhEERS3_ called 12 returned 100% blocks executed 75%
+       12:  211:ErrCode CComboCodec::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+       24:  212:    std::vector<uint8_t> mid;
+call    0 returned 12
+call    1 returned 12
+call    2 never executed
+       12:  213:    ErrCode e = m_outer->decode(in, mid);
+call    0 returned 12
+branch  1 taken 12 (fallthrough)
+branch  2 taken 0 (throw)
+      12*:  214:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 12
+       12:  215:    return m_inner->decode(mid, out);
+call    0 returned 12
+branch  1 taken 12 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  216:}
+        -:  217:
+        -:  218:} /* namespace DBKP */
+        -:  219:

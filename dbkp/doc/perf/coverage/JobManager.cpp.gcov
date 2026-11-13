@@ -1,0 +1,1225 @@
+        -:    0:Source:src/Web/JobManager.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/JobManager.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/JobManager.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  JobManager.cpp  -- 见 JobManager.h
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Web/JobManager.h"
+        -:    5:
+        -:    6:#include "Common/Defs.h"
+        -:    7:#include "Utils/Logger.h"
+        -:    8:
+        -:    9:#include <chrono>
+        -:   10:
+        -:   11:namespace DBKP {
+        -:   12:
+        -:   13:namespace {
+        -:   14:
+function _ZN4DBKP12_GLOBAL__N_16nowSecEv called 0 returned 0% blocks executed 0%
+    #####:   15:long long nowSec() {
+        -:   16:    return static_cast<long long>(
+    #####:   17:        std::chrono::duration_cast<std::chrono::seconds>(
+    #####:   18:            std::chrono::system_clock::now().time_since_epoch()).count());
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+        -:   19:}
+        -:   20:
+function _ZN4DBKP12_GLOBAL__N_113formatLogLineENS_8LogLevelERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:   21:std::string formatLogLine(LogLevel lv, const std::string& line) {
+    #####:   22:    const char* tag = "info";
+    #####:   23:    switch (lv) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   24:    case LL_ERROR: tag = "error"; break;
+    #####:   25:    case LL_WARN:  tag = "warn";  break;
+    #####:   26:    case LL_DEBUG: tag = "debug"; break;
+    #####:   27:    default: break;
+        -:   28:    }
+    #####:   29:    return std::string(tag) + ": " + line;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+        -:   30:}
+        -:   31:
+        -:   32:} /* anonymous namespace */
+        -:   33:
+        -:   34:/* ------------------------------------------------------------------ Job */
+function _ZN4DBKP11CJobManager3JobC2Ev called 0 returned 0% blocks executed 0%
+    #####:   35:CJobManager::Job::Job()
+        -:   36:    : m_state(ST_QUEUED), m_code(0), m_totalEntries(0), m_entriesDone(0),
+        -:   37:      m_totalBytes(0), m_bytesDone(0), m_createdAt(0), m_startedAt(0),
+    #####:   38:      m_finishedAt(0), m_cancelReq(false) {}
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+branch 17 never executed
+branch 18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+        -:   39:
+function _ZN4DBKP11CJobManager3Job7onStartExy called 0 returned 0% blocks executed 0%
+    #####:   40:void CJobManager::Job::onStart(int64_t totalEntries, uint64_t totalBytes) {
+    #####:   41:    m_totalEntries.store(static_cast<long long>(totalEntries));
+call    0 never executed
+    #####:   42:    m_totalBytes.store(totalBytes);
+call    0 never executed
+    #####:   43:}
+        -:   44:
+function _ZN4DBKP11CJobManager3Job10onProgressExy called 0 returned 0% blocks executed 0%
+    #####:   45:void CJobManager::Job::onProgress(int64_t entriesDone, uint64_t bytesDone) {
+    #####:   46:    m_entriesDone.store(static_cast<long long>(entriesDone));
+call    0 never executed
+    #####:   47:    m_bytesDone.store(bytesDone);
+call    0 never executed
+    #####:   48:}
+        -:   49:
+function _ZNK4DBKP11CJobManager3Job8canceledEv called 0 returned 0% blocks executed 0%
+    #####:   50:bool CJobManager::Job::canceled() const {
+    #####:   51:    return m_cancelReq.load();
+call    0 never executed
+        -:   52:}
+        -:   53:
+function _ZN4DBKP11CJobManager3Job6addLogERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEy called 0 returned 0% blocks executed 0%
+    #####:   54:void CJobManager::Job::addLog(const std::string& line, std::size_t maxLines) {
+    #####:   55:    std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:   56:    m_log.push_back(line);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:   57:    /* 环形缓冲：长任务打几上万行日志时，前端只需要最近这些，
+        -:   58:       但内存必须是有界的（否则跑一整夜的定时备份会把进程吃爆）。 */
+    #####:   59:    while (m_log.size() > maxLines) m_log.pop_front();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:   60:}
+        -:   61:
+function _ZNK4DBKP11CJobManager3Job8snapshotERNS0_4InfoE called 0 returned 0% blocks executed 0%
+    #####:   62:void CJobManager::Job::snapshot(Info& out) const {
+    #####:   63:    out.id = m_id;
+    #####:   64:    out.type = m_type;
+call    0 never executed
+    #####:   65:    out.label = m_label;
+call    0 never executed
+    #####:   66:    out.source = m_source;
+call    0 never executed
+    #####:   67:    out.target = m_target;
+call    0 never executed
+    #####:   68:    out.state = static_cast<State>(m_state.load());
+call    0 never executed
+    #####:   69:    out.code = m_code.load();
+call    0 never executed
+    #####:   70:    out.totalEntries = m_totalEntries.load();
+call    0 never executed
+    #####:   71:    out.entriesDone = m_entriesDone.load();
+call    0 never executed
+    #####:   72:    out.totalBytes = m_totalBytes.load();
+call    0 never executed
+    #####:   73:    out.bytesDone = m_bytesDone.load();
+call    0 never executed
+    #####:   74:    out.createdAt = m_createdAt.load();
+call    0 never executed
+    #####:   75:    out.startedAt = m_startedAt.load();
+call    0 never executed
+    #####:   76:    out.finishedAt = m_finishedAt.load();
+call    0 never executed
+        -:   77:    {
+    #####:   78:        std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:   79:        out.message = m_message;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   80:        out.log.assign(m_log.begin(), m_log.end());
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:   81:    }
+    #####:   82:}
+        -:   83:
+        -:   84:/* -------------------------------------------------------------- 生命周期 */
+function _ZN4DBKP11CJobManagerC2Ev called 0 returned 0% blocks executed 0%
+    #####:   85:CJobManager::CJobManager() : CJobManager(2) {}
+call    0 never executed
+        -:   86:
+function _ZN4DBKP11CJobManagerC2Ey called 0 returned 0% blocks executed 0%
+    #####:   87:CJobManager::CJobManager(std::size_t workerCount) {
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:   88:    m_revision.store(0);
+call    0 never executed
+    #####:   89:    if (workerCount < 1) workerCount = 1;
+branch  0 never executed
+branch  1 never executed
+    #####:   90:    if (workerCount > 8) workerCount = 8;      /* 再多也只是抢磁盘 */
+branch  0 never executed
+branch  1 never executed
+    #####:   91:    for (std::size_t i = 0; i < workerCount; ++i)
+branch  0 never executed
+branch  1 never executed
+    #####:   92:        m_threads.push_back(std::thread(&CJobManager::workerLoop, this));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+    #####:   93:}
+        -:   94:
+function _ZN4DBKP11CJobManagerD2Ev called 0 returned 0% blocks executed 0%
+    #####:   95:CJobManager::~CJobManager() { stop(); }
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+call    4 never executed
+call    5 never executed
+        -:   96:
+function _ZN4DBKP11CJobManager4stopEv called 0 returned 0% blocks executed 0%
+    #####:   97:void CJobManager::stop() {
+        -:   98:    {
+    #####:   99:        std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  100:        if (!m_accepting) return;              /* 幂等：析构可能再次调用 */
+branch  0 never executed
+branch  1 never executed
+    #####:  101:        m_accepting = false;
+        -:  102:        /* 排队中的直接标记取消，不必再执行；运行中的置 cancelReq 让内核收尾，
+        -:  103:           这样半成品归档会被删除，不会留下一个"看起来成功"的坏包。 */
+    #####:  104:        for (std::size_t i = 0; i < m_pending.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  105:            Job& j = *m_pending[i];
+call    0 never executed
+call    1 never executed
+    #####:  106:            if (j.m_state.load() == ST_QUEUED) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  107:                j.m_cancelReq.store(true);
+call    0 never executed
+    #####:  108:                j.m_state.store(ST_CANCELED);
+call    0 never executed
+    #####:  109:                j.m_code.store(E_CANCELED);
+call    0 never executed
+    #####:  110:                j.m_finishedAt.store(nowSec());
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  111:                std::lock_guard<std::mutex> lk2(j.m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  112:                j.m_message = "服务停止，任务未执行";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  113:            }
+        -:  114:        }
+        -:  115:    }
+    #####:  116:    m_cv.notify_all();
+call    0 never executed
+    #####:  117:    for (std::size_t i = 0; i < m_threads.size(); ++i)
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  118:        if (m_threads[i].joinable()) m_threads[i].join();
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+    #####:  119:    m_threads.clear();
+call    0 never executed
+        -:  120:}
+        -:  121:
+        -:  122:/* ------------------------------------------------------------------ 提交 */
+function _ZN4DBKP11CJobManager6submitERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_S8_S8_St8functionIFNS_7ErrCodeERNS_13IProgressSinkERS6_EE called 0 returned 0% blocks executed 0%
+    #####:  123:long long CJobManager::submit(const std::string& type, const std::string& label,
+        -:  124:                              const std::string& source, const std::string& target,
+        -:  125:                              Task task) {
+    #####:  126:    std::shared_ptr<Job> job(new Job());
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+    #####:  127:    job->m_type = type;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  128:    job->m_label = label;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  129:    job->m_source = source;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  130:    job->m_target = target;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  131:    job->m_createdAt.store(nowSec());
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+    #####:  132:    job->m_task = task;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  133:
+    #####:  134:    std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  135:    if (!m_accepting) return -1;
+branch  0 never executed
+branch  1 never executed
+    #####:  136:    job->m_id = m_nextId++;
+call    0 never executed
+    #####:  137:    m_pending.push_back(job);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  138:    m_history.push_back(job);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  139:    pruneLocked();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  140:    m_revision.fetch_add(1);
+    #####:  141:    m_cv.notify_one();
+call    0 never executed
+    #####:  142:    return job->m_id;
+call    0 never executed
+        -:  143:}
+        -:  144:
+        -:  145:/* ------------------------------------------------------------ worker 循环 */
+function _ZN4DBKP11CJobManager10workerLoopEv called 0 returned 0% blocks executed 0%
+    #####:  146:void CJobManager::workerLoop() {
+        -:  147:    for (;;) {
+    #####:  148:        std::shared_ptr<Job> job;
+call    0 never executed
+        -:  149:        {
+    #####:  150:            std::unique_lock<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  151:            m_cv.wait(lk, [this] { return !m_pending.empty() || !m_accepting; });
+call    0 never executed
+    #####:  152:            if (!m_accepting && m_pending.empty()) return;   /* 收尾退出 */
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+    #####:  153:            job = m_pending.front();
+call    0 never executed
+call    1 never executed
+    #####:  154:            m_pending.pop_front();
+call    0 never executed
+        -:  155:        }
+    #####:  156:        if (!job) continue;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  157:        if (job->m_state.load() == ST_CANCELED) { m_revision.fetch_add(1); continue; }
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  158:
+    #####:  159:        job->m_startedAt.store(nowSec());
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+    #####:  160:        job->m_state.store(ST_RUNNING);
+call    0 never executed
+call    1 never executed
+    #####:  161:        m_revision.fetch_add(1);
+        -:  162:
+        -:  163:        /* 本线程产生的日志只进这个 job 的环形缓冲：并发任务互不串台，
+        -:  164:           靠的是 Logger 里的 thread_local sink，而不是全局状态。 */
+    #####:  165:        const std::size_t maxLines = m_maxLogLines;
+    #####:  166:        Logger::setThreadSink([job, maxLines](LogLevel lv, const std::string& line) {
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+        -:  167:            job->addLog(formatLogLine(lv, line), maxLines);
+        -:  168:        });
+        -:  169:
+    #####:  170:        ErrCode code = E_INTERNAL;
+    #####:  171:        std::string message;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+        -:  172:        try {
+    #####:  173:            if (job->m_task) code = job->m_task(*job, message);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+    #####:  174:            else message = "内部错误：任务体为空";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    =====:  175:        } catch (const std::exception& e) {
+call    0 never executed
+call    1 never executed
+    =====:  176:            code = E_INTERNAL;
+    =====:  177:            message = std::string("任务抛出异常：") + e.what();
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+    =====:  178:        } catch (...) {
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+    =====:  179:            code = E_INTERNAL;
+    =====:  180:            message = "任务抛出未知异常";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  181:        }
+    #####:  182:        Logger::setThreadSink(Logger::ThreadSink());   /* 线程复用前必须清掉 */
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  183:
+    #####:  184:        if (job->m_cancelReq.load() || code == E_CANCELED) {
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  185:            job->m_state.store(ST_CANCELED);
+call    0 never executed
+call    1 never executed
+    #####:  186:            job->m_code.store(E_CANCELED);
+call    0 never executed
+call    1 never executed
+    #####:  187:            if (message.empty()) message = "任务已取消";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  188:        } else if (code == E_OK) {
+branch  0 never executed
+branch  1 never executed
+    #####:  189:            job->m_state.store(ST_SUCCEEDED);
+call    0 never executed
+call    1 never executed
+    #####:  190:            job->m_code.store(E_OK);
+call    0 never executed
+call    1 never executed
+    #####:  191:            if (message.empty()) message = "完成";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+        -:  192:        } else {
+    #####:  193:            job->m_state.store(ST_FAILED);
+call    0 never executed
+call    1 never executed
+    #####:  194:            job->m_code.store(static_cast<int>(code));
+call    0 never executed
+call    1 never executed
+    #####:  195:            if (message.empty()) message = errCodeToString(code);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+        -:  196:        }
+        -:  197:        {
+    #####:  198:            std::lock_guard<std::mutex> lk(job->m_mtx);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+    #####:  199:            job->m_message = message;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  200:        }
+    #####:  201:        job->m_finishedAt.store(nowSec());
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+    #####:  202:        m_revision.fetch_add(1);
+        -:  203:
+        -:  204:        {
+    #####:  205:            std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  206:            pruneLocked();      /* 定时备份跑一整夜也不会把内存单调吃掉 */
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  207:        }
+    #####:  208:    }
+        -:  209:}
+        -:  210:
+function _ZN4DBKP11CJobManager11pruneLockedEv called 0 returned 0% blocks executed 0%
+    #####:  211:void CJobManager::pruneLocked() {
+    #####:  212:    while (m_history.size() > m_keepHistory) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  213:        const int st = m_history.front()->m_state.load();
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  214:        if (st == ST_QUEUED || st == ST_RUNNING) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  215:            /* 队首还在执行时先删后面第一个已结束的，保持"旧的先出门" */
+    #####:  216:            bool erased = false;
+    #####:  217:            for (std::size_t i = 1; i < m_history.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  218:                const int s2 = m_history[i]->m_state.load();
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  219:                if (s2 != ST_QUEUED && s2 != ST_RUNNING) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  220:                    m_history.erase(m_history.begin() + static_cast<std::ptrdiff_t>(i));
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  221:                    erased = true;
+    #####:  222:                    break;
+        -:  223:                }
+        -:  224:            }
+    #####:  225:            if (!erased) return;                /* 全都在跑：等下一轮 */
+branch  0 never executed
+branch  1 never executed
+        -:  226:        } else {
+    #####:  227:            m_history.pop_front();
+call    0 never executed
+        -:  228:        }
+        -:  229:    }
+        -:  230:}
+        -:  231:
+        -:  232:/* --------------------------------------------------------------- 查询/控制 */
+function _ZN4DBKP11CJobManager6cancelEx called 0 returned 0% blocks executed 0%
+    #####:  233:bool CJobManager::cancel(long long id) {
+    #####:  234:    std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  235:    for (std::size_t i = 0; i < m_history.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  236:        if (m_history[i]->m_id != id) continue;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  237:        Job& j = *m_history[i];
+call    0 never executed
+call    1 never executed
+    #####:  238:        const int st = j.m_state.load();
+call    0 never executed
+    #####:  239:        if (st != ST_QUEUED && st != ST_RUNNING) return false;   /* 已结束的取消不了 */
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  240:        j.m_cancelReq.store(true);
+call    0 never executed
+    #####:  241:        if (st == ST_QUEUED) {
+branch  0 never executed
+branch  1 never executed
+        -:  242:            /* 还没开始，直接终态；worker 之后取到它会跳过 */
+    #####:  243:            j.m_state.store(ST_CANCELED);
+call    0 never executed
+    #####:  244:            j.m_code.store(E_CANCELED);
+call    0 never executed
+    #####:  245:            j.m_finishedAt.store(nowSec());
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  246:            std::lock_guard<std::mutex> lk2(j.m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  247:            j.m_message = "已在排队阶段取消";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  248:        }
+    #####:  249:        m_revision.fetch_add(1);
+    #####:  250:        return true;
+        -:  251:    }
+    #####:  252:    return false;
+        -:  253:}
+        -:  254:
+function _ZNK4DBKP11CJobManager3getExRNS0_4InfoE called 0 returned 0% blocks executed 0%
+    #####:  255:bool CJobManager::get(long long id, Info& out) const {
+    #####:  256:    std::shared_ptr<Job> found;
+call    0 never executed
+call    1 never executed
+        -:  257:    {
+    #####:  258:        std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  259:        for (std::size_t i = 0; i < m_history.size(); ++i)
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  260:            if (m_history[i]->m_id == id) { found = m_history[i]; break; }
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  261:    }
+    #####:  262:    if (!found) return false;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  263:    found->snapshot(out);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  264:    return true;
+        -:  265:}
+        -:  266:
+function _ZNK4DBKP11CJobManager4listERSt6vectorINS0_4InfoESaIS2_EEy called 0 returned 0% blocks executed 0%
+    #####:  267:void CJobManager::list(std::vector<Info>& out, std::size_t limit) const {
+    #####:  268:    std::vector<std::shared_ptr<Job> > snap;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+        -:  269:    {
+    #####:  270:        std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  271:        snap.assign(m_history.begin(), m_history.end());
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  272:    }
+        -:  273:    /* 新->旧：前端列表最想先看正在跑/刚跑完的那个 */
+    #####:  274:    for (std::size_t i = snap.size(); i > 0; --i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  275:        if (limit && out.size() >= limit) break;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+    #####:  276:        Info info;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  277:        snap[i - 1]->snapshot(info);
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  278:        out.push_back(info);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  279:    }
+    #####:  280:}
+        -:  281:
+function _ZNK4DBKP11CJobManager5countEv called 0 returned 0% blocks executed 0%
+    #####:  282:std::size_t CJobManager::count() const {
+    #####:  283:    std::lock_guard<std::mutex> lk(m_mtx);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  284:    return m_history.size();
+call    0 never executed
+        -:  285:}
+        -:  286:
+function _ZN4DBKP11CJobManager9stateNameENS0_5StateE called 0 returned 0% blocks executed 0%
+    #####:  287:const char* CJobManager::stateName(State s) {
+    #####:  288:    switch (s) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  289:    case ST_QUEUED:    return "queued";
+    #####:  290:    case ST_RUNNING:   return "running";
+    #####:  291:    case ST_SUCCEEDED: return "succeeded";
+    #####:  292:    case ST_FAILED:    return "failed";
+    #####:  293:    case ST_CANCELED:  return "canceled";
+        -:  294:    }
+    #####:  295:    return "unknown";
+        -:  296:}
+        -:  297:
+function _ZN4DBKP11CJobManager6toJsonERKNS0_4InfoEb called 0 returned 0% blocks executed 0%
+    #####:  298:CJsonValue CJobManager::toJson(const Info& info, bool withLog) {
+    #####:  299:    CJsonValue o = CJsonValue::makeObject();
+call    0 never executed
+    #####:  300:    o["id"]     = CJsonValue::makeInt(info.id);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  301:    o["type"]   = CJsonValue::makeString(info.type);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  302:    o["label"]  = CJsonValue::makeString(info.label);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  303:    o["source"] = CJsonValue::makeString(info.source);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  304:    o["target"] = CJsonValue::makeString(info.target);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  305:    o["state"]  = CJsonValue::makeString(stateName(info.state));
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+    #####:  306:    o["code"]   = CJsonValue::makeInt(info.code);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  307:    o["codeText"] = CJsonValue::makeString(errCodeToString(static_cast<ErrCode>(info.code)));
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+branch 12 never executed
+branch 13 never executed
+call   14 never executed
+branch 15 never executed
+branch 16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+    #####:  308:    o["message"] = CJsonValue::makeString(info.message);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  309:    o["totalEntries"] = CJsonValue::makeInt(info.totalEntries);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  310:    o["entriesDone"]  = CJsonValue::makeInt(info.entriesDone);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  311:    o["totalBytes"]   = CJsonValue::makeInt(static_cast<int64_t>(info.totalBytes));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  312:    o["bytesDone"]    = CJsonValue::makeInt(static_cast<int64_t>(info.bytesDone));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  313:    o["createdAt"] = CJsonValue::makeInt(info.createdAt);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  314:    o["startedAt"] = CJsonValue::makeInt(info.startedAt);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+    #####:  315:    o["finishedAt"] = CJsonValue::makeInt(info.finishedAt);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+        -:  316:
+    #####:  317:    double ratio = 0.0;
+    #####:  318:    if (info.totalEntries > 0) ratio = static_cast<double>(info.entriesDone) / static_cast<double>(info.totalEntries);
+branch  0 never executed
+branch  1 never executed
+    #####:  319:    else if (info.totalBytes > 0) ratio = static_cast<double>(info.bytesDone) / static_cast<double>(info.totalBytes);
+branch  0 never executed
+branch  1 never executed
+    #####:  320:    if (info.state == ST_SUCCEEDED) ratio = 1.0;         /* 内核可能少报最后一条 */
+branch  0 never executed
+branch  1 never executed
+    #####:  321:    if (ratio < 0) ratio = 0;
+branch  0 never executed
+branch  1 never executed
+    #####:  322:    if (ratio > 1) ratio = 1;
+branch  0 never executed
+branch  1 never executed
+    #####:  323:    o["ratio"] = CJsonValue::makeDouble(ratio);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+        -:  324:
+    #####:  325:    if (withLog) {
+branch  0 never executed
+branch  1 never executed
+    #####:  326:        CJsonValue arr = CJsonValue::makeArray();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  327:        for (std::size_t i = 0; i < info.log.size(); ++i)
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  328:            arr.push_back(CJsonValue::makeString(info.log[i]));
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+    #####:  329:        o["log"] = arr;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+        -:  330:    }
+    #####:  331:    return o;
+        -:  332:}
+        -:  333:
+        -:  334:} /* namespace DBKP */

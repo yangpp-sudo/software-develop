@@ -1,0 +1,154 @@
+        -:    0:Source:src/Codec/BitIo.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/BitIo.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/BitIo.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  BitIo.cpp  -- 码流头 + 位读写器
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Codec/Codecs.h"
+        -:    5:
+        -:    6:#include <cstring>
+        -:    7:
+        -:    8:namespace DBKP {
+        -:    9:namespace Codec {
+        -:   10:
+function _ZN4DBKP5Codec9putHeaderERSt6vectorIhSaIhEEthhy called 157 returned 100% blocks executed 83%
+      157:   11:void putHeader(std::vector<uint8_t>& out, uint16_t magic, uint8_t ver, uint8_t flags,
+        -:   12:               uint64_t rawLen) {
+      157:   13:    out.push_back(static_cast<uint8_t>(magic & 0xFF));
+call    0 returned 157
+branch  1 taken 157 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+      157:   14:    out.push_back(static_cast<uint8_t>((magic >> 8) & 0xFF));
+call    0 returned 157
+branch  1 taken 157 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+      157:   15:    out.push_back(ver);
+call    0 returned 157
+      157:   16:    out.push_back(flags);
+call    0 returned 157
+     1413:   17:    for (int i = 0; i < 8; ++i) out.push_back(static_cast<uint8_t>((rawLen >> (8 * i)) & 0xFF));
+branch  0 taken 1256 (fallthrough)
+branch  1 taken 157
+call    2 returned 1256
+branch  3 taken 1256 (fallthrough)
+branch  4 taken 0 (throw)
+      157:   18:}
+        -:   19:
+function _ZN4DBKP5Codec10readHeaderERKSt6vectorIhSaIhEEtRhS6_RyS7_ called 461 returned 100% blocks executed 100%
+      461:   20:bool readHeader(const std::vector<uint8_t>& in, uint16_t expectMagic,
+        -:   21:                uint8_t& ver, uint8_t& flags, uint64_t& rawLen, std::size_t& payloadStart) {
+      461:   22:    if (in.size() < 12) return false;
+call    0 returned 461
+branch  1 taken 3 (fallthrough)
+branch  2 taken 458
+      458:   23:    const uint16_t magic = uint16_t(in[0]) | (uint16_t(in[1]) << 8);
+call    0 returned 458
+call    1 returned 458
+      458:   24:    if (magic != expectMagic) return false;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 457
+      457:   25:    ver = in[2];
+call    0 returned 457
+      457:   26:    flags = in[3];
+call    0 returned 457
+      457:   27:    rawLen = 0;
+     4113:   28:    for (int i = 0; i < 8; ++i) rawLen |= uint64_t(in[4 + i]) << (8 * i);
+branch  0 taken 3656 (fallthrough)
+branch  1 taken 457
+call    2 returned 3656
+      457:   29:    payloadStart = 12;
+      457:   30:    return true;
+        -:   31:}
+        -:   32:
+function _ZN4DBKP5Codec9BitWriter5writeEji called 7 returned 100% blocks executed 100%
+        7:   33:void BitWriter::write(uint32_t value, int nbits) {
+       32:   34:    for (int i = 0; i < nbits; ++i) {
+branch  0 taken 25 (fallthrough)
+branch  1 taken 7
+       25:   35:        m_acc |= ((value >> i) & 1u) << m_bits;
+       25:   36:        ++m_bits;
+       25:   37:        if (m_bits == 8) { m_out.push_back(static_cast<uint8_t>(m_acc)); m_acc = 0; m_bits = 0; }
+branch  0 taken 2 (fallthrough)
+branch  1 taken 23
+call    2 returned 2
+branch  3 taken 2 (fallthrough)
+branch  4 taken 0 (throw)
+        -:   38:    }
+        7:   39:}
+        -:   40:
+function _ZN4DBKP5Codec9BitWriter8writeMsbEji called 3544925 returned 100% blocks executed 100%
+  3544925:   41:void BitWriter::writeMsb(uint32_t value, int nbits) {
+ 23196982:   42:    for (int i = nbits - 1; i >= 0; --i) {
+branch  0 taken 19652057 (fallthrough)
+branch  1 taken 3544925
+ 19652057:   43:        m_acc |= ((value >> i) & 1u) << m_bits;
+ 19652057:   44:        ++m_bits;
+ 19652057:   45:        if (m_bits == 8) { m_out.push_back(static_cast<uint8_t>(m_acc)); m_acc = 0; m_bits = 0; }
+branch  0 taken 2456488 (fallthrough)
+branch  1 taken 17195569
+call    2 returned 2456488
+branch  3 taken 2456488 (fallthrough)
+branch  4 taken 0 (throw)
+        -:   46:    }
+  3544925:   47:}
+        -:   48:
+function _ZN4DBKP5Codec9BitWriter5flushEv called 56 returned 100% blocks executed 100%
+       56:   49:void BitWriter::flush() {
+       56:   50:    if (m_bits) { m_out.push_back(static_cast<uint8_t>(m_acc)); m_acc = 0; m_bits = 0; }
+branch  0 taken 39 (fallthrough)
+branch  1 taken 17
+call    2 returned 39
+branch  3 taken 39 (fallthrough)
+branch  4 taken 0 (throw)
+       56:   51:}
+        -:   52:
+function _ZN4DBKP5Codec9BitReader4readERji called 19325352 returned 100% blocks executed 100%
+ 19325352:   53:bool BitReader::read(uint32_t& value, int nbits) {
+ 19325352:   54:    value = 0;
+ 38650711:   55:    for (int i = 0; i < nbits; ++i) {
+branch  0 taken 19325360 (fallthrough)
+branch  1 taken 19325351
+ 19325360:   56:        if (m_bits == 0) {
+branch  0 taken 2415678 (fallthrough)
+branch  1 taken 16909682
+  2415678:   57:            if (m_pos >= m_size) return false;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 2415677
+  2415677:   58:            m_acc = m_data[m_pos++];
+  2415677:   59:            m_bits = 8;
+        -:   60:        }
+ 19325359:   61:        value |= (m_acc & 1u) << i;
+ 19325359:   62:        m_acc >>= 1;
+ 19325359:   63:        --m_bits;
+        -:   64:    }
+ 19325351:   65:    return true;
+        -:   66:}
+        -:   67:
+function _ZN4DBKP5Codec9BitReader7readMsbERji called 3 returned 100% blocks executed 89%
+        3:   68:bool BitReader::readMsb(uint32_t& value, int nbits) {
+        3:   69:    value = 0;
+       14:   70:    for (int i = nbits - 1; i >= 0; --i) {
+branch  0 taken 11 (fallthrough)
+branch  1 taken 3
+       11:   71:        if (m_bits == 0) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 9
+       2*:   72:            if (m_pos >= m_size) return false;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+        2:   73:            m_acc = m_data[m_pos++];
+        2:   74:            m_bits = 8;
+        -:   75:        }
+       11:   76:        value |= (m_acc & 1u) << i;
+       11:   77:        m_acc >>= 1;
+       11:   78:        --m_bits;
+        -:   79:    }
+        3:   80:    return true;
+        -:   81:}
+        -:   82:
+        -:   83:} /* namespace Codec */
+        -:   84:} /* namespace DBKP */

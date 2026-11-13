@@ -1,0 +1,142 @@
+﻿============================================================================
+ dbkp 单元测试运行记录（GoogleTest）—— 批次10 任务F 第1项 / 任务C"单元测试"
+
+ 工具名称 : GoogleTest (googletest framework + gtest_main)
+ 工具版本 : release-1.12.1（vendored 于 third_party/googletest，非系统安装）
+ 编译器   : MinGW-w64 GCC 8.1.0 (x86_64-posix-seh-rev0, built by Mi64-Build)
+ 集成方式 : Makefile 目标 test-gtest：把 third_party/googletest/googletest/src/gtest-all.cc
+            与 gtest_main.cc 直接编入 objg/，头文件路径 -Ithird_party/googletest/googletest/include
+            同一批 test/*.cpp 通过 -DDBKP_USE_REAL_GTEST=1 切到真 gtest 宏
+ 调用命令 : mingw32-make test-gtest -j4   然后   bin\bk_gtest.exe
+ 对照命令 : mingw32-make test -j4          然后   bin\bk_test.exe（内置 mini 框架）
+ 运行时间 : 2026-11-14 00:39:20
+============================================================================
+
+[==========] Running 361 tests from 58 test suites.
+[==========] 361 tests from 58 test suites ran. (138154 ms total)
+[  PASSED  ] 361 tests.
+
+--- 双框架口径对账 ---
+  mini 框架 (make test)      : 361 tests ran, 0 failed
+  GoogleTest (make test-gtest): 361 tests from 58 test suites ran, 361 PASSED
+  基线（批次10 前）            : 178 tests
+  本批次新增白盒用例           : 183 tests，7 个文件 test_wb_*.cpp：
+            boundary 54 + coverage_gap 43 + crypto 24 + codec 22 + restore_guard 16 +
+            no_partial_output 14 + write_failures 10 = 183（spec 要求 >=60，实测 183）
+  数量一致性                  : 两框架完全一致，说明 TEST 宏适配层无漏编/重定义
+
+--- 各测试套件用例数（GoogleTest 汇总行）---
+
+RegressF6b                            4 tests       93 ms
+WbCodecHuffman                        5 tests     2602 ms
+WbCodecLz77                           5 tests     2251 ms
+WbCodecRle                            5 tests     1398 ms
+WbCodecCombo                          5 tests     4405 ms
+WbCodecHeader                         1 tests        0 ms
+WbCodecFactory                        1 tests        0 ms
+RegressF1                             5 tests     2326 ms
+WebHttp                               6 tests        1 ms
+WebJson                               2 tests        1 ms
+WebApi                                2 tests       27 ms
+FilterOptions                         4 tests        1 ms
+Defs                                  1 tests        0 ms
+RegressF7                             5 tests     1103 ms
+RegressF12                           10 tests     2636 ms
+WbCryptoAes                           7 tests    13380 ms
+WbCryptoChaCha                        5 tests     7419 ms
+WbCrypto3Des                          6 tests    12120 ms
+WbCryptoKdf                           4 tests     5573 ms
+WbCryptoFactory                       1 tests        0 ms
+WbCryptoRandom                        1 tests        0 ms
+Meta                                  9 tests      210 ms
+WbNoPartialOutput                    14 tests     7139 ms
+RegressF3                             2 tests     3181 ms
+Pack                                  8 tests     8509 ms
+RegressF11                            3 tests       78 ms
+WbCoverageGap                        43 tests    10070 ms
+WbRestoreGuard                       16 tests      214 ms
+RegressF6                             7 tests     1038 ms
+WbBoundary                           54 tests     3701 ms
+Crc64                                 5 tests       39 ms
+RegressF2                             5 tests      114 ms
+Huffman                               3 tests      144 ms
+LZ77                                  4 tests     2220 ms
+Rle                                   1 tests        6 ms
+Combo                                 1 tests       57 ms
+Factory                               1 tests        1 ms
+Filter                                6 tests      275 ms
+RegressF8                             6 tests       32 ms
+PathUtil                              6 tests        0 ms
+Des                                   2 tests        2 ms
+DesEdeCbc                             5 tests     1532 ms
+RegressF10                            9 tests    22950 ms
+WbWriteFailures                      10 tests      180 ms
+CryptoBehavior                        6 tests    14974 ms
+Enumerator                            5 tests      229 ms
+PackErr                               5 tests      340 ms
+Serialize                             9 tests        0 ms
+Sha256                                3 tests        1 ms
+HmacSha256                            2 tests        0 ms
+Pbkdf2                                3 tests      372 ms
+RegressF5                             4 tests     3042 ms
+RegressF4                             5 tests      324 ms
+RegressF9                             3 tests      125 ms
+Aes256                                2 tests        0 ms
+Aes256Cbc                             5 tests     1118 ms
+ChaCha20                              3 tests      522 ms
+CryptoFactory                         1 tests       52 ms
+TOTAL                               361 tests
+
+--- Windows 下编译 GoogleTest 踩到的坑（对账报告同步登记）---
+  1) gtest 1.12 需要 -std=c++14 以上；项目原为 c++17，无冲突。
+  2) gtest-all.cc 体量极大，与项目源码同目录编译会拖慢增量构建，
+     故单独放 objg/ 目录，与 obj/（mini 框架）物理隔离。
+  3) MinGW 下 gtest 默认启用 <thread> 支持需要 -pthread；
+     为避免与 -static-libstdc++ 组合产生链接顺序问题，
+     统一使用 GTEST_HAS_PTHREAD=0（单线程测试进程足够）。
+  4) gtest 输出含 ANSI 颜色码，重定向到文件时会被判为二进制流；
+     运行前设置 GTEST_COLOR=no 可得到纯文本日志。
+
+--- 完整原始日志（末 40 行）---
+
+[       OK ] RegressF9.enumerator_skips_excluded_paths (23 ms)
+[----------] 3 tests from RegressF9 (125 ms total)
+
+[----------] 2 tests from Aes256
+[ RUN      ] Aes256.SboxMatchesFips197
+[       OK ] Aes256.SboxMatchesFips197 (0 ms)
+[ RUN      ] Aes256.Fips197KnownAnswer
+[       OK ] Aes256.Fips197KnownAnswer (0 ms)
+[----------] 2 tests from Aes256 (0 ms total)
+
+[----------] 5 tests from Aes256Cbc
+[ RUN      ] Aes256Cbc.RoundTrip
+[       OK ] Aes256Cbc.RoundTrip (202 ms)
+[ RUN      ] Aes256Cbc.EmptyAndBlockAlignedSizes
+[       OK ] Aes256Cbc.EmptyAndBlockAlignedSizes (201 ms)
+[ RUN      ] Aes256Cbc.WrongPasswordIsRejected
+[       OK ] Aes256Cbc.WrongPasswordIsRejected (342 ms)
+[ RUN      ] Aes256Cbc.TamperedCiphertextIsRejected
+[       OK ] Aes256Cbc.TamperedCiphertextIsRejected (174 ms)
+[ RUN      ] Aes256Cbc.SamePlaintextDifferentCiphertext
+[       OK ] Aes256Cbc.SamePlaintextDifferentCiphertext (196 ms)
+[----------] 5 tests from Aes256Cbc (1118 ms total)
+
+[----------] 3 tests from ChaCha20
+[ RUN      ] ChaCha20.KeystreamIsDeterministicAndNonZero
+[       OK ] ChaCha20.KeystreamIsDeterministicAndNonZero (0 ms)
+[ RUN      ] ChaCha20.RoundTripAndWrongPassword
+[       OK ] ChaCha20.RoundTripAndWrongPassword (351 ms)
+[ RUN      ] ChaCha20.EmptyInputAndTruncatedStream
+[       OK ] ChaCha20.EmptyInputAndTruncatedStream (170 ms)
+[----------] 3 tests from ChaCha20 (522 ms total)
+
+[----------] 1 test from CryptoFactory
+[ RUN      ] CryptoFactory.UnknownAlgorithmReturnsNull
+[       OK ] CryptoFactory.UnknownAlgorithmReturnsNull (51 ms)
+[----------] 1 test from CryptoFactory (52 ms total)
+
+[----------] Global test environment tear-down
+[==========] 361 tests from 58 test suites ran. (138154 ms total)
+[  PASSED  ] 361 tests.
+

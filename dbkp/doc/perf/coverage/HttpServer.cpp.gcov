@@ -1,0 +1,1315 @@
+        -:    0:Source:src/Web/HttpServer.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/HttpServer.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/HttpServer.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  HttpServer.cpp  -- 见 Http.h / HttpServer.h
+        -:    3: * ==========================================================================*/
+        -:    4:
+        -:    5:/* 必须在任何 include 之前定义：mingw-w64 的 ws2tcpip.h 用 NTDDI_VERSION 决定
+        -:    6:   是否给出 inet_ntop/inet_pton 原型（只设 _WIN32_WINNT 还不够，NTDDI_VERSION
+        -:    7:   会退回默认的 NTDDI_WINXP），Linux 侧无此问题。 */
+        -:    8:#ifdef _WIN32
+        -:    9:  #ifndef WIN32_LEAN_AND_MEAN
+        -:   10:  #define WIN32_LEAN_AND_MEAN
+        -:   11:  #endif
+        -:   12:  #ifndef _WIN32_WINNT
+        -:   13:  #define _WIN32_WINNT 0x0600
+        -:   14:  #endif
+        -:   15:  #ifndef WINVER
+        -:   16:  #define WINVER 0x0600
+        -:   17:  #endif
+        -:   18:  #ifndef NTDDI_VERSION
+        -:   19:  #define NTDDI_VERSION 0x06000000
+        -:   20:  #endif
+        -:   21:#endif
+        -:   22:
+        -:   23:#include "Web/HttpServer.h"
+        -:   24:
+        -:   25:#include "Platform/FS.h"
+        -:   26:#include "Utils/Logger.h"
+        -:   27:#include "Utils/SimpleFile.h"
+        -:   28:#include "Web/Http.h"        /* F12：resolveCorsOrigin */
+        -:   29:
+        -:   30:#include <cerrno>
+        -:   31:#include <cstring>
+        -:   32:
+        -:   33:#ifdef _WIN32
+        -:   34:  #include <winsock2.h>
+        -:   35:  #include <ws2tcpip.h>
+        -:   36:  typedef int        cbkSockLen;
+        -:   37:  #define CBK_MSG_FLAGS 0
+        -:   38:#else
+        -:   39:  #include <arpa/inet.h>
+        -:   40:  #include <netinet/in.h>
+        -:   41:  #include <sys/socket.h>
+        -:   42:  #include <sys/time.h>
+        -:   43:  #include <unistd.h>
+        -:   44:  typedef socklen_t  cbkSockLen;
+        -:   45:  #define CBK_MSG_FLAGS MSG_NOSIGNAL   /* 对端断开时别用 SIGPIPE 打死进程 */
+        -:   46:#endif
+        -:   47:
+        -:   48:namespace DBKP {
+        -:   49:
+        -:   50:bool CHttpServer::s_wsaReady = false;
+        -:   51:std::mutex CHttpServer::s_wsaMutex;
+        -:   52:
+        -:   53:namespace {
+        -:   54:
+        -:   55:const std::size_t kReadChunk = 8192;
+        -:   56:
+function _ZN4DBKP12_GLOBAL__N_111lastSockErrEv called 0 returned 0% blocks executed 0%
+    #####:   57:int lastSockErr() {
+        -:   58:#ifdef _WIN32
+    #####:   59:    return WSAGetLastError();
+call    0 never executed
+        -:   60:#else
+        -:   61:    return errno;
+        -:   62:#endif
+        -:   63:}
+        -:   64:
+function _ZN4DBKP12_GLOBAL__N_112isTimeoutErrEi called 0 returned 0% blocks executed 0%
+    #####:   65:bool isTimeoutErr(int e) {
+        -:   66:#ifdef _WIN32
+    #####:   67:    return e == WSAETIMEDOUT;
+        -:   68:#else
+        -:   69:    return e == EAGAIN || e == EWOULDBLOCK;
+        -:   70:#endif
+        -:   71:}
+        -:   72:
+function _ZN4DBKP12_GLOBAL__N_19closeSockEy called 0 returned 0% blocks executed 0%
+    #####:   73:void closeSock(CbkSocket s) {
+        -:   74:#ifdef _WIN32
+    #####:   75:    ::closesocket(static_cast<SOCKET>(s));
+call    0 never executed
+        -:   76:#else
+        -:   77:    ::close(static_cast<int>(s));
+        -:   78:#endif
+    #####:   79:}
+        -:   80:
+function _ZN4DBKP12_GLOBAL__N_112shutdownSockEy called 0 returned 0% blocks executed 0%
+    #####:   81:void shutdownSock(CbkSocket s) {
+        -:   82:#ifdef _WIN32
+    #####:   83:    ::shutdown(static_cast<SOCKET>(s), SD_BOTH);
+call    0 never executed
+        -:   84:#else
+        -:   85:    ::shutdown(static_cast<int>(s), SHUT_RDWR);
+        -:   86:#endif
+    #####:   87:}
+        -:   88:
+function _ZN4DBKP12_GLOBAL__N_112setIoTimeoutEyi called 0 returned 0% blocks executed 0%
+    #####:   89:void setIoTimeout(CbkSocket s, int ms) {
+        -:   90:#ifdef _WIN32
+    #####:   91:    DWORD v = static_cast<DWORD>(ms);
+    #####:   92:    ::setsockopt(static_cast<SOCKET>(s), SOL_SOCKET, SO_RCVTIMEO,
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:   93:                 reinterpret_cast<const char*>(&v), sizeof(v));
+    #####:   94:    ::setsockopt(static_cast<SOCKET>(s), SOL_SOCKET, SO_SNDTIMEO,
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:   95:                 reinterpret_cast<const char*>(&v), sizeof(v));
+        -:   96:#else
+        -:   97:    struct timeval tv;
+        -:   98:    tv.tv_sec = ms / 1000;
+        -:   99:    tv.tv_usec = (ms % 1000) * 1000;
+        -:  100:    ::setsockopt(static_cast<int>(s), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        -:  101:    ::setsockopt(static_cast<int>(s), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        -:  102:#endif
+    #####:  103:}
+        -:  104:
+function _ZN4DBKP12_GLOBAL__N_111peerAddressERK11sockaddr_in called 0 returned 0% blocks executed 0%
+    #####:  105:std::string peerAddress(const struct sockaddr_in& sa) {
+    #####:  106:    char buf[64] = {0};
+        -:  107:    /* 非 const 指针：Windows 的 inet_ntop 形参是 PVOID，POSIX 是 const void*，
+        -:  108:       这里取的是 &sa.sin_addr 的只读副本地址，const_cast 安全。 */
+    #####:  109:    ::inet_ntop(AF_INET, const_cast<void*>(static_cast<const void*>(&sa.sin_addr)),
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  110:                buf, static_cast<cbkSockLen>(sizeof(buf)));
+    #####:  111:    return std::string(buf);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  112:}
+        -:  113:
+        -:  114:} /* anonymous namespace */
+        -:  115:
+        -:  116:/* ------------------------------------------------------------ 生命周期 */
+function _ZN4DBKP11CHttpServerC2Ev called 0 returned 0% blocks executed 0%
+    #####:  117:CHttpServer::CHttpServer()
+    #####:  118:    : m_listen(kCbkInvalidSocket), m_running(false), m_clients(0) {}
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed
+call    7 never executed
+        -:  119:
+function _ZN4DBKP11CHttpServerD2Ev called 0 returned 0% blocks executed 0%
+    #####:  120:CHttpServer::~CHttpServer() { stop(); }
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed
+        -:  121:
+function _ZN4DBKP11CHttpServer5startERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  122:bool CHttpServer::start(std::string& err) {
+    #####:  123:    if (m_running.load()) { err = "服务器已在运行"; return false; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+        -:  124:
+        -:  125:#ifdef _WIN32
+        -:  126:    {
+    #####:  127:        std::lock_guard<std::mutex> lk(s_wsaMutex);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  128:        if (!s_wsaReady) {
+branch  0 never executed
+branch  1 never executed
+        -:  129:            WSADATA wd;
+    #####:  130:            const int rc = ::WSAStartup(MAKEWORD(2, 2), &wd);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  131:            if (rc != 0) { err = "WSAStartup 失败，错误码 " + std::to_string(rc); return false; }
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+    #####:  132:            s_wsaReady = true;
+        -:  133:        }
+        -:  134:    }
+        -:  135:#endif
+        -:  136:
+        -:  137:    /* webRoot 立刻定成绝对路径：任务线程/守护进程可能改变工作目录，
+        -:  138:       相对路径在那之后会指向错误的地方。 */
+        -:  139:    {
+    #####:  140:        std::string abs;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  141:        if (Platform::canonicalPath(m_opt.webRoot, abs) == E_OK && !abs.empty())
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+    #####:  142:            m_absWebRoot = abs;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  143:        else {
+    #####:  144:            std::string cur;
+call    0 never executed
+call    1 never executed
+    #####:  145:            Platform::currentDir(cur);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  146:            m_absWebRoot = cur + "/" + m_opt.webRoot;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+        -:  147:        }
+        -:  148:    }
+        -:  149:
+    #####:  150:    const CbkSocket fd = static_cast<CbkSocket>(::socket(AF_INET, SOCK_STREAM, 0));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  151:    if (fd == kCbkInvalidSocket) { err = "创建套接字失败"; return false; }
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  152:
+    #####:  153:    int on = 1;
+    #####:  154:    ::setsockopt(static_cast<int>(fd), SOL_SOCKET, SO_REUSEADDR,
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  155:                 reinterpret_cast<const char*>(&on), sizeof(on));
+        -:  156:
+        -:  157:    struct sockaddr_in sa;
+    #####:  158:    std::memset(&sa, 0, sizeof(sa));
+    #####:  159:    sa.sin_family = AF_INET;
+    #####:  160:    if (m_opt.bindAddress.empty() || m_opt.bindAddress == "*" ||
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+    #####:  161:        m_opt.bindAddress == "0.0.0.0") {
+call    0 never executed
+    #####:  162:        sa.sin_addr.s_addr = htonl(INADDR_ANY);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  163:    } else {
+        -:  164:        char buf[64];
+    #####:  165:        std::strncpy(buf, m_opt.bindAddress.c_str(), sizeof(buf) - 1);
+call    0 never executed
+    #####:  166:        buf[sizeof(buf) - 1] = '\0';
+    #####:  167:        if (::inet_pton(AF_INET, buf, &sa.sin_addr) != 1) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  168:            err = "监听地址无效：" + m_opt.bindAddress + "（需 IPv4，如 127.0.0.1）";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+    #####:  169:            closeSock(fd);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  170:            return false;
+        -:  171:        }
+        -:  172:    }
+    #####:  173:    sa.sin_port = htons(static_cast<unsigned short>(m_opt.port < 0 ? 0 : m_opt.port));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  174:
+    #####:  175:    if (::bind(static_cast<int>(fd), reinterpret_cast<struct sockaddr*>(&sa), sizeof(sa)) != 0) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  176:        err = "绑定端口 " + std::to_string(m_opt.port) + " 失败（端口被占用或权限不足），错误码 "
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:  177:              + std::to_string(lastSockErr());
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:  178:        closeSock(fd);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  179:        return false;
+        -:  180:    }
+    #####:  181:    if (::listen(static_cast<int>(fd), 32) != 0) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  182:        err = "监听失败，错误码 " + std::to_string(lastSockErr());
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+    #####:  183:        closeSock(fd);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  184:        return false;
+        -:  185:    }
+        -:  186:
+        -:  187:    struct sockaddr_in bound;
+    #####:  188:    std::memset(&bound, 0, sizeof(bound));
+    #####:  189:    cbkSockLen bl = static_cast<cbkSockLen>(sizeof(bound));
+    #####:  190:    if (::getsockname(static_cast<int>(fd), reinterpret_cast<struct sockaddr*>(&bound), &bl) == 0)
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  191:        m_boundPort = ntohs(bound.sin_port);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  192:    else
+    #####:  193:        m_boundPort = m_opt.port;
+        -:  194:
+    #####:  195:    m_listen = fd;
+    #####:  196:    m_running.store(true);
+call    0 never executed
+    #####:  197:    m_acceptor = std::thread(&CHttpServer::acceptLoop, this);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  198:    return true;
+        -:  199:}
+        -:  200:
+function _ZN4DBKP11CHttpServer4stopEv called 0 returned 0% blocks executed 0%
+    #####:  201:void CHttpServer::stop() {
+    #####:  202:    const bool was = m_running.exchange(false);
+call    0 never executed
+        -:  203:
+        -:  204:    /* 先让 accept 立刻返回：shutdown+close 会让阻塞中的 accept 失败退出 */
+    #####:  205:    if (m_listen != kCbkInvalidSocket) {
+branch  0 never executed
+branch  1 never executed
+    #####:  206:        shutdownSock(m_listen);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  207:        closeSock(m_listen);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  208:        m_listen = kCbkInvalidSocket;
+        -:  209:    }
+        -:  210:    /* 再掐断在途连接，否则 stop() 要等到 ioTimeoutMs 才返回 */
+        -:  211:    {
+    #####:  212:        std::lock_guard<std::mutex> lk(m_mutex);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  213:        for (std::set<CbkSocket>::iterator it = m_sockets.begin(); it != m_sockets.end(); ++it)
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+    #####:  214:            shutdownSock(*it);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  215:    }
+        -:  216:
+    #####:  217:    if (m_acceptor.joinable()) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  218:        /* stop() 允许从任意线程调用（main 等信号、Ctrl+C 之后的主循环）。
+        -:  219:           万一真是 accept 线程自己调的，只能 detach，绝不能自杀式 join。 */
+    #####:  220:        if (m_acceptor.get_id() == std::this_thread::get_id()) m_acceptor.detach();
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  221:        else m_acceptor.join();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  222:    }
+    #####:  223:    std::vector<Worker> pool;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+        -:  224:    {
+    #####:  225:        std::lock_guard<std::mutex> lk(m_mutex);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  226:        pool.swap(m_workers);
+call    0 never executed
+        -:  227:    }
+    #####:  228:    const std::thread::id self = std::this_thread::get_id();
+call    0 never executed
+    #####:  229:    for (std::size_t i = 0; i < pool.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  230:        if (!pool[i].th.joinable()) continue;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  231:        /* 正在处理请求的线程可能就在池子里（SSE handler 观察 running() 后
+        -:  232:           自己退出前，主线程已经在 join）：那种情况只能 detach */
+    #####:  233:        if (pool[i].th.get_id() == self) pool[i].th.detach();
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+    #####:  234:        else pool[i].th.join();
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  235:    }
+    #####:  236:    if (was) LOG_INFO("web 服务已停止");
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+    #####:  237:}
+        -:  238:
+function _ZN4DBKP11CHttpServer11trackSocketEy called 0 returned 0% blocks executed 0%
+    #####:  239:void CHttpServer::trackSocket(CbkSocket sock) {
+    #####:  240:    std::lock_guard<std::mutex> lk(m_mutex);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  241:    m_sockets.insert(sock);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  242:}
+        -:  243:
+function _ZN4DBKP11CHttpServer13untrackSocketEy called 0 returned 0% blocks executed 0%
+    #####:  244:void CHttpServer::untrackSocket(CbkSocket sock) {
+    #####:  245:    std::lock_guard<std::mutex> lk(m_mutex);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  246:    m_sockets.erase(sock);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  247:}
+        -:  248:
+        -:  249:/* ------------------------------------------------------------ 接受循环 */
+function _ZN4DBKP11CHttpServer10acceptLoopEv called 0 returned 0% blocks executed 0%
+    #####:  250:void CHttpServer::acceptLoop() {
+    #####:  251:    while (m_running.load()) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  252:        struct sockaddr_in peer;
+    #####:  253:        std::memset(&peer, 0, sizeof(peer));
+    #####:  254:        cbkSockLen len = static_cast<cbkSockLen>(sizeof(peer));
+        -:  255:        const CbkSocket fd = static_cast<CbkSocket>(
+    #####:  256:            ::accept(static_cast<int>(m_listen), reinterpret_cast<struct sockaddr*>(&peer), &len));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  257:        if (fd == kCbkInvalidSocket) {
+branch  0 never executed
+branch  1 never executed
+        -:  258:            /* stop() 期间 accept 必然失败：这不是错误，不要刷屏 */
+    #####:  259:            if (m_running.load()) LOG_WARN("accept 失败，错误码 " + std::to_string(lastSockErr()));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+    #####:  260:            if (!m_running.load()) break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  261:            continue;
+        -:  262:        }
+    #####:  263:        if (m_clients.load() >= m_opt.maxClients) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  264:            std::string body = CHttpResponse::jsonError(503, "服务繁忙，请稍后再试", 503).serialize();
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+    #####:  265:            sendAll(fd, body.data(), body.size());
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  266:            closeSock(fd);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  267:            continue;
+        -:  268:        }
+        -:  269:
+        -:  270:        /* 回收已结束的工作线程：worker 退出时把自己的 done 置位，
+        -:  271:           这里顺路 join，线程数才不会只增不减。 */
+        -:  272:        {
+    #####:  273:            std::lock_guard<std::mutex> lk(m_mutex);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  274:            for (std::vector<Worker>::iterator it = m_workers.begin(); it != m_workers.end(); ) {
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  275:                if (it->done->load()) { if (it->th.joinable()) it->th.join(); it = m_workers.erase(it); }
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+call   14 never executed
+branch 15 never executed
+branch 16 never executed
+    #####:  276:                else ++it;
+call    0 never executed
+        -:  277:            }
+        -:  278:        }
+        -:  279:
+    #####:  280:        const std::string ip = peerAddress(peer);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  281:        const unsigned short port = ntohs(peer.sin_port);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  282:        std::shared_ptr<std::atomic<bool> > done(new std::atomic<bool>(false));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+    #####:  283:        Worker w;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  284:        w.done = done;
+call    0 never executed
+    #####:  285:        w.th = std::thread(&CHttpServer::serveConnection, this, fd, ip, port, done);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+        -:  286:        {
+    #####:  287:            std::lock_guard<std::mutex> lk(m_mutex);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  288:            m_workers.push_back(std::move(w));
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  289:        }
+    #####:  290:        ++m_clients;
+call    0 never executed
+        -:  291:    }
+    #####:  292:}
+        -:  293:
+        -:  294:/* ----------------------------------------------------------- 单连接处理 */
+function _ZN4DBKP11CHttpServer15serveConnectionEyNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEtSt10shared_ptrISt6atomicIbEE called 0 returned 0% blocks executed 0%
+    #####:  295:void CHttpServer::serveConnection(CbkSocket sock, std::string peerIp, unsigned short peerPort,
+        -:  296:                                  std::shared_ptr<std::atomic<bool> > done) {
+        -:  297:    try {
+    #####:  298:        setIoTimeout(sock, m_opt.ioTimeoutMs);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  299:        trackSocket(sock);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  300:
+    #####:  301:        CHttpRequest req;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  302:        std::string err;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  303:        const ReadStatus st = readRequest(sock, req, err);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  304:
+    #####:  305:        CHttpResponse res;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  306:        if (st == RS_CLOSED) {
+branch  0 never executed
+branch  1 never executed
+        -:  307:            /* 浏览器探测/预连接会立刻断开，回它也没意义，静默收尾 */
+    #####:  308:        } else if (st == RS_TIMEOUT) {
+branch  0 never executed
+branch  1 never executed
+    #####:  309:            res = CHttpResponse::jsonError(408, "读取请求超时", 408);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+    #####:  310:        } else if (st == RS_TOO_LARGE) {
+branch  0 never executed
+branch  1 never executed
+    #####:  311:            res = CHttpResponse::jsonError(413, "请求体超过上限 "
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  312:                    + std::to_string(m_opt.maxBodyBytes / (1024 * 1024)) + "MB", 413);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+    #####:  313:        } else if (st == RS_BAD) {
+branch  0 never executed
+branch  1 never executed
+    #####:  314:            res = CHttpResponse::jsonError(400, "请求报文格式错误：" + err, 400);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+        -:  315:        } else {
+    #####:  316:            req.setClient(peerIp, peerPort);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  317:            req.setSocket(sock);           /* SSE handler 需要它自己往连接写事件 */
+call    0 never executed
+    #####:  318:            if (req.method == "OPTIONS") {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  319:                res = CHttpResponse::text(204, "");      /* CORS 预检：serialize 会带上允许头 */
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+        -:  320:            } else {
+    #####:  321:                res = routeRequest(req);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  322:                if (req.method == "HEAD") res.body.clear();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+        -:  323:            }
+        -:  324:        }
+        -:  325:
+    #####:  326:        if (st != RS_CLOSED && !res.streaming) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:  327:            /* streaming：handler（/api/events）已经把头和事件写完，这里再写一遍
+        -:  328:               就会让前端看到重复报文，必须跳过 */
+        -:  329:            /* F12：serialize() 是 const 且拿不到请求，所以在这里按请求 Origin
+        -:  330:               与配置算出 CORS 放行结论，再作为字段带给响应。报文解析失败
+        -:  331:               （RS_BAD/RS_TOO_LARGE/RS_TIMEOUT）时 Origin 未知，不发 CORS 头。 */
+    #####:  332:            if (st == RS_OK)
+branch  0 never executed
+branch  1 never executed
+    #####:  333:                res.corsAllowOrigin = resolveCorsOrigin(m_opt.corsOrigin,
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  334:                                                        req.header("origin"));
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+    #####:  335:            const std::string out = res.serialize();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  336:            if (!sendAll(sock, out.data(), out.size()))
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+    #####:  337:                LOG_DEBUG("写响应失败（客户端可能已关闭页面）: " + req.path);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+        -:  338:        }
+    =====:  339:    } catch (const std::exception& e) {
+call    0 never executed
+call    1 never executed
+    =====:  340:        LOG_ERR(std::string("连接处理异常: ") + e.what());
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+branch 12 never executed
+branch 13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+    =====:  341:    } catch (...) {
+call    0 never executed
+call    1 never executed
+    =====:  342:        LOG_ERR("连接处理发生未知异常");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+        -:  343:    }
+        -:  344:    /* 关连接前先把对端可能还在发的字节读干：直接 closesocket() 会发 RST，
+        -:  345:       而 RST 会把本端尚未被 ACK 的响应一起销毁——客户端就表现为
+        -:  346:       "只收到响应头、响应体是空的"（PowerShell / 部分浏览器会踩到）。 */
+    #####:  347:    drainSocket(sock);
+call    0 never executed
+    #####:  348:    shutdownSock(sock);
+call    0 never executed
+    #####:  349:    untrackSocket(sock);
+call    0 never executed
+    #####:  350:    closeSock(sock);
+call    0 never executed
+    #####:  351:    --m_clients;
+call    0 never executed
+    #####:  352:    done->store(true);
+call    0 never executed
+call    1 never executed
+    #####:  353:}
+        -:  354:
+function _ZN4DBKP11CHttpServer11readRequestEyRNS_12CHttpRequestERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  355:CHttpServer::ReadStatus CHttpServer::readRequest(CbkSocket sock, CHttpRequest& req,
+        -:  356:                                                 std::string& err) {
+    #####:  357:    std::string raw;
+call    0 never executed
+call    1 never executed
+    #####:  358:    const std::size_t hardLimit = m_opt.maxBodyBytes + kReadChunk * 8;  /* 头 + 体 + 余量 */
+    #####:  359:    bool sent100 = false;
+        -:  360:    for (;;) {
+    #####:  361:        if (!m_running.load()) { err = "服务正在停止"; return RS_CLOSED; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+        -:  362:        char buf[kReadChunk];
+    #####:  363:        const long n = ::recv(static_cast<int>(sock), buf, static_cast<int>(sizeof(buf)), 0);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  364:        if (n > 0) {
+branch  0 never executed
+branch  1 never executed
+    #####:  365:            raw.append(buf, static_cast<std::size_t>(n));
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  366:            if (raw.size() > hardLimit) { err = "请求过大"; return RS_TOO_LARGE; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  367:            std::size_t need = 0;
+    #####:  368:            const bool ok = parseHttpRequest(raw, req, err, need);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  369:            if (!ok) {
+branch  0 never executed
+branch  1 never executed
+        -:  370:                /* 体积超限和格式错误要分开回：413 对用户是可行动的提示 */
+    #####:  371:                if (err == "request body too large" || err == "request header too large")
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  372:                    return RS_TOO_LARGE;
+    #####:  373:                return RS_BAD;
+        -:  374:            }
+    #####:  375:            if (need == 0) return RS_OK;
+branch  0 never executed
+branch  1 never executed
+        -:  376:            /* .NET（PowerShell 的 Invoke-WebRequest）发 POST 时会带
+        -:  377:               "Expect: 100-continue"，它先把请求体扣住，等中间响应；
+        -:  378:               不回它，它也要干等一段超时才肯继续。按 RFC 回 100 最省事。 */
+    #####:  379:            if (!sent100 && req.hasExpectContinue()) {
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+    #####:  380:                sent100 = true;
+        -:  381:                static const char k100[] = "HTTP/1.1 100 Continue\r\n\r\n";
+    #####:  382:                if (!sendAll(sock, k100, sizeof(k100) - 1))
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  383:                    { err = "客户端在等待 100 响应时断开"; return RS_CLOSED; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  384:            }
+    #####:  385:            continue;
+        -:  386:        }
+    #####:  387:        if (n == 0) { err = raw.empty() ? "客户端关闭连接" : "请求不完整"; return RS_CLOSED; }
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:  388:        const int e = lastSockErr();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  389:        if (isTimeoutErr(e)) return RS_TIMEOUT;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  390:        err = "读取失败，错误码 " + std::to_string(e);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+    #####:  391:        return RS_CLOSED;
+    #####:  392:    }
+        -:  393:}
+        -:  394:
+        -:  395:/* ------------------------------------------------------------- 路由/静态 */
+function _ZN4DBKP11CHttpServer12routeRequestERNS_12CHttpRequestE called 0 returned 0% blocks executed 0%
+    #####:  396:CHttpResponse CHttpServer::routeRequest(CHttpRequest& req) {
+    #####:  397:    if (m_router) {
+branch  0 never executed
+branch  1 never executed
+    #####:  398:        CHttpResponse res;
+call    0 never executed
+call    1 never executed
+    #####:  399:        if (m_router->dispatch(req, res)) return res;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+        -:  400:    }
+    #####:  401:    const bool isApi = (req.path.compare(0, 5, "/api/") == 0 || req.path == "/api");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  402:    if (isApi)
+branch  0 never executed
+branch  1 never executed
+    #####:  403:        return CHttpResponse::jsonError(404, "接口不存在：" + req.path, 404);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed
+    #####:  404:    if (m_opt.serveStatic && (req.method == "GET" || req.method == "HEAD"))
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+    #####:  405:        return serveStaticFile(req.path);
+call    0 never executed
+    #####:  406:    return CHttpResponse::jsonError(404, "页面不存在：" + req.path, 404);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  407:}
+        -:  408:
+function _ZN4DBKP11CHttpServer15serveStaticFileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  409:CHttpResponse CHttpServer::serveStaticFile(const std::string& urlPath) {
+    #####:  410:    std::string rel;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  411:    if (!normalizeStaticPath(urlPath, rel))
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  412:        return CHttpResponse::text(403, "403 Forbidden: 路径不合法");
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+        -:  413:
+    #####:  414:    const std::string full = m_absWebRoot + "/" + rel;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+    #####:  415:    std::vector<uint8_t> bytes;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  416:    const ErrCode ec = CSimpleFile::readWhole(full, bytes);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  417:    if (ec != E_OK) {
+branch  0 never executed
+branch  1 never executed
+        -:  418:        /* 前端会请求 favicon.ico 之类，缺文件是常态，回文本 404 即可，不打日志 */
+    #####:  419:        return CHttpResponse::text(404, "404 Not Found: " + rel);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+        -:  420:    }
+        -:  421:    return CHttpResponse::file(mimeTypeOf(rel),
+    #####:  422:                               std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+        -:  423:}
+        -:  424:
+        -:  425:/* --------------------------------------------------------------- 收发 */
+function _ZN4DBKP11CHttpServer11drainSocketEy called 0 returned 0% blocks executed 0%
+    #####:  426:void CHttpServer::drainSocket(CbkSocket sock) {
+        -:  427:    /* 只给 300ms：够把已经在路上的字节收完，收不到也不算错。
+        -:  428:       目的是让后面的 close 走 FIN 而不是 RST，保住已发出去的响应体。 */
+    #####:  429:    setIoTimeout(sock, 300);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  430:    char buf[512];
+    #####:  431:    for (int i = 0; i < 32; ++i) {
+branch  0 never executed
+branch  1 never executed
+    #####:  432:        const long n = ::recv(static_cast<int>(sock), buf, static_cast<int>(sizeof(buf)), 0);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  433:        if (n <= 0) break;              /* 0=对端已 FIN，-1=超时/出错，都不必再等 */
+branch  0 never executed
+branch  1 never executed
+        -:  434:    }
+    #####:  435:}
+        -:  436:
+function _ZN4DBKP11CHttpServer7sendAllEyPKcy called 0 returned 0% blocks executed 0%
+    #####:  437:bool CHttpServer::sendAll(CbkSocket sock, const char* data, std::size_t len) {
+    #####:  438:    std::size_t off = 0;
+    #####:  439:    while (off < len) {
+branch  0 never executed
+branch  1 never executed
+    #####:  440:        const std::size_t want = len - off < kReadChunk ? (len - off) : kReadChunk;
+    #####:  441:        const long n = ::send(static_cast<int>(sock), data + off,
+call    0 never executed
+        -:  442:                              static_cast<int>(want), CBK_MSG_FLAGS);
+    #####:  443:        if (n <= 0) return false;
+branch  0 never executed
+branch  1 never executed
+    #####:  444:        off += static_cast<std::size_t>(n);
+        -:  445:    }
+    #####:  446:    return true;
+        -:  447:}
+        -:  448:
+function _ZN4DBKP11CHttpServer8writeRawEyRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  449:bool CHttpServer::writeRaw(CbkSocket sock, const std::string& bytes) {
+    #####:  450:    return sendAll(sock, bytes.data(), bytes.size());
+call    0 never executed
+call    1 never executed
+call    2 never executed
+        -:  451:}
+        -:  452:
+        -:  453:} /* namespace DBKP */

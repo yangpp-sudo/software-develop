@@ -1,0 +1,672 @@
+        -:    0:Source:src/Crypto/Des.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/Des.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Crypto/Des.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Des.cpp  -- 自实现 DES(FIPS 46-3) + 3DES-EDE + CBC 模式
+        -:    3: *
+        -:    4: *  为什么自己写：课件《加密解密》第 6 章的 CDES 用 OpenSSL EVP，而本工程一贯
+        -:    5: *  零第三方依赖（AES/ChaCha/SHA 全是自实现）。这里按同样的比特表实现，并用
+        -:    6: *  已知答案向量(KAT)在单测里把正确性钉死——DES 的 S 盒与置换表是固定表、无法
+        -:    7: *  像 AES S 盒那样用 GF(2^8) 求逆生成，一旦手抄错就只有 KAT 能抓出来。
+        -:    8: *
+        -:    9: *  密文布局与 AES-256-CBC 完全同构，只是分组换成 8 字节：
+        -:   10: *    header(magic|ver|flags|rawLen) | IV(8) | CBC 密文 | HMAC-SHA256[0..15]
+        -:   11: *  口令->密钥仍走 deriveCipherKeys(PBKDF2)，取其前 16 字节当两密钥 3DES 的
+        -:   12: *  K1||K2（K3=K1），与课件"3DES(DES-EDE) 密钥 16 字节"一致。
+        -:   13: * ==========================================================================*/
+        -:   14:#include "Crypto/Algorithms.h"
+        -:   15:#include "Crypto/Blob.h"
+        -:   16:#include "Crypto/Sha256.h"
+        -:   17:
+        -:   18:#include <cstring>
+        -:   19:#include <vector>
+        -:   20:
+        -:   21:namespace DBKP {
+        -:   22:namespace {
+        -:   23:
+        -:   24:/* -------------------------------------------------- 标准 DES 置换表(0 基) */
+        -:   25:const uint8_t kIP[64] = {
+        -:   26:    57, 49, 41, 33, 25, 17, 9, 1,  59, 51, 43, 35, 27, 19, 11, 3,
+        -:   27:    61, 53, 45, 37, 29, 21, 13, 5, 63, 55, 47, 39, 31, 23, 15, 7,
+        -:   28:    56, 48, 40, 32, 24, 16, 8, 0,  58, 50, 42, 34, 26, 18, 10, 2,
+        -:   29:    60, 52, 44, 36, 28, 20, 12, 4, 62, 54, 46, 38, 30, 22, 14, 6
+        -:   30:};
+        -:   31:
+        -:   32:const uint8_t kFP[64] = {
+        -:   33:    39, 7, 47, 15, 55, 23, 63, 31, 38, 6, 46, 14, 54, 22, 62, 30,
+        -:   34:    37, 5, 45, 13, 53, 21, 61, 29, 36, 4, 44, 12, 52, 20, 60, 28,
+        -:   35:    35, 3, 43, 11, 51, 19, 59, 27, 34, 2, 42, 10, 50, 18, 58, 26,
+        -:   36:    33, 1, 41, 9,  49, 17, 57, 25, 32, 0, 40, 8, 48, 16, 56, 24
+        -:   37:};
+        -:   38:
+        -:   39:const uint8_t kPC1[56] = {
+        -:   40:    56, 48, 40, 32, 24, 16, 8,  0, 57, 49, 41, 33, 25, 17,
+        -:   41:    9,  1,  58, 50, 42, 34, 26, 18, 10, 2, 59, 51, 43, 35,
+        -:   42:    62, 54, 46, 38, 30, 22, 14, 6, 61, 53, 45, 37, 29, 21,
+        -:   43:    13, 5,  60, 52, 44, 36, 28, 20, 12, 4, 27, 19, 11, 3
+        -:   44:};
+        -:   45:
+        -:   46:const uint8_t kPC2[48] = {
+        -:   47:    13, 16, 10, 23, 0,  4,  2,  27, 14, 5,  20, 9,
+        -:   48:    22, 18, 11, 3,  25, 7,  15, 6,  26, 19, 12, 1,
+        -:   49:    40, 51, 30, 36, 46, 54, 29, 39, 50, 44, 32, 47,
+        -:   50:    43, 48, 38, 55, 33, 52, 45, 41, 49, 35, 28, 31
+        -:   51:};
+        -:   52:
+        -:   53:const uint8_t kSHIFT[16] = {
+        -:   54:    1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1
+        -:   55:};
+        -:   56:
+        -:   57:const uint8_t kEXP[48] = {
+        -:   58:    31, 0,  1,  2,  3,  4,  3,  4,  5,  6,  7,  8,
+        -:   59:    7,  8,  9,  10, 11, 12, 11, 12, 13, 14, 15, 16,
+        -:   60:    15, 16, 17, 18, 19, 20, 19, 20, 21, 22, 23, 24,
+        -:   61:    23, 24, 25, 26, 27, 28, 27, 28, 29, 30, 31, 0
+        -:   62:};
+        -:   63:
+        -:   64:const uint8_t kPP[32] = {
+        -:   65:    15, 6,  19, 20, 28, 11, 27, 16, 0,  14, 22, 25, 4,  17, 30, 9,
+        -:   66:    1,  7,  23, 13, 31, 26, 2,  8,  18, 12, 29, 5,  21, 10, 3,  24
+        -:   67:};
+        -:   68:
+        -:   69:/* 8 个 S 盒，每个 4 行 x 16 列展平存 64 项 */
+        -:   70:const uint8_t kSBOX[8][64] = {
+        -:   71:    { /* S1 */
+        -:   72:        14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7,
+        -:   73:        0, 15, 7, 4, 14, 2, 13, 1, 10, 6, 12, 11, 9, 5, 3, 8,
+        -:   74:        4, 1, 14, 8, 13, 6, 2, 11, 15, 12, 9, 7, 3, 10, 5, 0,
+        -:   75:        15, 12, 8, 2, 4, 9, 1, 7, 5, 11, 3, 14, 10, 0, 6, 13 },
+        -:   76:    { /* S2 */
+        -:   77:        15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10,
+        -:   78:        3, 13, 4, 7, 15, 2, 8, 14, 12, 0, 1, 10, 6, 9, 11, 5,
+        -:   79:        0, 14, 7, 11, 10, 4, 13, 1, 5, 8, 12, 6, 9, 3, 2, 15,
+        -:   80:        13, 8, 10, 1, 3, 15, 4, 2, 11, 6, 7, 12, 0, 5, 14, 9 },
+        -:   81:    { /* S3 */
+        -:   82:        10, 0, 9, 14, 6, 3, 15, 5, 1, 13, 12, 7, 11, 4, 2, 8,
+        -:   83:        13, 7, 0, 9, 3, 4, 6, 10, 2, 8, 5, 14, 12, 11, 15, 1,
+        -:   84:        13, 6, 4, 9, 8, 15, 3, 0, 11, 1, 2, 12, 5, 10, 14, 7,
+        -:   85:        1, 10, 13, 0, 6, 9, 8, 7, 4, 15, 14, 3, 11, 5, 2, 12 },
+        -:   86:    { /* S4 */
+        -:   87:        7, 13, 14, 3, 0, 6, 9, 10, 1, 2, 8, 5, 11, 12, 4, 15,
+        -:   88:        13, 8, 11, 5, 6, 15, 0, 3, 4, 7, 2, 12, 1, 10, 14, 9,
+        -:   89:        10, 6, 9, 0, 12, 11, 7, 13, 15, 1, 3, 14, 5, 2, 8, 4,
+        -:   90:        3, 15, 0, 6, 10, 1, 13, 8, 9, 4, 5, 11, 12, 7, 2, 14 },
+        -:   91:    { /* S5 */
+        -:   92:        2, 12, 4, 1, 7, 10, 11, 6, 8, 5, 3, 15, 13, 0, 14, 9,
+        -:   93:        14, 11, 2, 12, 4, 7, 13, 1, 5, 0, 15, 10, 3, 9, 8, 6,
+        -:   94:        4, 2, 1, 11, 10, 13, 7, 8, 15, 9, 12, 5, 6, 3, 0, 14,
+        -:   95:        11, 8, 12, 7, 1, 14, 2, 13, 6, 15, 0, 9, 10, 4, 5, 3 },
+        -:   96:    { /* S6 */
+        -:   97:        12, 1, 10, 15, 9, 2, 6, 8, 0, 13, 3, 4, 14, 7, 5, 11,
+        -:   98:        10, 15, 4, 2, 7, 12, 9, 5, 6, 1, 13, 14, 0, 11, 3, 8,
+        -:   99:        9, 14, 15, 5, 2, 8, 12, 3, 7, 0, 4, 10, 1, 13, 11, 6,
+        -:  100:        4, 3, 2, 12, 9, 5, 15, 10, 11, 14, 1, 7, 6, 0, 8, 13 },
+        -:  101:    { /* S7 */
+        -:  102:        4, 11, 2, 14, 15, 0, 8, 13, 3, 12, 9, 7, 5, 10, 6, 1,
+        -:  103:        13, 0, 11, 7, 4, 9, 1, 10, 14, 3, 5, 12, 2, 15, 8, 6,
+        -:  104:        1, 4, 11, 13, 12, 3, 7, 14, 10, 15, 6, 8, 0, 5, 9, 2,
+        -:  105:        6, 11, 13, 8, 1, 4, 10, 7, 9, 5, 0, 15, 14, 2, 3, 12 },
+        -:  106:    { /* S8 */
+        -:  107:        13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7,
+        -:  108:        1, 15, 13, 8, 10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2,
+        -:  109:        7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8,
+        -:  110:        2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11 }
+        -:  111:};
+        -:  112:
+        -:  113:/* 字节 <-> 比特串（MSB 先行），全程用 0/1 的 vector 走标准表置换 */
+function _ZN4DBKP12_GLOBAL__N_111bytesToBitsEPKhy called 2334 returned 100% blocks executed 87%
+     2334:  114:std::vector<uint8_t> bytesToBits(const uint8_t* b, std::size_t n) {
+     2334:  115:    std::vector<uint8_t> bits(n * 8);
+call    0 returned 2334
+call    1 returned 2334
+branch  2 taken 2334 (fallthrough)
+branch  3 taken 0 (throw)
+    21006:  116:    for (std::size_t i = 0; i < n; ++i)
+branch  0 taken 18672 (fallthrough)
+branch  1 taken 2334
+   168048:  117:        for (int k = 0; k < 8; ++k)
+branch  0 taken 149376 (fallthrough)
+branch  1 taken 18672
+   149376:  118:            bits[i * 8 + k] = static_cast<uint8_t>((b[i] >> (7 - k)) & 1);
+call    0 returned 149376
+     2334:  119:    return bits;
+        -:  120:}
+        -:  121:
+function _ZN4DBKP12_GLOBAL__N_111bitsToBytesERKSt6vectorIhSaIhEEPh called 2128 returned 100% blocks executed 100%
+     2128:  122:void bitsToBytes(const std::vector<uint8_t>& bits, uint8_t* out) {
+     2128:  123:    const std::size_t n = bits.size() / 8;
+call    0 returned 2128
+     2128:  124:    std::memset(out, 0, n);
+   138320:  125:    for (std::size_t i = 0; i < bits.size(); ++i)
+call    0 returned 138320
+branch  1 taken 136192 (fallthrough)
+branch  2 taken 2128
+   136192:  126:        out[i / 8] = static_cast<uint8_t>(out[i / 8] | ((bits[i] & 1) << (7 - (i % 8))));
+call    0 returned 136192
+     2128:  127:}
+        -:  128:
+function _ZN4DBKP12_GLOBAL__N_17permuteEPKhyRKSt6vectorIhSaIhEE called 75854 returned 100% blocks executed 85%
+    75854:  129:std::vector<uint8_t> permute(const uint8_t* tab, std::size_t tn, const std::vector<uint8_t>& in) {
+    75854:  130:    std::vector<uint8_t> out(tn);
+call    0 returned 75854
+call    1 returned 75854
+branch  2 taken 75854 (fallthrough)
+branch  3 taken 0 (throw)
+  3241822:  131:    for (std::size_t i = 0; i < tn; ++i) out[i] = in[tab[i]];
+branch  0 taken 3165968 (fallthrough)
+branch  1 taken 75854
+call    2 returned 3165968
+call    3 returned 3165968
+    75854:  132:    return out;
+        -:  133:}
+        -:  134:
+        -:  135:/** Feistel 主体：dec=false 正序轮密钥（加密），true 逆序（解密） */
+function _ZN4DBKP12_GLOBAL__N_18desBlockEPKSt6vectorIhSaIhEERS4_b called 2128 returned 100% blocks executed 69%
+     2128:  136:std::vector<uint8_t> desBlock(const std::vector<uint8_t> sub[16],
+        -:  137:                              const std::vector<uint8_t>& bits64, bool dec) {
+     4256:  138:    std::vector<uint8_t> blk = permute(kIP, 64, bits64);
+call    0 returned 2128
+branch  1 taken 2128 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2128
+call    4 never executed
+     4256:  139:    std::vector<uint8_t> L(blk.begin(), blk.begin() + 32);
+call    0 returned 2128
+call    1 returned 2128
+call    2 returned 2128
+call    3 returned 2128
+call    4 returned 2128
+branch  5 taken 2128 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 2128
+call    8 returned 2128
+call    9 never executed
+     4256:  140:    std::vector<uint8_t> R(blk.begin() + 32, blk.end());
+call    0 returned 2128
+call    1 returned 2128
+call    2 returned 2128
+call    3 returned 2128
+call    4 returned 2128
+branch  5 taken 2128 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 2128
+call    8 returned 2128
+call    9 never executed
+    36176:  141:    for (int r = 0; r < 16; ++r) {
+branch  0 taken 34048 (fallthrough)
+branch  1 taken 2128
+    34048:  142:        const int round = dec ? 15 - r : r;
+branch  0 taken 16672 (fallthrough)
+branch  1 taken 17376
+    68096:  143:        std::vector<uint8_t> rc = R;                       /* 暂存旧 R */
+call    0 returned 34048
+branch  1 taken 34048 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 34048
+call    4 never executed
+    68096:  144:        std::vector<uint8_t> e = permute(kEXP, 48, R);      /* 32 -> 48 */
+call    0 returned 34048
+branch  1 taken 34048 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 34048
+call    4 never executed
+  1668352:  145:        for (int i = 0; i < 48; ++i) e[i] = static_cast<uint8_t>(e[i] ^ sub[round][i]);
+branch  0 taken 1634304 (fallthrough)
+branch  1 taken 34048
+call    2 returned 1634304
+call    3 returned 1634304
+call    4 returned 1634304
+        -:  146:        /* 8 个 S 盒：6 位 -> 4 位 */
+    68096:  147:        std::vector<uint8_t> s(32);
+call    0 returned 34048
+call    1 returned 34048
+branch  2 taken 34048 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 34048
+call    5 never executed
+   306432:  148:        for (int j = 0; j < 8; ++j) {
+branch  0 taken 272384 (fallthrough)
+branch  1 taken 34048
+   272384:  149:            const uint8_t row = static_cast<uint8_t>((e[j * 6] << 1) | e[j * 6 + 5]);
+call    0 returned 272384
+call    1 returned 272384
+   272384:  150:            const uint8_t col = static_cast<uint8_t>((e[j * 6 + 1] << 3) | (e[j * 6 + 2] << 2) |
+call    0 returned 272384
+call    1 returned 272384
+   272384:  151:                                                     (e[j * 6 + 3] << 1) | e[j * 6 + 4]);
+call    0 returned 272384
+call    1 returned 272384
+   272384:  152:            const uint8_t v = kSBOX[j][row * 16 + col];
+   272384:  153:            s[j * 4]     = static_cast<uint8_t>((v >> 3) & 1);
+call    0 returned 272384
+   272384:  154:            s[j * 4 + 1] = static_cast<uint8_t>((v >> 2) & 1);
+call    0 returned 272384
+   272384:  155:            s[j * 4 + 2] = static_cast<uint8_t>((v >> 1) & 1);
+call    0 returned 272384
+   272384:  156:            s[j * 4 + 3] = static_cast<uint8_t>(v & 1);
+call    0 returned 272384
+        -:  157:        }
+    68096:  158:        std::vector<uint8_t> f = permute(kPP, 32, s);       /* P 置换 */
+call    0 returned 34048
+branch  1 taken 34048 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 34048
+call    4 never executed
+  1123584:  159:        for (int i = 0; i < 32; ++i) R[i] = static_cast<uint8_t>(f[i] ^ L[i]);
+branch  0 taken 1089536 (fallthrough)
+branch  1 taken 34048
+call    2 returned 1089536
+call    3 returned 1089536
+call    4 returned 1089536
+    34048:  160:        L = rc;
+call    0 returned 34048
+branch  1 taken 34048 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  161:    }
+     4256:  162:    std::vector<uint8_t> pre;                              /* 末轮后再拼 R||L */
+call    0 returned 2128
+call    1 returned 2128
+call    2 never executed
+     2128:  163:    pre.insert(pre.end(), R.begin(), R.end());
+call    0 returned 2128
+call    1 returned 2128
+call    2 returned 2128
+call    3 returned 2128
+call    4 returned 2128
+branch  5 taken 2128 (fallthrough)
+branch  6 taken 0 (throw)
+     2128:  164:    pre.insert(pre.end(), L.begin(), L.end());
+call    0 returned 2128
+call    1 returned 2128
+call    2 returned 2128
+call    3 returned 2128
+call    4 returned 2128
+branch  5 taken 2128 (fallthrough)
+branch  6 taken 0 (throw)
+     4256:  165:    return permute(kFP, 64, pre);
+call    0 returned 2128
+branch  1 taken 2128 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  166:}
+        -:  167:
+        -:  168:/* --------------------------------------------------- 3DES-EDE 单块(两密钥) */
+function _ZN4DBKP12_GLOBAL__N_110edeEncryptERKNS_4CDesES3_PKhPh called 376 returned 100% blocks executed 100%
+      376:  169:void edeEncrypt(const CDes& k1, const CDes& k2, const uint8_t in[8], uint8_t out[8]) {
+        -:  170:    uint8_t t[8];
+      376:  171:    k1.encryptBlock(in, t);
+call    0 returned 376
+branch  1 taken 376 (fallthrough)
+branch  2 taken 0 (throw)
+      376:  172:    k2.decryptBlock(t, t);
+call    0 returned 376
+branch  1 taken 376 (fallthrough)
+branch  2 taken 0 (throw)
+      376:  173:    k1.encryptBlock(t, out);
+call    0 returned 376
+branch  1 taken 376 (fallthrough)
+branch  2 taken 0 (throw)
+      376:  174:}
+function _ZN4DBKP12_GLOBAL__N_110edeDecryptERKNS_4CDesES3_PKhPh called 332 returned 100% blocks executed 100%
+      332:  175:void edeDecrypt(const CDes& k1, const CDes& k2, const uint8_t in[8], uint8_t out[8]) {
+        -:  176:    uint8_t t[8];
+      332:  177:    k1.decryptBlock(in, t);
+call    0 returned 332
+branch  1 taken 332 (fallthrough)
+branch  2 taken 0 (throw)
+      332:  178:    k2.encryptBlock(t, t);
+call    0 returned 332
+branch  1 taken 332 (fallthrough)
+branch  2 taken 0 (throw)
+      332:  179:    k1.decryptBlock(t, out);
+call    0 returned 332
+branch  1 taken 332 (fallthrough)
+branch  2 taken 0 (throw)
+      332:  180:}
+        -:  181:
+        -:  182:const uint16_t kDesMagic = Crypto::kMagicDes;
+        -:  183:
+        -:  184:} /* anonymous namespace */
+        -:  185:
+        -:  186:/* ------------------------------------------------------------- DES 原语 */
+function _ZN4DBKP4CDesC2EPKh called 206 returned 100% blocks executed 60%
+     3502:  187:CDes::CDes(const uint8_t key[kKeySize]) {
+branch  0 taken 3296 (fallthrough)
+branch  1 taken 206
+call    2 returned 3296
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+      412:  188:    std::vector<uint8_t> k56 = permute(kPC1, 56, bytesToBits(key, kKeySize));
+call    0 returned 206
+branch  1 taken 206 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 206
+branch  4 taken 206 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 206
+call    7 never executed
+      412:  189:    std::vector<uint8_t> L(k56.begin(), k56.begin() + 28);
+call    0 returned 206
+call    1 returned 206
+call    2 returned 206
+call    3 returned 206
+call    4 returned 206
+branch  5 taken 206 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 206
+call    8 returned 206
+call    9 never executed
+      412:  190:    std::vector<uint8_t> R(k56.begin() + 28, k56.end());
+call    0 returned 206
+call    1 returned 206
+call    2 returned 206
+call    3 returned 206
+call    4 returned 206
+branch  5 taken 206 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 206
+call    8 returned 206
+call    9 never executed
+     3502:  191:    for (int r = 0; r < 16; ++r) {
+branch  0 taken 3296 (fallthrough)
+branch  1 taken 206
+     9064:  192:        for (int s = 0; s < kSHIFT[r]; ++s) {              /* 循环左移 */
+branch  0 taken 5768 (fallthrough)
+branch  1 taken 3296
+     5768:  193:            const uint8_t lh = L[0], rh = R[0];
+call    0 returned 5768
+call    1 returned 5768
+     5768:  194:            L.erase(L.begin()); L.push_back(lh);
+call    0 returned 5768
+call    1 returned 5768
+call    2 returned 5768
+branch  3 taken 5768 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 5768
+branch  6 taken 5768 (fallthrough)
+branch  7 taken 0 (throw)
+     5768:  195:            R.erase(R.begin()); R.push_back(rh);
+call    0 returned 5768
+call    1 returned 5768
+call    2 returned 5768
+branch  3 taken 5768 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 5768
+branch  6 taken 5768 (fallthrough)
+branch  7 taken 0 (throw)
+        -:  196:        }
+     3296:  197:        std::vector<uint8_t> cd;
+call    0 returned 3296
+call    1 never executed
+     3296:  198:        cd.insert(cd.end(), L.begin(), L.end());
+call    0 returned 3296
+call    1 returned 3296
+call    2 returned 3296
+call    3 returned 3296
+call    4 returned 3296
+branch  5 taken 3296 (fallthrough)
+branch  6 taken 0 (throw)
+     3296:  199:        cd.insert(cd.end(), R.begin(), R.end());
+call    0 returned 3296
+call    1 returned 3296
+call    2 returned 3296
+call    3 returned 3296
+call    4 returned 3296
+branch  5 taken 3296 (fallthrough)
+branch  6 taken 0 (throw)
+     3296:  200:        m_subkeys[r] = permute(kPC2, 48, cd);
+call    0 returned 3296
+branch  1 taken 3296 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 3296
+call    4 returned 3296
+call    5 returned 3296
+        -:  201:    }
+      206:  202:}
+        -:  203:
+function _ZNK4DBKP4CDes12encryptBlockEPKhPh called 1086 returned 100% blocks executed 70%
+     1086:  204:void CDes::encryptBlock(const uint8_t in[8], uint8_t out[8]) const {
+     2172:  205:    const std::vector<uint8_t> b = desBlock(m_subkeys, bytesToBits(in, 8), false);
+call    0 returned 1086
+branch  1 taken 1086 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1086
+branch  4 taken 1086 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1086
+     1086:  206:    bitsToBytes(b, out);
+call    0 returned 1086
+     1086:  207:}
+function _ZNK4DBKP4CDes12decryptBlockEPKhPh called 1042 returned 100% blocks executed 70%
+     1042:  208:void CDes::decryptBlock(const uint8_t in[8], uint8_t out[8]) const {
+     2084:  209:    const std::vector<uint8_t> b = desBlock(m_subkeys, bytesToBits(in, 8), true);
+call    0 returned 1042
+branch  1 taken 1042 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1042
+branch  4 taken 1042 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1042
+     1042:  210:    bitsToBytes(b, out);
+call    0 returned 1042
+     1042:  211:}
+        -:  212:
+        -:  213:/* ------------------------------------------------------- DES-EDE-CBC 模式 */
+function _ZN4DBKP16DesEdeCbcEncryptEPKhS1_RKSt6vectorIhSaIhEERS4_ called 53 returned 100% blocks executed 74%
+       53:  214:ErrCode DesEdeCbcEncrypt(const uint8_t key[32], const uint8_t macKey[32],
+        -:  215:                         const std::vector<uint8_t>& plain, std::vector<uint8_t>& cipher) {
+      106:  216:    const CDes k1(key);            /* K1 = key[0..7] */
+call    0 returned 53
+branch  1 taken 53 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 53
+call    4 never executed
+      106:  217:    const CDes k2(key + 8);        /* K2 = key[8..15]，K3 = K1 */
+call    0 returned 53
+branch  1 taken 53 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 53
+call    4 never executed
+       53:  218:    cipher.clear();
+call    0 returned 53
+       53:  219:    Crypto::putCipherHeader(cipher, kDesMagic, static_cast<uint64_t>(plain.size()));
+call    0 returned 53
+call    1 returned 53
+branch  2 taken 53 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  220:
+        -:  221:    uint8_t iv[8];
+       53:  222:    fillRandom(iv, 8);
+call    0 returned 53
+branch  1 taken 53 (fallthrough)
+branch  2 taken 0 (throw)
+       53:  223:    cipher.insert(cipher.end(), iv, iv + 8);
+call    0 returned 53
+call    1 returned 53
+call    2 returned 53
+branch  3 taken 53 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  224:
+        -:  225:    /* PKCS#7：总是补 1..8 字节 */
+       53:  226:    const std::size_t pad = 8 - (plain.size() % 8);
+call    0 returned 53
+       53:  227:    std::vector<uint8_t> buf(plain.size() + pad, static_cast<uint8_t>(pad));
+call    0 returned 53
+call    1 returned 53
+call    2 returned 53
+branch  3 taken 53 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 53
+call    6 never executed
+       53:  228:    if (!plain.empty()) std::memcpy(buf.data(), plain.data(), plain.size());
+call    0 returned 53
+branch  1 taken 51 (fallthrough)
+branch  2 taken 2
+call    3 returned 51
+call    4 returned 51
+call    5 returned 51
+        -:  229:
+       53:  230:    const std::size_t blocks = buf.size() / 8;
+call    0 returned 53
+       53:  231:    const std::size_t head = cipher.size();
+call    0 returned 53
+       53:  232:    cipher.resize(head + buf.size());
+call    0 returned 53
+call    1 returned 53
+branch  2 taken 53 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  233:    uint8_t chain[8];
+       53:  234:    std::memcpy(chain, iv, 8);
+      429:  235:    for (std::size_t b = 0; b < blocks; ++b) {
+branch  0 taken 376 (fallthrough)
+branch  1 taken 53
+        -:  236:        uint8_t in[8], out[8];
+     3384:  237:        for (int i = 0; i < 8; ++i) in[i] = static_cast<uint8_t>(buf[b * 8 + i] ^ chain[i]);
+branch  0 taken 3008 (fallthrough)
+branch  1 taken 376
+call    2 returned 3008
+      376:  238:        edeEncrypt(k1, k2, in, out);
+call    0 returned 376
+branch  1 taken 376 (fallthrough)
+branch  2 taken 0 (throw)
+      376:  239:        std::memcpy(cipher.data() + head + b * 8, out, 8);
+call    0 returned 376
+      376:  240:        std::memcpy(chain, out, 8);
+        -:  241:    }
+        -:  242:    /* Encrypt-then-MAC：tag = HMAC-SHA256(macKey, 全部密文)[0..15] */
+        -:  243:    uint8_t tag[32];
+       53:  244:    CSha256::hmac(macKey, 32, cipher.data(), cipher.size(), tag);
+call    0 returned 53
+call    1 returned 53
+call    2 returned 53
+branch  3 taken 53 (fallthrough)
+branch  4 taken 0 (throw)
+       53:  245:    cipher.insert(cipher.end(), tag, tag + Crypto::kTagSize);
+call    0 returned 53
+call    1 returned 53
+call    2 returned 53
+branch  3 taken 53 (fallthrough)
+branch  4 taken 0 (throw)
+       53:  246:    std::memset(chain, 0, sizeof(chain));
+      106:  247:    return E_OK;
+call    0 returned 53
+        -:  248:}
+        -:  249:
+function _ZN4DBKP16DesEdeCbcDecryptEPKhS1_RKSt6vectorIhSaIhEERS4_ called 54 returned 100% blocks executed 76%
+       54:  250:ErrCode DesEdeCbcDecrypt(const uint8_t key[32], const uint8_t macKey[32],
+        -:  251:                         const std::vector<uint8_t>& cipher, std::vector<uint8_t>& plain) {
+       54:  252:    uint64_t rawLen = 0;
+       54:  253:    std::size_t start = 0;
+      54*:  254:    if (!Crypto::readCipherHeader(cipher, kDesMagic, rawLen, start)) return E_CRYPTO_FAIL;
+call    0 returned 54
+branch  1 taken 0 (fallthrough)
+branch  2 taken 54
+        -:  255:    /* 12 + IV8 + 密文(>=8) + tag16 */
+      54*:  256:    if (cipher.size() < start + 8 + 8 + 16) return E_TRUNCATED_ARCHIVE;
+call    0 returned 54
+branch  1 taken 0 (fallthrough)
+branch  2 taken 54
+       54:  257:    const std::size_t ctStart = start + 8;
+       54:  258:    const std::size_t ctLen = cipher.size() - ctStart - Crypto::kTagSize;
+call    0 returned 54
+      54*:  259:    if (ctLen % 8) return E_CRYPTO_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 54
+        -:  260:
+        -:  261:    uint8_t tag[32];
+       54:  262:    CSha256::hmac(macKey, 32, cipher.data(), ctStart + ctLen, tag);
+call    0 returned 54
+call    1 returned 54
+branch  2 taken 54 (fallthrough)
+branch  3 taken 0 (throw)
+       54:  263:    if (std::memcmp(tag, cipher.data() + cipher.size() - Crypto::kTagSize, Crypto::kTagSize) != 0) {
+call    0 returned 54
+call    1 returned 54
+branch  2 taken 5 (fallthrough)
+branch  3 taken 49
+        5:  264:        return E_WRONG_PASSWORD;                     /* 口令错或数据被篡改 */
+        -:  265:    }
+        -:  266:
+       98:  267:    const CDes k1(key);
+call    0 returned 49
+branch  1 taken 49 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 49
+call    4 never executed
+       98:  268:    const CDes k2(key + 8);
+call    0 returned 49
+branch  1 taken 49 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 49
+call    4 never executed
+        -:  269:    uint8_t chain[8];
+       49:  270:    std::memcpy(chain, cipher.data() + start, 8);
+call    0 returned 49
+       98:  271:    std::vector<uint8_t> buf(ctLen);
+call    0 returned 49
+call    1 returned 49
+branch  2 taken 49 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 49
+call    5 never executed
+      381:  272:    for (std::size_t b = 0; b < ctLen / 8; ++b) {
+branch  0 taken 332 (fallthrough)
+branch  1 taken 49
+        -:  273:        uint8_t out[8];
+      332:  274:        edeDecrypt(k1, k2, cipher.data() + ctStart + b * 8, out);
+call    0 returned 332
+call    1 returned 332
+branch  2 taken 332 (fallthrough)
+branch  3 taken 0 (throw)
+     2988:  275:        for (int i = 0; i < 8; ++i) buf[b * 8 + i] = static_cast<uint8_t>(out[i] ^ chain[i]);
+branch  0 taken 2656 (fallthrough)
+branch  1 taken 332
+call    2 returned 2656
+      332:  276:        std::memcpy(chain, cipher.data() + ctStart + b * 8, 8);
+call    0 returned 332
+        -:  277:    }
+      49*:  278:    const uint8_t pad = buf.empty() ? 0 : buf[buf.size() - 1];
+call    0 returned 49
+branch  1 taken 0 (fallthrough)
+branch  2 taken 49
+call    3 returned 49
+call    4 returned 49
+      49*:  279:    if (pad == 0 || pad > 8 || buf.size() < rawLen + pad) return E_CRYPTO_FAIL;
+branch  0 taken 49 (fallthrough)
+branch  1 taken 0
+branch  2 taken 49 (fallthrough)
+branch  3 taken 0
+call    4 returned 49
+branch  5 taken 0 (fallthrough)
+branch  6 taken 49
+branch  7 taken 0 (fallthrough)
+branch  8 taken 49
+      288:  280:    for (std::size_t i = buf.size() - pad; i < buf.size(); ++i) {
+call    0 returned 49
+call    1 returned 288
+branch  2 taken 239 (fallthrough)
+branch  3 taken 49
+     239*:  281:        if (buf[i] != pad) return E_CRYPTO_FAIL;
+call    0 returned 239
+branch  1 taken 0 (fallthrough)
+branch  2 taken 239
+        -:  282:    }
+       49:  283:    buf.resize(buf.size() - pad);
+call    0 returned 49
+call    1 returned 49
+branch  2 taken 49 (fallthrough)
+branch  3 taken 0 (throw)
+      49*:  284:    if (buf.size() != rawLen) return E_CRYPTO_FAIL;
+call    0 returned 49
+branch  1 taken 0 (fallthrough)
+branch  2 taken 49
+       49:  285:    plain.swap(buf);
+call    0 returned 49
+       49:  286:    return E_OK;
+        -:  287:}
+        -:  288:
+        -:  289:} /* namespace DBKP */

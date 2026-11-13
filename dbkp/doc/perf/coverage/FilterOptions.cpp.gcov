@@ -1,0 +1,1074 @@
+        -:    0:Source:src/Enumerator/FilterOptions.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Enumerator/FilterOptions.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Enumerator/FilterOptions.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  FilterOptions.cpp  -- 六个维度的自定义备份过滤
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Enumerator/FilterOptions.h"
+        -:    5:
+        -:    6:#include <algorithm>
+        -:    7:#include <cctype>
+        -:    8:#include <cmath>
+        -:    9:#include <cstdio>
+        -:   10:#include <cstdlib>
+        -:   11:#include <cstring>
+        -:   12:#include <ctime>
+        -:   13:#include <sstream>
+        -:   14:
+        -:   15:#include "Utils/Logger.h"
+        -:   16:#include "Utils/PathUtil.h"
+        -:   17:
+        -:   18:namespace DBKP {
+        -:   19:
+        -:   20:namespace {
+        -:   21:
+function _ZN4DBKP12_GLOBAL__N_19splitListERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEc called 16 returned 100% blocks executed 85%
+       16:   22:std::vector<std::string> splitList(const std::string& text, char sep) {
+       16:   23:    std::vector<std::string> out;
+call    0 returned 16
+       32:   24:    std::string cur;
+call    0 returned 16
+call    1 returned 16
+call    2 never executed
+       51:   25:    for (size_t i = 0; i < text.size(); ++i) {
+call    0 returned 51
+branch  1 taken 35 (fallthrough)
+branch  2 taken 16
+       35:   26:        if (text[i] == sep) { if (!cur.empty()) { out.push_back(cur); cur.clear(); } }
+call    0 returned 35
+branch  1 taken 1 (fallthrough)
+branch  2 taken 34
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+       34:   27:        else cur.push_back(text[i]);
+call    0 returned 34
+call    1 returned 34
+branch  2 taken 34 (fallthrough)
+branch  3 taken 0 (throw)
+        -:   28:    }
+       16:   29:    if (!cur.empty()) out.push_back(cur);
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0
+call    3 returned 16
+branch  4 taken 16 (fallthrough)
+branch  5 taken 0 (throw)
+       32:   30:    return out;
+        -:   31:}
+        -:   32:
+function _ZN4DBKP12_GLOBAL__N_17anyGlobERKSt6vectorINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESaIS7_EERKS7_ called 50 returned 100% blocks executed 100%
+       50:   33:bool anyGlob(const std::vector<std::string>& globs, const std::string& text) {
+       90:   34:    for (size_t i = 0; i < globs.size(); ++i) {
+call    0 returned 90
+branch  1 taken 50 (fallthrough)
+branch  2 taken 40
+       50:   35:        if (Path::matchGlob(globs[i], text)) return true;
+call    0 returned 50
+call    1 returned 50
+branch  2 taken 10 (fallthrough)
+branch  3 taken 40
+        -:   36:    }
+       40:   37:    return false;
+        -:   38:}
+        -:   39:
+        -:   40:/** relDir 是否可能是某条 include 模式的路径前缀（用于放行父目录） */
+function _ZN4DBKP12_GLOBAL__N_113isPrefixOfAnyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKSt6vectorIS6_SaIS6_EE called 5 returned 100% blocks executed 86%
+        5:   41:bool isPrefixOfAny(const std::string& relDir, const std::vector<std::string>& globs) {
+        6:   42:    for (size_t i = 0; i < globs.size(); ++i) {
+call    0 returned 6
+branch  1 taken 5 (fallthrough)
+branch  2 taken 1
+        5:   43:        const std::string& g = globs[i];
+call    0 returned 5
+        5:   44:        size_t cut = g.find_first_of("*?[");
+call    0 returned 5
+       5*:   45:        if (cut == std::string::npos) cut = g.size();
+branch  0 taken 0 (fallthrough)
+branch  1 taken 5
+call    2 never executed
+        5:   46:        std::string prefix = g.substr(0, cut);
+call    0 returned 5
+branch  1 taken 5 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        5:   47:        size_t slash = prefix.find_last_of('/');
+call    0 returned 5
+        5:   48:        if (slash != std::string::npos) prefix = prefix.substr(0, slash + 1);
+branch  0 taken 5 (fallthrough)
+branch  1 taken 0
+call    2 returned 5
+branch  3 taken 5 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 5
+call    6 returned 5
+       5*:   49:        if (prefix.empty()) continue;
+call    0 returned 5
+branch  1 taken 0 (fallthrough)
+branch  2 taken 5
+        5:   50:        if (relDir.size() < prefix.size()) {
+call    0 returned 5
+call    1 returned 5
+branch  2 taken 5 (fallthrough)
+branch  3 taken 0
+        5:   51:            if (prefix.compare(0, relDir.size(), relDir) == 0) return true;
+call    0 returned 5
+call    1 returned 5
+branch  2 taken 5 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 4 (fallthrough)
+branch  5 taken 1
+        -:   52:        }
+        -:   53:    }
+        1:   54:    return false;
+        -:   55:}
+        -:   56:
+        -:   57:} /* anonymous namespace */
+        -:   58:
+function _ZNK4DBKP13FilterOptions7isEmptyEv called 11 returned 100% blocks executed 100%
+       11:   59:bool FilterOptions::isEmpty() const {
+       32:   60:    return includePaths.empty() && excludePaths.empty() &&
+call    0 returned 11
+call    1 returned 11
+branch  2 taken 10 (fallthrough)
+branch  3 taken 1
+branch  4 taken 10 (fallthrough)
+branch  5 taken 0
+       30:   61:           nameGlobs.empty() && nameRejects.empty() &&
+call    0 returned 10
+call    1 returned 10
+branch  2 taken 10 (fallthrough)
+branch  3 taken 0
+branch  4 taken 10 (fallthrough)
+branch  5 taken 0
+       20:   62:           typeAllow.empty() && typeDeny.empty() &&
+call    0 returned 10
+call    1 returned 10
+branch  2 taken 10 (fallthrough)
+branch  3 taken 0
+       10:   63:           mtimeAfter == 0 && mtimeBefore == 0 &&
+branch  0 taken 10 (fallthrough)
+branch  1 taken 0
+branch  2 taken 10 (fallthrough)
+branch  3 taken 0
+       20:   64:           minSize < 0 && maxSize < 0 &&
+branch  0 taken 10 (fallthrough)
+branch  1 taken 0
+branch  2 taken 10 (fallthrough)
+branch  3 taken 0
+branch  4 taken 10 (fallthrough)
+branch  5 taken 0
+       20:   65:           uids.empty() && ownerNames.empty() &&
+call    0 returned 10
+call    1 returned 10
+branch  2 taken 10 (fallthrough)
+branch  3 taken 0
+       22:   66:           !followSymlinks && !noCrossDevice && maxDepth < 0 && !skipSpecials;
+branch  0 taken 11 (fallthrough)
+branch  1 taken 0
+branch  2 taken 10 (fallthrough)
+branch  3 taken 0
+branch  4 taken 10 (fallthrough)
+branch  5 taken 0
+branch  6 taken 10 (fallthrough)
+branch  7 taken 0
+branch  8 taken 10 (fallthrough)
+branch  9 taken 0
+        -:   67:}
+        -:   68:
+function _ZNK4DBKP13FilterOptions4passERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_8Platform8FileInfoE called 549 returned 100% blocks executed 63%
+      549:   69:bool FilterOptions::pass(const std::string& relPath, const Platform::FileInfo& fi) const {
+        -:   70:    /* --- 3. 文件类型 --- */
+      549:   71:    if (std::find(typeDeny.begin(), typeDeny.end(), fi.type) != typeDeny.end()) return false;
+call    0 returned 549
+call    1 returned 549
+call    2 returned 549
+call    3 returned 549
+branch  4 taken 549 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 549
+branch  7 taken 4 (fallthrough)
+branch  8 taken 545
+      554:   72:    if (!typeAllow.empty() &&
+call    0 returned 545
+branch  1 taken 9 (fallthrough)
+branch  2 taken 536
+branch  3 taken 5 (fallthrough)
+branch  4 taken 4
+      554:   73:        std::find(typeAllow.begin(), typeAllow.end(), fi.type) == typeAllow.end()) return false;
+call    0 returned 9
+call    1 returned 9
+call    2 returned 9
+call    3 returned 9
+branch  4 taken 9 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 9
+branch  7 taken 5 (fallthrough)
+branch  8 taken 540
+     540*:   74:    if (skipSpecials && (fi.type == FT_FIFO || fi.type == FT_BLOCK ||
+branch  0 taken 0 (fallthrough)
+branch  1 taken 540
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:   75:                         fi.type == FT_CHAR  || fi.type == FT_SOCKET)) return false;
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+        -:   76:
+        -:   77:    /* --- 1. 路径 --- */
+      540:   78:    if (!excludePaths.empty() && anyGlob(excludePaths, relPath)) return false;
+call    0 returned 540
+branch  1 taken 7 (fallthrough)
+branch  2 taken 533
+call    3 returned 7
+branch  4 taken 7 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 2 (fallthrough)
+branch  7 taken 5
+branch  8 taken 2 (fallthrough)
+branch  9 taken 538
+      538:   79:    if (!includePaths.empty() && !anyGlob(includePaths, relPath)) {
+call    0 returned 538
+branch  1 taken 8 (fallthrough)
+branch  2 taken 530
+call    3 returned 8
+branch  4 taken 8 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 7 (fallthrough)
+branch  7 taken 1
+branch  8 taken 7 (fallthrough)
+branch  9 taken 531
+        7:   80:        if (fi.type == FT_DIR && isPrefixOfAny(relPath, includePaths)) { /* 放行父目录 */ }
+branch  0 taken 3 (fallthrough)
+branch  1 taken 4
+call    2 returned 3
+branch  3 taken 3 (fallthrough)
+branch  4 taken 0 (throw)
+branch  5 taken 2 (fallthrough)
+branch  6 taken 1
+branch  7 taken 5 (fallthrough)
+branch  8 taken 2
+        5:   81:        else return false;
+        -:   82:    }
+        -:   83:
+        -:   84:    /* --- 2. 文件名称 --- */
+     1066:   85:    const std::string base = Path::fileName(relPath);
+call    0 returned 533
+branch  1 taken 533 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 533
+call    4 never executed
+      533:   86:    if (!nameGlobs.empty() && !anyGlob(nameGlobs, base)) {
+call    0 returned 533
+branch  1 taken 21 (fallthrough)
+branch  2 taken 512
+call    3 returned 21
+branch  4 taken 21 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 16 (fallthrough)
+branch  7 taken 5
+branch  8 taken 16 (fallthrough)
+branch  9 taken 517
+       16:   87:        std::ostringstream os;
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+      32*:   88:        for (size_t i = 0; i < nameGlobs.size(); ++i) os << (i ? "," : "") << nameGlobs[i];
+call    0 returned 32
+branch  1 taken 16 (fallthrough)
+branch  2 taken 16
+branch  3 taken 0 (fallthrough)
+branch  4 taken 16
+call    5 returned 16
+branch  6 taken 16 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 16
+call    9 returned 16
+branch 10 taken 16 (fallthrough)
+branch 11 taken 0 (throw)
+       16:   89:        LOG_DEBUG("name allow miss: base=[" + base + "] globs=[" + os.str() + "]");
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 16
+branch  4 taken 16 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 16
+branch  7 taken 16 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 16
+branch 10 taken 16 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 16
+branch 13 taken 16 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 16
+branch 16 taken 16 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 16
+branch 19 taken 16 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 16
+call   22 returned 16
+call   23 returned 16
+call   24 returned 16
+call   25 returned 16
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+       16:   90:        return false;
+call    0 returned 16
+        -:   91:    }
+      517:   92:    if (!nameRejects.empty() && anyGlob(nameRejects, base)) return false;
+call    0 returned 517
+branch  1 taken 9 (fallthrough)
+branch  2 taken 508
+call    3 returned 9
+branch  4 taken 9 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 1 (fallthrough)
+branch  7 taken 8
+branch  8 taken 1 (fallthrough)
+branch  9 taken 516
+        -:   93:
+        -:   94:    /* --- 5. 尺寸（仅普通文件） --- */
+      516:   95:    if (fi.type == FT_REGULAR) {
+branch  0 taken 274 (fallthrough)
+branch  1 taken 242
+      274:   96:        if (minSize >= 0 && fi.size < minSize) return false;
+branch  0 taken 5 (fallthrough)
+branch  1 taken 269
+branch  2 taken 3 (fallthrough)
+branch  3 taken 2
+      271:   97:        if (maxSize >= 0 && fi.size > maxSize) return false;
+branch  0 taken 5 (fallthrough)
+branch  1 taken 266
+branch  2 taken 3 (fallthrough)
+branch  3 taken 2
+        -:   98:    }
+        -:   99:    /* --- 4. 修改时间 --- */
+      510:  100:    if (mtimeAfter > 0  && fi.mtimeSec < mtimeAfter)  return false;
+branch  0 taken 8 (fallthrough)
+branch  1 taken 502
+branch  2 taken 8 (fallthrough)
+branch  3 taken 0
+     502*:  101:    if (mtimeBefore > 0 && fi.mtimeSec > mtimeBefore) return false;
+branch  0 taken 8 (fallthrough)
+branch  1 taken 494
+branch  2 taken 0 (fallthrough)
+branch  3 taken 8
+        -:  102:
+        -:  103:    /* --- 6. 拥有者 --- */
+     502*:  104:    if (!uids.empty() &&
+call    0 returned 502
+branch  1 taken 0 (fallthrough)
+branch  2 taken 502
+branch  3 never executed
+branch  4 never executed
+     502*:  105:        std::find(uids.begin(), uids.end(), fi.uid) == uids.end()) return false;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 taken 0 (fallthrough)
+branch  8 taken 502
+      502:  106:    if (!ownerNames.empty()) {
+call    0 returned 502
+branch  1 taken 0 (fallthrough)
+branch  2 taken 502
+    #####:  107:        std::string name;
+call    0 never executed
+call    1 never executed
+    #####:  108:        if (DBKP_IS_ERR(Platform::uidToName(fi.uid, name))) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  109:            /* 平台无法解析属主（如 Windows）：降级为不按名字过滤 */
+        -:  110:        } else {
+    #####:  111:            bool matched = false;
+    #####:  112:            for (size_t i = 0; i < ownerNames.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  113:                if (Path::iequals(ownerNames[i], name)) { matched = true; break; }
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+        -:  114:            }
+    #####:  115:            if (!matched) return false;
+branch  0 never executed
+branch  1 never executed
+        -:  116:        }
+        -:  117:    }
+      502:  118:    return true;
+        -:  119:}
+        -:  120:
+function _ZNK4DBKP13FilterOptions13passTraversalERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 140 returned 100% blocks executed 77%
+      140:  121:bool FilterOptions::passTraversal(const std::string& relDir) const {
+     140*:  122:    if (relDir.empty()) return true;
+call    0 returned 140
+branch  1 taken 0 (fallthrough)
+branch  2 taken 140
+     140*:  123:    if (!excludePaths.empty() && anyGlob(excludePaths, relDir)) return false;
+call    0 returned 140
+branch  1 taken 1 (fallthrough)
+branch  2 taken 139
+call    3 returned 1
+branch  4 taken 0 (fallthrough)
+branch  5 taken 1
+branch  6 taken 0 (fallthrough)
+branch  7 taken 140
+      140:  124:    return true;
+        -:  125:}
+        -:  126:
+function _ZNK4DBKP13FilterOptions16passForTraversalERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_8Platform8FileInfoE called 141 returned 100% blocks executed 84%
+      141:  127:bool FilterOptions::passForTraversal(const std::string& relDir,
+        -:  128:                                     const Platform::FileInfo& fi) const {
+     141*:  129:    if (fi.type != FT_DIR) return false;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 141
+     141*:  130:    if (relDir.empty()) return true;
+call    0 returned 141
+branch  1 taken 0 (fallthrough)
+branch  2 taken 141
+        -:  131:    /* 只有"路径"维度能剪断遍历；类型/名称/尺寸维度仅决定条目本身是否入档，
+        -:  132:       否则 --type -D（不要目录条目）会连子目录里的文件一起丢掉。 */
+      141:  133:    if (!excludePaths.empty() && anyGlob(excludePaths, relDir)) return false;
+call    0 returned 141
+branch  1 taken 2 (fallthrough)
+branch  2 taken 139
+call    3 returned 2
+branch  4 taken 1 (fallthrough)
+branch  5 taken 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 140
+     142*:  134:    if (!includePaths.empty() && !anyGlob(includePaths, relDir) &&
+call    0 returned 140
+branch  1 taken 2 (fallthrough)
+branch  2 taken 138
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0
+branch  6 taken 0 (fallthrough)
+branch  7 taken 140
+       2*:  135:        !isPrefixOfAny(relDir, includePaths)) return false;
+call    0 returned 2
+branch  1 taken 0 (fallthrough)
+branch  2 taken 2
+      140:  136:    return true;
+        -:  137:}
+        -:  138:
+function _ZN4DBKP13FilterOptions11setTypeSpecERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 22 returned 100% blocks executed 87%
+       22:  139:bool FilterOptions::setTypeSpec(const std::string& spec) {
+       22:  140:    if (spec.empty()) return false;
+call    0 returned 22
+branch  1 taken 2 (fallthrough)
+branch  2 taken 20
+       20:  141:    bool deny = false;
+       20:  142:    size_t start = 0;
+       20:  143:    if (spec[0] == '-') { deny = true; start = 1; }
+call    0 returned 20
+branch  1 taken 5 (fallthrough)
+branch  2 taken 15
+       15:  144:    else if (spec[0] == '+') { start = 1; }
+call    0 returned 15
+branch  1 taken 2 (fallthrough)
+branch  2 taken 13
+       40:  145:    const std::string body = spec.substr(start);
+call    0 returned 20
+branch  1 taken 20 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 20
+call    4 never executed
+       20:  146:    if (body.empty()) return false;
+call    0 returned 20
+branch  1 taken 2 (fallthrough)
+branch  2 taken 18
+        -:  147:
+        -:  148:    /* 类型 token 有两种写法：单字母集合 "-DL" 与逗号名单 "regular,dir" */
+        -:  149:    struct TypeAlias { const char* text; char type; };
+        -:  150:    static const TypeAlias kAliases[] = {
+        -:  151:        { "r", FT_REGULAR }, { "regular", FT_REGULAR }, { "file", FT_REGULAR },
+        -:  152:        { "reg", FT_REGULAR }, { "plain", FT_REGULAR },
+        -:  153:        { "d", FT_DIR }, { "dir", FT_DIR }, { "directory", FT_DIR },
+        -:  154:        { "l", FT_SYMLINK }, { "link", FT_SYMLINK }, { "symlink", FT_SYMLINK },
+        -:  155:        { "h", FT_HARDLINK }, { "hard", FT_HARDLINK }, { "hardlink", FT_HARDLINK },
+        -:  156:        { "f", FT_FIFO }, { "pipe", FT_FIFO }, { "fifo", FT_FIFO },
+        -:  157:        { "b", FT_BLOCK }, { "block", FT_BLOCK },
+        -:  158:        { "c", FT_CHAR }, { "char", FT_CHAR }, { "character", FT_CHAR },
+        -:  159:        { "s", FT_SOCKET }, { "sock", FT_SOCKET }, { "socket", FT_SOCKET },
+        -:  160:    };
+        -:  161:
+        -:  162:    /* 全字母且无逗号 -> 视为字母集合，逐字符拆开 */
+       18:  163:    bool letterSet = body.size() > 1 && body.find(',') == std::string::npos;
+call    0 returned 18
+branch  1 taken 7 (fallthrough)
+branch  2 taken 11
+call    3 returned 7
+branch  4 taken 6 (fallthrough)
+branch  5 taken 1
+       29:  164:    for (size_t i = 0; i < body.size() && letterSet; ++i) {
+call    0 returned 29
+branch  1 taken 27 (fallthrough)
+branch  2 taken 2
+branch  3 taken 11 (fallthrough)
+branch  4 taken 16
+branch  5 taken 11 (fallthrough)
+branch  6 taken 18
+       22:  165:        std::string one = body.substr(i, 1);
+call    0 returned 11
+branch  1 taken 11 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 11
+       11:  166:        bool known = false;
+      159:  167:        for (size_t k = 0; k < sizeof(kAliases) / sizeof(kAliases[0]); ++k) {
+branch  0 taken 155 (fallthrough)
+branch  1 taken 4
+      155:  168:            if (std::strlen(kAliases[k].text) == 1 && kAliases[k].text[0] == std::tolower(static_cast<unsigned char>(body[i]))) {
+branch  0 taken 51 (fallthrough)
+branch  1 taken 104
+call    2 returned 51
+branch  3 taken 7 (fallthrough)
+branch  4 taken 44
+branch  5 taken 7 (fallthrough)
+branch  6 taken 148
+        7:  169:                known = true; break;
+        -:  170:            }
+        -:  171:        }
+       11:  172:        if (!known) letterSet = false;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 7
+        -:  173:    }
+       36:  174:    std::vector<std::string> items;
+call    0 returned 18
+call    1 returned 18
+call    2 never executed
+       18:  175:    if (letterSet) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 16
+        6:  176:        for (size_t i = 0; i < body.size(); ++i) items.push_back(body.substr(i, 1));
+call    0 returned 6
+branch  1 taken 4 (fallthrough)
+branch  2 taken 2
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+branch  7 taken 4 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 4
+call   10 never executed
+        -:  177:    } else {
+       16:  178:        items = splitList(body, ',');
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 16
+call    4 returned 16
+        -:  179:    }
+      18*:  180:    if (items.empty()) return false;
+call    0 returned 18
+branch  1 taken 0 (fallthrough)
+branch  2 taken 18
+        -:  181:
+       18:  182:    std::vector<char>& bucket = deny ? typeDeny : typeAllow;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 14
+       36:  183:    for (size_t i = 0; i < items.size(); ++i) {
+call    0 returned 36
+branch  1 taken 21 (fallthrough)
+branch  2 taken 15
+       21:  184:        std::string tok;
+call    0 returned 21
+call    1 never executed
+       59:  185:        for (size_t k = 0; k < items[i].size(); ++k) {
+call    0 returned 59
+call    1 returned 59
+branch  2 taken 38 (fallthrough)
+branch  3 taken 21
+       38:  186:            tok.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(items[i][k]))));
+call    0 returned 38
+call    1 returned 38
+branch  2 taken 38 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 38
+branch  5 taken 38 (fallthrough)
+branch  6 taken 0 (throw)
+        -:  187:        }
+       21:  188:        char t = 0;
+      239:  189:        for (size_t k = 0; k < sizeof(kAliases) / sizeof(kAliases[0]); ++k) {
+branch  0 taken 236 (fallthrough)
+branch  1 taken 3
+      236:  190:            if (tok == kAliases[k].text) { t = kAliases[k].type; break; }
+call    0 returned 236
+branch  1 taken 18 (fallthrough)
+branch  2 taken 218
+        -:  191:        }
+       21:  192:        if (t == 0) {
+branch  0 taken 3 (fallthrough)
+branch  1 taken 18
+        -:  193:            /* 未知类型名以前只告警并继续：配合 --type 做“排除式备份”时，
+        -:  194:               一个拼错的 token 会让整条过滤静默失效（help 自己举的 reg 就踩这个坑）。
+        -:  195:               现在直接判错，让调用方退出去改参数。 */
+        6:  196:            lastError = "unknown file type: " + items[i] +
+call    0 returned 3
+call    1 returned 3
+branch  2 taken 3 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 3
+branch  5 taken 3 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 3
+call    8 returned 3
+call    9 never executed
+        3:  197:                        " (r/reg/regular/file, d/dir, l/link, h/hardlink, f/fifo, b, c, s)";
+call    0 returned 3
+        3:  198:            return false;
+        -:  199:        }
+       18:  200:        if (std::find(bucket.begin(), bucket.end(), t) == bucket.end()) bucket.push_back(t);
+call    0 returned 18
+call    1 returned 18
+call    2 returned 18
+call    3 returned 18
+branch  4 taken 18 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 18
+branch  7 taken 18 (fallthrough)
+branch  8 taken 0
+call    9 returned 18
+branch 10 taken 18 (fallthrough)
+branch 11 taken 0 (throw)
+        -:  201:    }
+       15:  202:    return true;
+        -:  203:}
+        -:  204:
+function _ZN4DBKP13FilterOptions9parseSizeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPb called 18 returned 100% blocks executed 91%
+       18:  205:int64_t FilterOptions::parseSize(const std::string& text, bool* okOut) {
+       18:  206:    if (okOut) *okOut = false;
+branch  0 taken 18 (fallthrough)
+branch  1 taken 0
+       18:  207:    if (text.empty()) return -1;
+call    0 returned 18
+branch  1 taken 2 (fallthrough)
+branch  2 taken 16
+       16:  208:    char* endp = nullptr;
+       16:  209:    double v = std::strtod(text.c_str(), &endp);
+call    0 returned 16
+call    1 returned 16
+       16:  210:    if (endp == text.c_str()) return -1;
+call    0 returned 16
+branch  1 taken 2 (fallthrough)
+branch  2 taken 14
+      42*:  211:    std::string unit = endp ? std::string(endp) : std::string();
+branch  0 taken 14 (fallthrough)
+branch  1 taken 0
+call    2 returned 14
+call    3 returned 14
+branch  4 taken 14 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 never executed
+branch  7 taken 14 (fallthrough)
+branch  8 taken 0
+call    9 returned 14
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+       27:  212:    for (size_t i = 0; i < unit.size(); ++i) {
+call    0 returned 27
+branch  1 taken 13 (fallthrough)
+branch  2 taken 14
+       13:  213:        unit[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(unit[i])));
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 13
+branch  4 taken 13 (fallthrough)
+branch  5 taken 0 (throw)
+        -:  214:    }
+       14:  215:    if (unit.empty() || unit == "B") { if (okOut) *okOut = true; return static_cast<int64_t>(v); }
+call    0 returned 14
+branch  1 taken 10 (fallthrough)
+branch  2 taken 4
+call    3 returned 10
+branch  4 taken 0 (fallthrough)
+branch  5 taken 10
+branch  6 taken 4 (fallthrough)
+branch  7 taken 10
+branch  8 taken 4 (fallthrough)
+branch  9 taken 0
+       10:  216:    int64_t mul = 0;
+       10:  217:    if      (unit == "K" || unit == "KB") mul = 1024;
+call    0 returned 10
+branch  1 taken 8 (fallthrough)
+branch  2 taken 2
+call    3 returned 8
+branch  4 taken 2 (fallthrough)
+branch  5 taken 6
+branch  6 taken 4 (fallthrough)
+branch  7 taken 6
+        6:  218:    else if (unit == "M" || unit == "MB") mul = 1024 * 1024;
+call    0 returned 6
+branch  1 taken 5 (fallthrough)
+branch  2 taken 1
+call    3 returned 5
+branch  4 taken 1 (fallthrough)
+branch  5 taken 4
+branch  6 taken 2 (fallthrough)
+branch  7 taken 4
+        4:  219:    else if (unit == "G" || unit == "GB") mul = 1024 * 1024 * 1024;
+call    0 returned 4
+branch  1 taken 2 (fallthrough)
+branch  2 taken 2
+call    3 returned 2
+branch  4 taken 0 (fallthrough)
+branch  5 taken 2
+branch  6 taken 2 (fallthrough)
+branch  7 taken 2
+        2:  220:    else if (unit == "T" || unit == "TB") mul = static_cast<int64_t>(1024) * 1024 * 1024 * 1024;
+call    0 returned 2
+branch  1 taken 1 (fallthrough)
+branch  2 taken 1
+call    3 returned 1
+branch  4 taken 0 (fallthrough)
+branch  5 taken 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 1
+       10:  221:    if (mul == 0) return -1;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 9
+        9:  222:    if (okOut) *okOut = true;
+branch  0 taken 9 (fallthrough)
+branch  1 taken 0
+        9:  223:    return static_cast<int64_t>(v * static_cast<double>(mul));
+        -:  224:}
+        -:  225:
+function _ZN4DBKP13FilterOptions9parseTimeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEPb called 16 returned 100% blocks executed 100%
+       16:  226:int64_t FilterOptions::parseTime(const std::string& text, bool* okOut) {
+       16:  227:    if (okOut) *okOut = false;
+branch  0 taken 15 (fallthrough)
+branch  1 taken 1
+       16:  228:    if (text.empty()) return 0;
+call    0 returned 16
+branch  1 taken 1 (fallthrough)
+branch  2 taken 15
+        -:  229:    /* 相对时间："7d" "12h" "30m" "60s" —— 表示"距今多久之前" */
+       15:  230:    if (text.size() >= 2 && std::isdigit(static_cast<unsigned char>(text[0]))) {
+call    0 returned 15
+branch  1 taken 15 (fallthrough)
+branch  2 taken 0
+call    3 returned 15
+branch  4 taken 13 (fallthrough)
+branch  5 taken 2
+branch  6 taken 13 (fallthrough)
+branch  7 taken 2
+       13:  231:        char last = static_cast<char>(std::tolower(static_cast<unsigned char>(text[text.size() - 1])));
+call    0 returned 13
+call    1 returned 13
+       13:  232:        if (last == 'd' || last == 'h' || last == 'm' || last == 's') {
+branch  0 taken 11 (fallthrough)
+branch  1 taken 2
+branch  2 taken 9 (fallthrough)
+branch  3 taken 2
+branch  4 taken 7 (fallthrough)
+branch  5 taken 2
+branch  6 taken 1 (fallthrough)
+branch  7 taken 6
+        7:  233:            double n = std::atof(text.substr(0, text.size() - 1).c_str());
+call    0 returned 7
+call    1 returned 7
+branch  2 taken 7 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 7
+call    5 returned 7
+call    6 returned 7
+        7:  234:            int64_t per = last == 'd' ? 86400 : (last == 'h' ? 3600 : (last == 'm' ? 60 : 1));
+branch  0 taken 5 (fallthrough)
+branch  1 taken 2
+branch  2 taken 3 (fallthrough)
+branch  3 taken 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 1
+        7:  235:            if (okOut) *okOut = true;
+branch  0 taken 7 (fallthrough)
+branch  1 taken 0
+        7:  236:            return static_cast<int64_t>(std::time(nullptr)) - static_cast<int64_t>(n * per);
+call    0 returned 7
+        -:  237:        }
+        -:  238:    }
+        -:  239:    std::tm tmv;
+        8:  240:    std::memset(&tmv, 0, sizeof(tmv));
+        8:  241:    int y = 0, mo = 0, d = 0, h = 12, mi = 0, s = 0;
+        8:  242:    int matched = std::sscanf(text.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &s);
+call    0 returned 8
+call    1 returned 8
+branch  2 taken 8 (fallthrough)
+branch  3 taken 0 (throw)
+        8:  243:    if (matched < 3) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 6
+        2:  244:        matched = std::sscanf(text.c_str(), "%d-%d-%d %d:%d:%d", &y, &mo, &d, &h, &mi, &s);
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+        2:  245:        if (matched < 3) return 0;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+        -:  246:    }
+        6:  247:    tmv.tm_year = y - 1900; tmv.tm_mon = mo - 1; tmv.tm_mday = d;
+        6:  248:    tmv.tm_hour = h; tmv.tm_min = mi; tmv.tm_sec = s;
+        6:  249:    tmv.tm_isdst = -1;
+        6:  250:    if (okOut) *okOut = true;
+branch  0 taken 5 (fallthrough)
+branch  1 taken 1
+        6:  251:    return static_cast<int64_t>(std::mktime(&tmv));
+call    0 returned 6
+        -:  252:}
+        -:  253:
+function _ZNK4DBKP13FilterOptions8describeB5cxx11Ev called 2 returned 100% blocks executed 59%
+        2:  254:std::string FilterOptions::describe() const {
+        4:  255:    std::ostringstream os;
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+call    4 never executed
+       2*:  256:    if (!includePaths.empty()) os << "include-path=" << includePaths.size() << " ";
+call    0 returned 2
+branch  1 taken 0 (fallthrough)
+branch  2 taken 2
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+        2:  257:    if (!excludePaths.empty()) os << "exclude-path=" << excludePaths.size() << " ";
+call    0 returned 2
+branch  1 taken 1 (fallthrough)
+branch  2 taken 1
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+branch 11 taken 1 (fallthrough)
+branch 12 taken 0 (throw)
+        2:  258:    if (!nameGlobs.empty())    os << "name=" << nameGlobs.size() << " ";
+call    0 returned 2
+branch  1 taken 1 (fallthrough)
+branch  2 taken 1
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+branch 11 taken 1 (fallthrough)
+branch 12 taken 0 (throw)
+       2*:  259:    if (!nameRejects.empty())  os << "name-exclude=" << nameRejects.size() << " ";
+call    0 returned 2
+branch  1 taken 0 (fallthrough)
+branch  2 taken 2
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+       2*:  260:    if (!typeAllow.empty())    os << "type=" << typeAllow.size() << " ";
+call    0 returned 2
+branch  1 taken 0 (fallthrough)
+branch  2 taken 2
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+       2*:  261:    if (!typeDeny.empty())     os << "type-exclude=" << typeDeny.size() << " ";
+call    0 returned 2
+branch  1 taken 0 (fallthrough)
+branch  2 taken 2
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+        2:  262:    if (minSize >= 0 || maxSize >= 0) os << "size=[" << minSize << "," << maxSize << "] ";
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1
+branch  2 taken 0 (fallthrough)
+branch  3 taken 1
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+branch 11 taken 1 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 1
+branch 14 taken 1 (fallthrough)
+branch 15 taken 0 (throw)
+call   16 returned 1
+branch 17 taken 1 (fallthrough)
+branch 18 taken 0 (throw)
+        2:  263:    if (mtimeAfter > 0 || mtimeBefore > 0)
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 2
+    #####:  264:        os << "mtime=[" << mtimeAfter << "," << mtimeBefore << "] ";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+       2*:  265:    if (!uids.empty() || !ownerNames.empty())
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0
+call    3 returned 2
+branch  4 taken 0 (fallthrough)
+branch  5 taken 2
+branch  6 taken 0 (fallthrough)
+branch  7 taken 2
+    #####:  266:        os << "owner=" << (uids.size() + ownerNames.size()) << " ";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+        2:  267:    if (followSymlinks) os << "follow-symlink ";
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0 (throw)
+       2*:  268:    if (noCrossDevice)  os << "no-cross-device ";
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+       2*:  269:    if (maxDepth >= 0)  os << "max-depth=" << maxDepth << " ";
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+       2*:  270:    if (skipSpecials)   os << "skip-special ";
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        2:  271:    std::string s = os.str();
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        2:  272:    if (!s.empty() && s[s.size() - 1] == ' ') s.erase(s.size() - 1);
+call    0 returned 2
+branch  1 taken 1 (fallthrough)
+branch  2 taken 1
+call    3 returned 1
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0 (throw)
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0
+branch  9 taken 1 (fallthrough)
+branch 10 taken 1
+call   11 returned 1
+call   12 returned 1
+branch 13 taken 1 (fallthrough)
+branch 14 taken 0 (throw)
+        5:  273:    return s.empty() ? "none" : s;
+call    0 returned 2
+branch  1 taken 1 (fallthrough)
+branch  2 taken 1
+call    3 returned 1
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+branch 10 taken 1 (fallthrough)
+branch 11 taken 1
+call   12 returned 1
+call   13 returned 2
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+        -:  274:}
+        -:  275:
+        -:  276:} /* namespace DBKP */
+        -:  277:

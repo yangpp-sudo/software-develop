@@ -1,0 +1,280 @@
+        -:    0:Source:src/Web/Router.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/Router.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/Router.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Router.cpp  -- 见 Router.h
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Web/Router.h"
+        -:    5:
+        -:    6:namespace DBKP {
+        -:    7:
+function _ZN4DBKP7CRouter12splitPatternERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERSt6vectorIS6_SaIS6_EE called 0 returned 0% blocks executed 0%
+    #####:    8:void CRouter::splitPattern(const std::string& pattern, std::vector<std::string>& segs) {
+    #####:    9:    segs.clear();
+call    0 never executed
+    #####:   10:    std::size_t pos = 0;
+    #####:   11:    if (pos < pattern.size() && pattern[pos] == '/') ++pos;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:   12:    while (pos <= pattern.size()) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   13:        std::size_t slash = pattern.find('/', pos);
+call    0 never executed
+    #####:   14:        if (slash == std::string::npos) slash = pattern.size();
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+    #####:   15:        const std::string seg = pattern.substr(pos, slash - pos);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:   16:        if (!seg.empty()) segs.push_back(seg);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:   17:        if (slash >= pattern.size()) break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   18:        pos = slash + 1;
+        -:   19:    }
+    #####:   20:}
+        -:   21:
+function _ZN4DBKP7CRouter9matchSegsERKSt6vectorINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESaIS7_EESB_RSt3mapIS7_S7_St4lessIS7_ESaISt4pairIKS7_S7_EEE called 0 returned 0% blocks executed 0%
+    #####:   22:bool CRouter::matchSegs(const std::vector<std::string>& segs,
+        -:   23:                        const std::vector<std::string>& pathSegs,
+        -:   24:                        CHttpRequest::TParams& params) {
+    #####:   25:    for (std::size_t i = 0; i < segs.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   26:        const std::string& p = segs[i];
+call    0 never executed
+    #####:   27:        if (p == "*") return true;                       /* 尾部通配：剩下的都算命中 */
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   28:        if (i >= pathSegs.size()) return false;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   29:        const std::string& v = pathSegs[i];
+call    0 never executed
+    #####:   30:        if (p.size() > 1 && p[0] == ':') {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+    #####:   31:            if (v.empty()) return false;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   32:            params[p.substr(1)] = v;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+    #####:   33:        } else if (p != v) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   34:            return false;
+        -:   35:        }
+        -:   36:    }
+        -:   37:    /* 没有通配时，段数必须严格相等：/api/jobs 不该匹配 /api/jobs/9 */
+    #####:   38:    return segs.size() == pathSegs.size();
+call    0 never executed
+call    1 never executed
+        -:   39:}
+        -:   40:
+function _ZN4DBKP7CRouter3addERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_St8functionIFNS_13CHttpResponseERKNS_12CHttpRequestEEE called 0 returned 0% blocks executed 0%
+    #####:   41:void CRouter::add(const std::string& method, const std::string& pattern, Handler handler) {
+    #####:   42:    Route r;
+call    0 never executed
+call    1 never executed
+    #####:   43:    splitPattern(pattern, r.segs);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   44:    r.handler = handler;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   45:    m_byMethod[CHttpRequest::methodUpper(method)].push_back(r);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:   46:    ++m_total;
+call    0 never executed
+    #####:   47:}
+        -:   48:
+function _ZNK4DBKP7CRouter14pathRegisteredERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:   49:bool CRouter::pathRegistered(const std::string& path) const {
+    #####:   50:    std::vector<std::string> pathSegs;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:   51:    splitPattern(path, pathSegs);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   52:    for (std::map<std::string, std::vector<Route> >::const_iterator mi = m_byMethod.begin();
+call    0 never executed
+    #####:   53:         mi != m_byMethod.end(); ++mi) {
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+    #####:   54:        for (std::size_t i = 0; i < mi->second.size(); ++i) {
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   55:            CHttpRequest::TParams tmp;
+call    0 never executed
+call    1 never executed
+    #####:   56:            if (matchSegs(mi->second[i].segs, pathSegs, tmp)) return true;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+        -:   57:        }
+        -:   58:    }
+    #####:   59:    return false;
+        -:   60:}
+        -:   61:
+function _ZNK4DBKP7CRouter8dispatchERNS_12CHttpRequestERNS_13CHttpResponseE called 0 returned 0% blocks executed 0%
+    #####:   62:bool CRouter::dispatch(CHttpRequest& req, CHttpResponse& res) const {
+    #####:   63:    std::vector<std::string> pathSegs;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:   64:    splitPattern(req.path, pathSegs);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:   65:
+    #####:   66:    std::map<std::string, std::vector<Route> >::const_iterator it = m_byMethod.find(req.method);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   67:    if (it != m_byMethod.end()) {
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   68:        for (std::size_t i = 0; i < it->second.size(); ++i) {
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   69:            req.params.clear();                      /* 同一连接复用 req：必须清干净 */
+call    0 never executed
+    #####:   70:            if (matchSegs(it->second[i].segs, pathSegs, req.params)) {
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+    #####:   71:                res = it->second[i].handler(req);
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+    #####:   72:                return true;
+        -:   73:            }
+        -:   74:        }
+        -:   75:    }
+    #####:   76:    if (pathRegistered(req.path)) {                  /* 路径有、方法不对 -> 405 */
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:   77:        res = CHttpResponse::jsonError(405, "method " + req.method + " not allowed for " + req.path, 405);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+    #####:   78:        res.setHeader("Allow", "GET, POST, PUT, DELETE, OPTIONS");
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+call   14 never executed
+call   15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+    #####:   79:        return true;
+        -:   80:    }
+    #####:   81:    return false;
+        -:   82:}
+        -:   83:
+        -:   84:} /* namespace DBKP */

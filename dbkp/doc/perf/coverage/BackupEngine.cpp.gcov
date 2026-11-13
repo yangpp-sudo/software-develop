@@ -1,0 +1,1575 @@
+        -:    0:Source:src/Backup/BackupEngine.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Backup/BackupEngine.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Backup/BackupEngine.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  BackupEngine.cpp  -- 逐文件复制备份 / 还原 / 校验（课程"基本要求"形态）
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Backup/BackupEngine.h"
+        -:    5:
+        -:    6:#include <algorithm>
+        -:    7:#include <cstring>
+        -:    8:#include <map>
+        -:    9:
+        -:   10:#include "Common/Serialize.h"
+        -:   11:#include "Platform/FS.h"
+        -:   12:#include "Utils/CRC64.h"
+        -:   13:#include "Utils/Logger.h"
+        -:   14:#include "Utils/PathUtil.h"
+        -:   15:
+        -:   16:namespace DBKP {
+        -:   17:
+        -:   18:namespace {
+        -:   19:
+        -:   20:const int64_t kCopyChunk = 512 * 1024;
+        -:   21:
+function _ZN4DBKP12_GLOBAL__N_15absOfERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 14 returned 100% blocks executed 77%
+       14:   22:std::string absOf(const std::string& root, const std::string& rel) {
+       14:   23:    if (rel == "." || rel.empty()) return root;
+call    0 returned 14
+branch  1 taken 11 (fallthrough)
+branch  2 taken 3
+call    3 returned 11
+branch  4 taken 0 (fallthrough)
+branch  5 taken 11
+branch  6 taken 3 (fallthrough)
+branch  7 taken 11
+call    8 returned 3
+       11:   24:    return Path::normalize(root + "/" + rel);
+call    0 returned 11
+call    1 returned 11
+branch  2 taken 11 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 11
+branch  5 taken 11 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 11
+call    8 returned 11
+call    9 never executed
+call   10 never executed
+        -:   25:}
+        -:   26:
+function _ZN4DBKP12_GLOBAL__N_110recordFromERKNS_15EnumeratedEntryE called 4 returned 100% blocks executed 86%
+        4:   27:FileRecord recordFrom(const EnumeratedEntry& ent) {
+        4:   28:    FileRecord rec;
+call    0 returned 4
+        4:   29:    const Platform::FileInfo& fi = ent.info;
+        4:   30:    rec.path = ent.relPath;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:   31:    rec.type = fi.type;
+        4:   32:    rec.link = fi.linkTarget;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:   33:    rec.mode = fi.mode;
+        4:   34:    rec.uid = fi.uid;
+        4:   35:    rec.gid = fi.gid;
+        4:   36:    rec.mtimeSec = fi.mtimeSec; rec.mtimeNSec = fi.mtimeNSec;
+        4:   37:    rec.atimeSec = fi.atimeSec; rec.atimeNSec = fi.atimeNSec;
+        4:   38:    rec.ctimeSec = fi.ctimeSec;
+        4:   39:    rec.ino = fi.ino; rec.nlink = fi.nlink; rec.dev = fi.dev;
+        4:   40:    rec.majorNum = fi.majorNum; rec.minorNum = fi.minorNum;
+        4:   41:    rec.size = fi.size;
+        4:   42:    rec.flags = static_cast<uint8_t>(RF_META_MODE | RF_META_TIME | RF_CRC_VALID);
+        4:   43:    return rec;
+        -:   44:}
+        -:   45:
+        -:   46:/** 流式复制一个普通文件（分块，不整体载入内存），返回其 CRC64 */
+function _ZN4DBKP12_GLOBAL__N_110streamCopyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_Ry called 2 returned 100% blocks executed 63%
+        2:   47:ErrCode streamCopy(const std::string& src, const std::string& dst, uint64_t& crcOut) {
+        4:   48:    CSimpleFile in;
+call    0 returned 2
+call    1 returned 2
+call    2 never executed
+        2:   49:    ErrCode e = in.open(src, CSimpleFile::MODE_READ);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+       2*:   50:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+        4:   51:    CSimpleFile out;
+call    0 returned 2
+call    1 returned 2
+call    2 never executed
+        2:   52:    e = out.open(dst, CSimpleFile::MODE_WRITE_NEW);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+       2*:   53:    if (DBKP_IS_ERR(e)) { in.close(); return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:   54:
+        4:   55:    std::vector<uint8_t> buf;
+call    0 returned 2
+call    1 returned 2
+call    2 never executed
+        2:   56:    buf.resize(static_cast<size_t>(kCopyChunk));
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:   57:    CRC64 crc;
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   58:    for (;;) {
+        4:   59:        int64_t n = Platform::readNative(in.fd(), buf.data(), kCopyChunk);
+call    0 returned 4
+call    1 returned 4
+call    2 returned 4
+branch  3 taken 4 (fallthrough)
+branch  4 taken 0 (throw)
+        4:   60:        if (n < 0) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+    #####:   61:            if (errno == EINTR) continue;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:   62:            out.close(); in.close();
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:   63:            return E_FILE_READ_FAIL;
+        -:   64:        }
+        4:   65:        if (n == 0) break;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 2
+        2:   66:        e = out.writeN(buf.data(), n);
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+       2*:   67:        if (DBKP_IS_ERR(e)) { out.close(); in.close(); return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+        2:   68:        crc.update(buf.data(), static_cast<size_t>(n));
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+        2:   69:    }
+        2:   70:    ErrCode fe = out.flush();
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:   71:    ErrCode ce = out.close();
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:   72:    in.close();
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:   73:    crcOut = crc.value();
+call    0 returned 2
+       2*:   74:    if (DBKP_IS_ERR(fe)) return fe;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+        2:   75:    return ce;
+        -:   76:}
+        -:   77:
+        -:   78:/* F2：把路径解析成"可比较"的形态 —— 优先真实路径（穿过符号链接/junction、
+        -:   79:   折叠 ..、大小写由调用方用 iequals 处理），解析失败（目标尚不存在等）时
+        -:   80:   退化为纯词法归一化。 */
+function _ZN4DBKP12_GLOBAL__N_114comparablePathERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 16 returned 100% blocks executed 69%
+       16:   81:std::string comparablePath(const std::string& p) {
+       32:   82:    std::string canon;
+call    0 returned 16
+call    1 returned 16
+call    2 never executed
+      16*:   83:    if (DBKP_IS_ERR(Platform::canonicalPath(p, canon))) canon = p;
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 16
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+       32:   84:    return Path::normalize(canon);
+call    0 returned 16
+branch  1 taken 16 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   85:}
+        -:   86:
+        -:   87:/* F2：copy 模式下源与目标重叠会自毁数据（streamCopy 以 CREATE|TRUNC 打开
+        -:   88:   目标，目标==源时先把源清成 0 字节，随后 verify 拿同一文件比自身恒等，
+        -:   89:   于是"备份成功"）。归档模式不受影响：目标只是一个新文件，且 F9 已把它
+        -:   90:   排除出扫描。返回 E_OK 表示允许继续。 */
+function _ZN4DBKP12_GLOBAL__N_122checkSourceDestOverlapERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_NS_10BackupModeERS6_ called 8 returned 100% blocks executed 64%
+        8:   91:ErrCode checkSourceDestOverlap(const std::string& source, const std::string& destination,
+        -:   92:                               BackupMode mode, std::string& why) {
+       16:   93:    const std::string src = comparablePath(source);
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 8
+call    4 never executed
+       16:   94:    const std::string dst = comparablePath(destination);
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 8
+call    4 never executed
+        8:   95:    if (Path::iequals(src, dst)) {
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 2 (fallthrough)
+branch  4 taken 6
+        2:   96:        why = "source and destination are the same path (" + src + ")";
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+call    7 returned 2
+call    8 returned 2
+call    9 never executed
+        2:   97:        return E_INVALID_PARAMETER;
+        -:   98:    }
+        6:   99:    if (mode == MODE_COPY) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 4
+        -:  100:        /* F6：包含判定与 watch 入口共用 Path::isSubPath。相等已在上面判过，
+        -:  101:           走到这里若为真就是"严格嵌在里面"。 */
+        2:  102:        if (Path::isSubPath(src, dst)) {
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 1
+        2:  103:            why = "destination is inside source (" + dst + " under " + src +
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+call   13 returned 1
+call   14 returned 1
+call   15 returned 1
+call   16 never executed
+call   17 never executed
+call   18 never executed
+        1:  104:                  ") in copy mode; copying onto yourself destroys the source";
+call    0 returned 1
+        1:  105:            return E_INVALID_PARAMETER;
+        -:  106:        }
+        -:  107:    }
+        5:  108:    return E_OK;
+        -:  109:}
+        -:  110:
+        -:  111:} /* anonymous namespace */
+        -:  112:
+function _ZN4DBKP13CBackupEngine11resolveModeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_10BackupModeE called 8 returned 100% blocks executed 77%
+        8:  113:BackupMode CBackupEngine::resolveMode(const std::string& destination, BackupMode requested) {
+        8:  114:    if (requested != MODE_AUTO) return requested;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 4
+        8:  115:    const std::string d = Path::toArchive(destination);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 never executed
+        8:  116:    const std::string suffix = DEFAULT_ARCHIVE_SUFFIX;
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 4
+call    5 never executed
+        8:  117:    if (d.size() >= suffix.size() &&
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0
+branch  4 taken 1 (fallthrough)
+branch  5 taken 3
+        4:  118:        d.compare(d.size() - suffix.size(), suffix.size(), suffix) == 0) {
+call    0 returned 4
+call    1 returned 4
+call    2 returned 4
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 1 (fallthrough)
+branch  7 taken 3
+        1:  119:        return MODE_ARCHIVE;
+        -:  120:    }
+        3:  121:    return MODE_COPY;
+        -:  122:}
+        -:  123:
+function _ZN4DBKP13CBackupEngine3runERNS_13BackupOptionsE called 8 returned 100% blocks executed 53%
+        8:  124:ErrCode CBackupEngine::run(BackupOptions& opt) {
+        8:  125:    m_error.clear();
+call    0 returned 8
+       8*:  126:    if (opt.source.empty() || opt.destination.empty()) {
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0
+call    3 returned 8
+branch  4 taken 0 (fallthrough)
+branch  5 taken 8
+branch  6 taken 0 (fallthrough)
+branch  7 taken 8
+    #####:  127:        m_error = "source and destination are required";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  128:        return E_INVALID_PARAMETER;
+        -:  129:    }
+        8:  130:    const BackupMode mode = resolveMode(opt.destination, opt.mode);
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+        8:  131:    LOG_INFO("backup mode = " + std::string(backupModeName(mode)));
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 8
+call    4 returned 8
+call    5 returned 8
+branch  6 taken 8 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 8
+branch  9 taken 8 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 8
+branch 12 taken 8 (fallthrough)
+branch 13 taken 0 (throw)
+call   14 returned 8
+call   15 returned 8
+call   16 returned 8
+call   17 never executed
+call   18 never executed
+call   19 never executed
+        -:  132:
+        -:  133:    {
+        8:  134:        std::string why;
+call    0 returned 8
+call    1 never executed
+        8:  135:        ErrCode oe = checkSourceDestOverlap(opt.source, opt.destination, mode, why);
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+        8:  136:        if (DBKP_IS_ERR(oe)) { m_error = why; LOG_ERR("backup refused: " + why); return oe; }
+branch  0 taken 3 (fallthrough)
+branch  1 taken 5
+call    2 returned 3
+branch  3 taken 3 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 3
+branch  6 taken 3 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 3
+branch  9 taken 3 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 3
+branch 12 taken 3 (fallthrough)
+branch 13 taken 0 (throw)
+call   14 returned 3
+call   15 never executed
+        -:  137:    }
+        -:  138:
+        5:  139:    if (mode == MODE_ARCHIVE) {
+branch  0 taken 4
+branch  1 taken 1
+        8:  140:        PackOptions p = opt.pack;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+call    4 never executed
+        4:  141:        p.password = opt.password;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  142:        p.progress = opt.progress;
+       4*:  143:        if (p.filter.isEmpty() && !opt.filter.isEmpty()) p.filter = opt.filter;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 4 (fallthrough)
+branch  4 taken 0
+call    5 returned 4
+branch  6 taken 4 (fallthrough)
+branch  7 taken 0 (throw)
+branch  8 taken 0 (fallthrough)
+branch  9 taken 4
+branch 10 taken 0 (fallthrough)
+branch 11 taken 4
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+        8:  144:        CMyPack packer;
+call    0 returned 4
+call    1 returned 4
+call    2 never executed
+        4:  145:        ErrCode e = packer.pack(opt.source, opt.destination, p);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+       4*:  146:        if (DBKP_IS_ERR(e)) { m_error = packer.lastErrorText(); return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+        4:  147:        if (opt.verifyAfter) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+    #####:  148:            int bad = 0;
+    #####:  149:            ErrCode ve = packer.verify(opt.destination, opt.password, bad);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  150:            if (DBKP_IS_ERR(ve)) { m_error = "post-backup verification failed"; return ve; }
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  151:            LOG_INFO("post-backup verify: archive is consistent");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+call   12 never executed
+call   13 never executed
+        -:  152:        }
+        4:  153:        return E_OK;
+        -:  154:    }
+        -:  155:
+       2*:  156:    FilterOptions f = opt.pack.filter.isEmpty() ? opt.filter : opt.pack.filter;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+call    9 never executed
+        1:  157:    ErrCode e = copyBackup(opt.source, opt.destination, f, opt.preserveMeta, opt.warnings,
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  158:                           opt.progress);
+       1*:  159:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+        1:  160:    if (opt.verifyAfter) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+        1:  161:        int diff = 0;
+        1:  162:        ErrCode ve = verifyCopy(opt.source, opt.destination, f, diff);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+       1*:  163:        if (DBKP_IS_ERR(ve)) return ve;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+       1*:  164:        if (diff != 0) { m_error = "post-copy verification found differences"; return E_CHECKSUM_MISMATCH; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        1:  165:        LOG_INFO("post-backup verify: all copies match source CRC");
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 1
+branch  8 taken 1 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 1
+call   11 returned 1
+call   12 never executed
+call   13 never executed
+        -:  166:    }
+        1:  167:    return E_OK;
+        -:  168:}
+        -:  169:
+        -:  170:/* ------------------------------------------------------------ 复制备份 */
+function _ZN4DBKP13CBackupEngine10copyBackupERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RKNS_13FilterOptionsEbRiPNS_13IProgressSinkE called 1 returned 100% blocks executed 29%
+        1:  171:ErrCode CBackupEngine::copyBackup(const std::string& source, const std::string& dest,
+        -:  172:                                  const FilterOptions& filter, bool preserveMeta, int& warnings,
+        -:  173:                                  IProgressSink* progress) {
+        1:  174:    m_error.clear();
+call    0 returned 1
+        1:  175:    warnings = 0;
+        2:  176:    CFileEnumerator enumerator;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        2:  177:    std::vector<EnumeratedEntry> entries;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        1:  178:    ErrCode e = enumerator.enumerateFiles(source, filter, entries);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+       1*:  179:    if (DBKP_IS_ERR(e)) { m_error = "enumerate failed"; return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  180:
+        1:  181:    uint64_t planBytes = 0;
+        5:  182:    for (size_t i = 0; i < entries.size(); ++i)
+call    0 returned 5
+branch  1 taken 4 (fallthrough)
+branch  2 taken 1
+        4:  183:        if (entries[i].info.type == FT_REGULAR && entries[i].info.size > 0)
+call    0 returned 4
+branch  1 taken 2 (fallthrough)
+branch  2 taken 2
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0
+branch  6 taken 2 (fallthrough)
+branch  7 taken 2
+        2:  184:            planBytes += static_cast<uint64_t>(entries[i].info.size);
+call    0 returned 2
+       1*:  185:    if (progress) progress->onStart(static_cast<int64_t>(entries.size()), planBytes);
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+        -:  186:
+        1:  187:    if (DBKP_IS_ERR(Platform::exists(dest))) {
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+        1:  188:        e = Platform::makeDirTree(dest);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+       1*:  189:        if (DBKP_IS_ERR(e)) { m_error = "cannot create destination: " + dest; return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+    #####:  190:    } else if (!Platform::isDirectory(dest)) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  191:        m_error = "destination is not a directory: " + dest;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  192:        return E_INVALID_PARAMETER;
+        -:  193:    }
+        -:  194:
+        2:  195:    std::map<std::pair<uint32_t, uint64_t>, std::string> inodeMap;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        2:  196:    std::vector<FileRecord> pendingDirs;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        1:  197:    int64_t copied = 0, dirsMade = 0, links = 0, special = 0;
+        -:  198:
+        1:  199:    uint64_t cdone = 0;
+        5:  200:    for (size_t i = 0; i < entries.size(); ++i) {
+call    0 returned 5
+branch  1 taken 4 (fallthrough)
+branch  2 taken 1
+        4:  201:        if (progress) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+    #####:  202:            if (i > 0 && entries[i - 1].info.type == FT_REGULAR && entries[i - 1].info.size > 0)
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+    #####:  203:                cdone += static_cast<uint64_t>(entries[i - 1].info.size);
+call    0 never executed
+    #####:  204:            progress->onProgress(static_cast<int64_t>(i), cdone);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  205:            if (progress->canceled()) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  206:                m_error = "copy backup canceled (partial copies kept)";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  207:                LOG_WARN(m_error);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  208:                return E_CANCELED;
+        -:  209:            }
+        -:  210:        }
+        4:  211:        const EnumeratedEntry& ent = entries[i];
+call    0 returned 4
+        4:  212:        FileRecord rec = recordFrom(ent);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        4:  213:        const std::string srcAbs = absOf(source, rec.path);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        4:  214:        const std::string dstAbs = absOf(dest, rec.path);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        4:  215:        const std::string parent = Path::parentDir(dstAbs);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+        -:  216:
+        4:  217:        if (rec.type == FT_DIR) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 2
+        2:  218:            e = Platform::makeDirTree(dstAbs);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+       2*:  219:            if (DBKP_IS_ERR(e) && e != E_ALREADY_EXISTS) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+branch  2 never executed
+branch  3 never executed
+    #####:  220:                LOG_WARN("cannot create directory: " + dstAbs);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  221:                ++warnings;
+    #####:  222:                continue;
+        -:  223:            }
+        2:  224:            pendingDirs.push_back(rec);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:  225:            ++dirsMade;
+        2:  226:            continue;
+        -:  227:        }
+        -:  228:
+        2:  229:        if (rec.type == FT_REGULAR) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+        2:  230:            bool madeLink = false;
+       2*:  231:            if (rec.nlink > 1 && rec.ino != 0 && Platform::supportsHardlink()) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 taken 0 (fallthrough)
+branch 10 taken 2
+    #####:  232:                const std::pair<uint32_t, uint64_t> key(rec.dev, rec.ino);
+call    0 never executed
+        -:  233:                std::map<std::pair<uint32_t, uint64_t>, std::string>::const_iterator it =
+    #####:  234:                    inodeMap.find(key);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  235:                if (it != inodeMap.end()) {
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  236:                    ErrCode le = Platform::makeHardLink(absOf(dest, it->second), dstAbs);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+    #####:  237:                    if (DBKP_IS_ERR(le)) {
+branch  0 never executed
+branch  1 never executed
+    #####:  238:                        LOG_WARN("hard link failed, copy instead: " + rec.path);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  239:                        ++warnings;
+        -:  240:                    } else {
+    #####:  241:                        madeLink = true;
+    #####:  242:                        ++links;
+        -:  243:                    }
+        -:  244:                }
+    #####:  245:                if (!madeLink) inodeMap[key] = rec.path;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+        -:  246:            }
+        2:  247:            if (!madeLink) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+        2:  248:                e = copyOneFile(srcAbs, dstAbs, rec, preserveMeta, warnings);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:  249:                if (DBKP_IS_ERR(e)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+    #####:  250:                    m_error = "copy failed: " + rec.path + " (" + errCodeToString(e) + ")";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+branch 10 never executed
+branch 11 never executed
+call   12 never executed
+branch 13 never executed
+branch 14 never executed
+call   15 never executed
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+    #####:  251:                    LOG_ERR(m_error);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  252:                    if (e == E_PERMISSION_DENIED) continue;
+branch  0 never executed
+branch  1 never executed
+    #####:  253:                    return e;
+        -:  254:                }
+        2:  255:                ++copied;
+    #####:  256:            } else if (preserveMeta) {
+branch  0 never executed
+branch  1 never executed
+    #####:  257:                Platform::setTimes(dstAbs, rec.mtimeSec, rec.mtimeNSec,
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  258:                                   rec.atimeSec, rec.atimeNSec, true);
+        -:  259:            }
+        2:  260:            continue;
+        -:  261:        }
+        -:  262:
+    #####:  263:        if (rec.type == FT_SYMLINK) {
+branch  0 never executed
+branch  1 never executed
+    #####:  264:            if (!Platform::supportsSymlink()) { ++special; continue; }
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+branch  4 never executed
+    #####:  265:            if (!parent.empty()) Platform::makeDirTree(parent);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  266:            e = Platform::makeSymlink(rec.link, dstAbs);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  267:            if (DBKP_IS_ERR(e)) {
+branch  0 never executed
+branch  1 never executed
+    #####:  268:                LOG_WARN(std::string("symlink not recreated (") + errCodeToString(e) +
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+branch 17 never executed
+branch 18 never executed
+call   19 never executed
+branch 20 never executed
+branch 21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+call   31 never executed
+        -:  269:                         "): " + rec.path);
+    #####:  270:                ++warnings;
+        -:  271:            } else {
+    #####:  272:                ++links;
+    #####:  273:                if (preserveMeta) {
+branch  0 never executed
+branch  1 never executed
+    #####:  274:                    Platform::setTimes(dstAbs, rec.mtimeSec, rec.mtimeNSec,
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  275:                                       rec.atimeSec, rec.atimeNSec, false);
+        -:  276:                }
+        -:  277:            }
+    #####:  278:            continue;
+        -:  279:        }
+        -:  280:
+    #####:  281:        if (!parent.empty()) Platform::makeDirTree(parent);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  282:        if (rec.type == FT_FIFO) {
+branch  0 never executed
+branch  1 never executed
+    #####:  283:            e = Platform::makeFifo(dstAbs, rec.mode);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  284:        } else if (rec.type == FT_BLOCK || rec.type == FT_CHAR) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  285:            e = Platform::makeDeviceNode(dstAbs, rec.type, rec.majorNum, rec.minorNum, rec.mode);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  286:        } else if (rec.type == FT_SOCKET) {
+branch  0 never executed
+branch  1 never executed
+    #####:  287:            e = Platform::makeSocketPlaceholder(dstAbs);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  288:            LOG_WARN("socket recorded as placeholder: " + rec.path);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+        -:  289:        } else {
+    #####:  290:            e = E_UNSUPPORTED_FEATURE;
+        -:  291:        }
+    #####:  292:        if (DBKP_IS_ERR(e)) {
+branch  0 never executed
+branch  1 never executed
+    #####:  293:            LOG_WARN(std::string("special file skipped (") + errCodeToString(e) +
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+branch 17 never executed
+branch 18 never executed
+call   19 never executed
+branch 20 never executed
+branch 21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+call   31 never executed
+        -:  294:                     "): " + rec.path);
+    #####:  295:            ++warnings;
+        -:  296:        } else {
+    #####:  297:            ++special;
+        -:  298:        }
+        -:  299:    }
+        -:  300:
+        -:  301:    /* 目录时间/权限最后逆序恢复（修复讲义已知缺陷） */
+        1:  302:    if (preserveMeta) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+        3:  303:        for (size_t i = pendingDirs.size(); i-- > 0;) {
+call    0 returned 1
+branch  1 taken 2 (fallthrough)
+branch  2 taken 1
+        2:  304:            const FileRecord& rec = pendingDirs[i];
+call    0 returned 2
+        4:  305:            const std::string dstAbs = absOf(dest, rec.path);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+call    4 never executed
+        2:  306:            Platform::setTimes(dstAbs, rec.mtimeSec, rec.mtimeNSec,
+        2:  307:                               rec.atimeSec, rec.atimeNSec, true);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:  308:            Platform::setMode(dstAbs, rec.mode);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+       2*:  309:            if (Platform::supportsOwner()) Platform::setOwner(dstAbs, rec.uid, rec.gid);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 2
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+        -:  310:        }
+        -:  311:    }
+        -:  312:
+        1:  313:    LOG_INFO("copy backup done: " + std::to_string(copied) + " files, " +
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+branch 13 taken 1 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 1
+branch 16 taken 1 (fallthrough)
+branch 17 taken 0 (throw)
+call   18 returned 1
+branch 19 taken 1 (fallthrough)
+branch 20 taken 0 (throw)
+call   21 returned 1
+branch 22 taken 1 (fallthrough)
+branch 23 taken 0 (throw)
+call   24 returned 1
+branch 25 taken 1 (fallthrough)
+branch 26 taken 0 (throw)
+call   27 returned 1
+branch 28 taken 1 (fallthrough)
+branch 29 taken 0 (throw)
+call   30 returned 1
+branch 31 taken 1 (fallthrough)
+branch 32 taken 0 (throw)
+call   33 returned 1
+branch 34 taken 1 (fallthrough)
+branch 35 taken 0 (throw)
+call   36 returned 1
+branch 37 taken 1 (fallthrough)
+branch 38 taken 0 (throw)
+call   39 returned 1
+branch 40 taken 1 (fallthrough)
+branch 41 taken 0 (throw)
+call   42 returned 1
+branch 43 taken 1 (fallthrough)
+branch 44 taken 0 (throw)
+call   45 returned 1
+call   46 returned 1
+call   47 returned 1
+call   48 returned 1
+call   49 returned 1
+call   50 returned 1
+call   51 returned 1
+call   52 returned 1
+call   53 returned 1
+call   54 returned 1
+call   55 returned 1
+call   56 returned 1
+call   57 returned 1
+call   58 never executed
+call   59 never executed
+call   60 never executed
+call   61 never executed
+call   62 never executed
+call   63 never executed
+call   64 never executed
+call   65 never executed
+call   66 never executed
+call   67 never executed
+call   68 never executed
+call   69 never executed
+call   70 never executed
+        -:  314:             std::to_string(dirsMade) + " dirs, " + std::to_string(links) + " links, " +
+        -:  315:             std::to_string(special) + " special -> " + dest);
+        1:  316:    return E_OK;
+        -:  317:}
+        -:  318:
+        -:  319:/* ------------------------------------------------------------ 单个文件 */
+function _ZN4DBKP13CBackupEngine11copyOneFileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RKNS_10FileRecordEbRi called 2 returned 100% blocks executed 77%
+        2:  320:ErrCode CBackupEngine::copyOneFile(const std::string& srcAbs, const std::string& dstAbs,
+        -:  321:                                   const FileRecord& rec, bool preserveMeta, int& warnings) {
+        4:  322:    const std::string parent = Path::parentDir(dstAbs);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+call    4 never executed
+        2:  323:    if (!parent.empty()) Platform::makeDirTree(parent);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+        2:  324:    uint64_t crc = 0;
+        2:  325:    ErrCode e = streamCopy(srcAbs, dstAbs, crc);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+       2*:  326:    if (DBKP_IS_ERR(e)) { ++warnings; return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+        2:  327:    if (preserveMeta) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+        2:  328:        Platform::setTimes(dstAbs, rec.mtimeSec, rec.mtimeNSec,
+        2:  329:                           rec.atimeSec, rec.atimeNSec, true);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+        2:  330:        Platform::setMode(dstAbs, rec.mode);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+       2*:  331:        if (Platform::supportsOwner()) Platform::setOwner(dstAbs, rec.uid, rec.gid);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 2
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+        -:  332:    }
+        2:  333:    return E_OK;
+        -:  334:}
+        -:  335:
+        -:  336:/* ------------------------------------------------------------ 从复制目录还原 */
+function _ZN4DBKP13CBackupEngine11copyRestoreERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_bRiPNS_13IProgressSinkE called 0 returned 0% blocks executed 0%
+    #####:  337:ErrCode CBackupEngine::copyRestore(const std::string& backupDir, const std::string& dest,
+        -:  338:                                   bool preserveMeta, int& warnings, IProgressSink* progress) {
+    #####:  339:    FilterOptions all;                       /* 备份目录本身已是筛选后的结果 */
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  340:    all.includeDirs = true;
+    #####:  341:    return copyBackup(backupDir, dest, all, preserveMeta, warnings, progress);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  342:}
+        -:  343:
+        -:  344:/* ------------------------------------------------------------ 复制结果校验 */
+        -:  345:namespace {
+        -:  346:
+function _ZN4DBKP12_GLOBAL__N_17fileCrcERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERy called 4 returned 100% blocks executed 77%
+        4:  347:ErrCode fileCrc(const std::string& path, uint64_t& crcOut) {
+        8:  348:    CSimpleFile f;
+call    0 returned 4
+call    1 returned 4
+call    2 never executed
+        4:  349:    ErrCode e = f.open(path, CSimpleFile::MODE_READ);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+       4*:  350:    if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+        8:  351:    std::vector<uint8_t> buf;
+call    0 returned 4
+call    1 returned 4
+call    2 never executed
+        4:  352:    buf.resize(static_cast<size_t>(kCopyChunk));
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  353:    CRC64 crc;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  354:    for (;;) {
+        8:  355:        int64_t n = Platform::readNative(f.fd(), buf.data(), kCopyChunk);
+call    0 returned 8
+call    1 returned 8
+call    2 returned 8
+branch  3 taken 8 (fallthrough)
+branch  4 taken 0 (throw)
+       8*:  356:        if (n < 0) { f.close(); return E_FILE_READ_FAIL; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 8
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        8:  357:        if (n == 0) break;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 4
+        4:  358:        crc.update(buf.data(), static_cast<size_t>(n));
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0 (throw)
+        4:  359:    }
+        4:  360:    f.close();
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  361:    crcOut = crc.value();
+call    0 returned 4
+        4:  362:    return E_OK;
+        -:  363:}
+        -:  364:
+        -:  365:} /* anonymous namespace */
+        -:  366:
+function _ZN4DBKP13CBackupEngine10verifyCopyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RKNS_13FilterOptionsERi called 1 returned 100% blocks executed 47%
+        1:  367:ErrCode CBackupEngine::verifyCopy(const std::string& source, const std::string& dest,
+        -:  368:                                  const FilterOptions& filter, int& diffCount) {
+        1:  369:    diffCount = 0;
+        2:  370:    CFileEnumerator enumerator;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        2:  371:    std::vector<EnumeratedEntry> entries;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        1:  372:    ErrCode e = enumerator.enumerateFiles(source, filter, entries);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+       1*:  373:    if (DBKP_IS_ERR(e)) { m_error = "enumerate source failed"; return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  374:
+        2:  375:    std::vector<EnumeratedEntry> mirrored;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        2:  376:    FilterOptions all;
+call    0 returned 1
+call    1 returned 1
+call    2 never executed
+        1:  377:    e = enumerator.enumerateFiles(dest, all, mirrored);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+       1*:  378:    if (DBKP_IS_ERR(e)) { m_error = "enumerate destination failed"; return e; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        -:  379:
+        2:  380:    std::map<std::string, const EnumeratedEntry*> srcMap, dstMap;
+call    0 returned 1
+call    1 returned 1
+call    2 returned 1
+call    3 never executed
+call    4 never executed
+        5:  381:    for (size_t i = 0; i < entries.size(); ++i) srcMap[entries[i].relPath] = &entries[i];
+call    0 returned 5
+branch  1 taken 4 (fallthrough)
+branch  2 taken 1
+call    3 returned 4
+call    4 returned 4
+call    5 returned 4
+branch  6 taken 4 (fallthrough)
+branch  7 taken 0 (throw)
+        5:  382:    for (size_t i = 0; i < mirrored.size(); ++i) dstMap[mirrored[i].relPath] = &mirrored[i];
+call    0 returned 5
+branch  1 taken 4 (fallthrough)
+branch  2 taken 1
+call    3 returned 4
+call    4 returned 4
+call    5 returned 4
+branch  6 taken 4 (fallthrough)
+branch  7 taken 0 (throw)
+        -:  383:
+        5:  384:    for (auto it = srcMap.begin(); it != srcMap.end(); ++it) {
+call    0 returned 1
+call    1 returned 5
+call    2 returned 5
+branch  3 taken 4 (fallthrough)
+branch  4 taken 1
+call    5 returned 4
+        4:  385:        const EnumeratedEntry& s = *it->second;
+call    0 returned 4
+        4:  386:        std::map<std::string, const EnumeratedEntry*>::const_iterator d = dstMap.find(s.relPath);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+       4*:  387:        if (d == dstMap.end()) {
+call    0 returned 4
+call    1 returned 4
+call    2 returned 4
+branch  3 taken 0 (fallthrough)
+branch  4 taken 4
+        -:  388:            /* 目录可能被过滤掉了（例如只复制文件），只在类型应当存在时报错 */
+    #####:  389:            if (s.info.type == FT_REGULAR && s.info.size > 0) {
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  390:                LOG_WARN("verify: missing in backup: " + s.relPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  391:                ++diffCount;
+        -:  392:            }
+    #####:  393:            continue;
+        -:  394:        }
+        4:  395:        const EnumeratedEntry& t = *d->second;
+call    0 returned 4
+       4*:  396:        if (s.info.type != t.info.type) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+    #####:  397:            LOG_WARN("verify: type differs: " + s.relPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  398:            ++diffCount;
+    #####:  399:            continue;
+        -:  400:        }
+        4:  401:        if (s.info.type == FT_REGULAR) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 2
+       2*:  402:            if (s.info.size != t.info.size) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+    #####:  403:                LOG_WARN("verify: size differs: " + s.relPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  404:                ++diffCount;
+    #####:  405:                continue;
+        -:  406:            }
+        2:  407:            uint64_t a = 0, b = 0;
+        2:  408:            ErrCode e1 = fileCrc(absOf(source, s.relPath), a);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+call    7 never executed
+        2:  409:            ErrCode e2 = fileCrc(absOf(dest, t.relPath), b);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+branch  4 taken 2 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 2
+call    7 never executed
+        2:  410:            if (DBKP_IS_ERR(e1) || DBKP_IS_ERR(e2) || a != b) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0
+branch  4 taken 0 (fallthrough)
+branch  5 taken 2
+    #####:  411:                LOG_WARN("verify: content differs: " + s.relPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  412:                ++diffCount;
+        -:  413:            }
+       2*:  414:        } else if (s.info.type == FT_SYMLINK && s.info.linkTarget != t.info.linkTarget) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 taken 0 (fallthrough)
+branch  6 taken 2
+    #####:  415:            LOG_WARN("verify: symlink target differs: " + s.relPath);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 never executed
+call   10 never executed
+    #####:  416:            ++diffCount;
+        -:  417:        }
+        -:  418:    }
+        5:  419:    for (auto it = dstMap.begin(); it != dstMap.end(); ++it) {
+call    0 returned 1
+call    1 returned 5
+call    2 returned 5
+branch  3 taken 4 (fallthrough)
+branch  4 taken 1
+call    5 returned 4
+        4:  420:        if (srcMap.find(it->first) == srcMap.end()) {
+call    0 returned 4
+call    1 returned 4
+call    2 returned 4
+branch  3 taken 4 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 4
+branch  6 taken 0 (fallthrough)
+branch  7 taken 4
+    #####:  421:            LOG_WARN("verify: unexpected extra entry: " + it->first);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+    #####:  422:            ++diffCount;
+        -:  423:        }
+        -:  424:    }
+        1:  425:    LOG_INFO("verify copy: " + std::to_string(diffCount) + " difference(s)");
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+branch  7 taken 1 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 1
+branch 10 taken 1 (fallthrough)
+branch 11 taken 0 (throw)
+call   12 returned 1
+branch 13 taken 1 (fallthrough)
+branch 14 taken 0 (throw)
+call   15 returned 1
+call   16 returned 1
+call   17 returned 1
+call   18 never executed
+call   19 never executed
+call   20 never executed
+        1:  426:    return E_OK;
+call    0 returned 1
+        -:  427:}
+        -:  428:
+function _ZN4DBKP13CBackupEngine13verifyArchiveERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_RNS_11ArchiveStatERy called 0 returned 0% blocks executed 0%
+    #####:  429:ErrCode CBackupEngine::verifyArchive(const std::string& archive, const std::string& password,
+        -:  430:                                     ArchiveStat& stat, uint64_t& crc) {
+    #####:  431:    CMyPack packer;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  432:    ArchiveHeader hdr;
+call    0 never executed
+call    1 never executed
+call    2 never executed
+    #####:  433:    ErrCode e = packer.stat(archive, hdr, stat);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  434:    if (DBKP_IS_ERR(e)) { m_error = packer.lastErrorText(); return e; }
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  435:    crc = hdr.payloadCrc;
+    #####:  436:    int bad = 0;
+    #####:  437:    e = packer.verify(archive, password, bad);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  438:    if (DBKP_IS_ERR(e)) m_error = packer.lastErrorText();
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  439:    return e;
+        -:  440:}
+        -:  441:
+        -:  442:} /* namespace DBKP */
+        -:  443:
+        -:  444:

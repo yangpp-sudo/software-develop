@@ -1,0 +1,1226 @@
+        -:    0:Source:src/Utils/PathUtil.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/PathUtil.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/PathUtil.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  PathUtil.cpp
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Utils/PathUtil.h"
+        -:    5:
+        -:    6:#include "Platform/FS.h"
+        -:    7:
+        -:    8:#include <algorithm>
+        -:    9:#include <cctype>
+        -:   10:#include <cstring>
+        -:   11:#include <sstream>
+        -:   12:
+        -:   13:#if defined(DBKP_OS_WINDOWS)
+        -:   14:#ifndef WIN32_LEAN_AND_MEAN
+        -:   15:#define WIN32_LEAN_AND_MEAN
+        -:   16:#endif
+        -:   17:#include <windows.h>
+        -:   18:#endif
+        -:   19:
+        -:   20:namespace DBKP {
+        -:   21:namespace Path {
+        -:   22:
+function _ZN4DBKP4Path4joinERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 1737 returned 100% blocks executed 85%
+     1737:   23:std::string join(const std::string& a, const std::string& b) {
+     1737:   24:    if (a.empty()) return b;
+call    0 returned 1737
+branch  1 taken 1 (fallthrough)
+branch  2 taken 1736
+call    3 returned 1
+    1736*:   25:    if (b.empty()) return a;
+call    0 returned 1736
+branch  1 taken 0 (fallthrough)
+branch  2 taken 1736
+call    3 never executed
+     1736:   26:    char last = a[a.size() - 1];
+call    0 returned 1736
+call    1 returned 1736
+     1736:   27:    if (last == '/' || last == '\\') return a + b;
+branch  0 taken 1735 (fallthrough)
+branch  1 taken 1
+branch  2 taken 0 (fallthrough)
+branch  3 taken 1735
+call    4 returned 1
+     1735:   28:    return a + kArchiveSep + b;
+call    0 returned 1735
+call    1 returned 1735
+branch  2 taken 1735 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 1735
+call    5 never executed
+        -:   29:}
+        -:   30:
+function _ZN4DBKP4Path10isAbsoluteERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 2994 returned 100% blocks executed 95%
+     2994:   31:bool isAbsolute(const std::string& p) {
+    2994*:   32:    if (p.empty()) return false;
+call    0 returned 2994
+branch  1 taken 0 (fallthrough)
+branch  2 taken 2994
+     2994:   33:    if (p[0] == '/' || p[0] == '\\') return true;
+call    0 returned 2994
+branch  1 taken 2980 (fallthrough)
+branch  2 taken 14
+call    3 returned 2980
+branch  4 taken 2 (fallthrough)
+branch  5 taken 2978
+branch  6 taken 16 (fallthrough)
+branch  7 taken 2978
+     2978:   34:    return p.size() >= 2 && std::isalpha(static_cast<unsigned char>(p[0])) && p[1] == ':';
+call    0 returned 2978
+branch  1 taken 2967 (fallthrough)
+branch  2 taken 11
+call    3 returned 2967
+branch  4 taken 2851 (fallthrough)
+branch  5 taken 116
+call    6 returned 2851
+branch  7 taken 1747 (fallthrough)
+branch  8 taken 1104
+        -:   35:}
+        -:   36:
+function _ZN4DBKP4Path9normalizeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 2734 returned 100% blocks executed 74%
+     2734:   37:std::string normalize(const std::string& raw) {
+     2734:   38:    if (raw.empty()) return raw;      /* 空输入 -> 空输出（调用方另有约定） */
+call    0 returned 2734
+branch  1 taken 1 (fallthrough)
+branch  2 taken 2733
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+     5466:   39:    std::vector<std::string> parts;
+call    0 returned 2733
+call    1 returned 2733
+call    2 never executed
+     5466:   40:    std::string cur;
+call    0 returned 2733
+call    1 returned 2733
+call    2 never executed
+     2733:   41:    bool absolute = isAbsolute(raw);
+call    0 returned 2733
+     2733:   42:    bool drivePrefix = absolute && raw.size() >= 2 && raw[1] == ':';
+branch  0 taken 1750 (fallthrough)
+branch  1 taken 983
+call    2 returned 1750
+branch  3 taken 1750 (fallthrough)
+branch  4 taken 0
+call    5 returned 1750
+branch  6 taken 1740 (fallthrough)
+branch  7 taken 10
+     2733:   43:    if (drivePrefix) {
+branch  0 taken 1740 (fallthrough)
+branch  1 taken 993
+     1740:   44:        parts.push_back(raw.substr(0, 2));
+call    0 returned 1740
+branch  1 taken 1740 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1740
+branch  4 taken 1740 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1740
+call    7 never executed
+     1740:   45:        cur.clear();
+call    0 returned 1740
+        -:   46:    }
+   134409:   47:    for (size_t i = drivePrefix ? 2 : 0; i < raw.size(); ++i) {
+branch  0 taken 1740 (fallthrough)
+branch  1 taken 993
+call    2 returned 134409
+branch  3 taken 131676 (fallthrough)
+branch  4 taken 2733
+   131676:   48:        char c = raw[i];
+call    0 returned 131676
+   131676:   49:        if (c == '/' || c == '\\') {
+branch  0 taken 116307 (fallthrough)
+branch  1 taken 15369
+branch  2 taken 8 (fallthrough)
+branch  3 taken 116299
+    15377:   50:            if (!cur.empty()) { parts.push_back(cur); cur.clear(); }
+call    0 returned 15377
+branch  1 taken 13624 (fallthrough)
+branch  2 taken 1753
+call    3 returned 13624
+branch  4 taken 13624 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 13624
+        -:   51:        } else {
+   116299:   52:            cur.push_back(c);
+call    0 returned 116299
+branch  1 taken 116299 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   53:        }
+        -:   54:    }
+     2733:   55:    if (!cur.empty()) parts.push_back(cur);
+call    0 returned 2733
+branch  1 taken 2730 (fallthrough)
+branch  2 taken 3
+call    3 returned 2730
+branch  4 taken 2730 (fallthrough)
+branch  5 taken 0 (throw)
+        -:   56:
+     5466:   57:    std::vector<std::string> out;
+call    0 returned 2733
+call    1 returned 2733
+call    2 never executed
+    20827:   58:    for (size_t i = 0; i < parts.size(); ++i) {
+call    0 returned 20827
+branch  1 taken 18094 (fallthrough)
+branch  2 taken 2733
+    18094:   59:        const std::string& seg = parts[i];
+call    0 returned 18094
+    18094:   60:        if (seg == ".") continue;
+call    0 returned 18094
+branch  1 taken 62 (fallthrough)
+branch  2 taken 18032
+    18032:   61:        if (seg == "..") {
+call    0 returned 18032
+branch  1 taken 13 (fallthrough)
+branch  2 taken 18019
+       23:   62:            if (!out.empty() && out.back() != ".." &&
+call    0 returned 13
+branch  1 taken 11 (fallthrough)
+branch  2 taken 2
+call    3 returned 11
+call    4 returned 11
+branch  5 taken 10 (fallthrough)
+branch  6 taken 1
+branch  7 taken 0 (fallthrough)
+branch  8 taken 10
+branch  9 taken 10 (fallthrough)
+branch 10 taken 3
+      10*:   63:                !(out.back().size() == 2 && out.back()[1] == ':')) {
+call    0 returned 10
+call    1 returned 10
+call    2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+       10:   64:                out.pop_back();
+call    0 returned 10
+        3:   65:            } else if (!absolute) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 1
+        2:   66:                out.push_back("..");
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 2
+branch  5 taken 2 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 2
+call    8 returned 2
+call    9 never executed
+call   10 never executed
+        -:   67:            }
+       13:   68:            continue;
+        -:   69:        }
+    18019:   70:        out.push_back(seg);
+call    0 returned 18019
+branch  1 taken 18019 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   71:    }
+        -:   72:
+     5466:   73:    std::string res;
+call    0 returned 2733
+call    1 returned 2733
+call    2 never executed
+    20744:   74:    for (size_t i = 0; i < out.size(); ++i) {
+call    0 returned 20744
+branch  1 taken 18011 (fallthrough)
+branch  2 taken 2733
+    18011:   75:        if (i) res += kArchiveSep;
+branch  0 taken 15280 (fallthrough)
+branch  1 taken 2731
+call    2 returned 15280
+branch  3 taken 15280 (fallthrough)
+branch  4 taken 0 (throw)
+    18011:   76:        res += out[i];
+call    0 returned 18011
+call    1 returned 18011
+branch  2 taken 18011 (fallthrough)
+branch  3 taken 0 (throw)
+        -:   77:    }
+        -:   78:    /* 绝对路径必须保留前导 '/'（此前被丢掉，导致 "/x//y/" -> "x/y"） */
+     2733:   79:    if (absolute && !drivePrefix) res = std::string(1, kArchiveSep) + res;
+branch  0 taken 1750 (fallthrough)
+branch  1 taken 983
+branch  2 taken 10 (fallthrough)
+branch  3 taken 1740
+call    4 returned 10
+call    5 returned 10
+branch  6 taken 10 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 10
+branch  9 taken 10 (fallthrough)
+branch 10 taken 0 (throw)
+call   11 returned 10
+call   12 returned 10
+call   13 returned 10
+call   14 returned 10
+call   15 never executed
+call   16 never executed
+    2733*:   80:    if (res.empty()) res = absolute ? std::string(1, kArchiveSep) : std::string(".");
+call    0 returned 2733
+branch  1 taken 2 (fallthrough)
+branch  2 taken 2731
+branch  3 taken 0 (fallthrough)
+branch  4 taken 2
+call    5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+call    9 returned 2
+call   10 returned 2
+branch 11 taken 2 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 2
+call   14 returned 2
+branch 15 taken 2 (fallthrough)
+branch 16 taken 0
+call   17 returned 2
+branch 18 taken 0 (fallthrough)
+branch 19 taken 2
+call   20 never executed
+branch 21 never executed
+branch 22 never executed
+call   23 never executed
+branch 24 never executed
+branch 25 never executed
+call   26 never executed
+     2733:   81:    return res;
+call    0 returned 2733
+        -:   82:}
+        -:   83:
+function _ZN4DBKP4Path4toOsERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:   84:std::string toOs(const std::string& archivePath) {
+        -:   85:#if defined(DBKP_OS_WINDOWS)
+    #####:   86:    std::string r = archivePath;
+call    0 never executed
+    #####:   87:    for (size_t i = 0; i < r.size(); ++i) if (r[i] == '/') r[i] = kOsSep;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+    #####:   88:    return r;
+        -:   89:#else
+        -:   90:    return archivePath;
+        -:   91:#endif
+        -:   92:}
+        -:   93:
+function _ZN4DBKP4Path9toArchiveERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 4 returned 100% blocks executed 77%
+        4:   94:std::string toArchive(const std::string& osPath) {
+        4:   95:    std::string r = osPath;
+call    0 returned 4
+      75*:   96:    for (size_t i = 0; i < r.size(); ++i) if (r[i] == '\\') r[i] = '/';
+call    0 returned 75
+branch  1 taken 71 (fallthrough)
+branch  2 taken 4
+call    3 returned 71
+branch  4 taken 71 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 71
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+        4:   97:    return r;
+        -:   98:}
+        -:   99:
+function _ZN4DBKP4Path8fileNameERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 539 returned 100% blocks executed 100%
+      539:  100:std::string fileName(const std::string& p) {
+      539:  101:    size_t pos = p.find_last_of("/\\");
+call    0 returned 539
+      539:  102:    return pos == std::string::npos ? p : p.substr(pos + 1);
+branch  0 taken 409 (fallthrough)
+branch  1 taken 130
+call    2 returned 409
+call    3 returned 130
+        -:  103:}
+        -:  104:
+function _ZN4DBKP4Path9parentDirERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 496 returned 100% blocks executed 74%
+      496:  105:std::string parentDir(const std::string& p) {
+      496:  106:    size_t pos = p.find_last_of("/\\");
+call    0 returned 496
+      496:  107:    if (pos == std::string::npos) return "";
+branch  0 taken 86 (fallthrough)
+branch  1 taken 410
+call    2 returned 86
+call    3 returned 86
+branch  4 taken 86 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 86
+call    7 never executed
+call    8 never executed
+      410:  108:    if (pos == 0) return "/";
+branch  0 taken 1 (fallthrough)
+branch  1 taken 409
+call    2 returned 1
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 1
+call    7 never executed
+      409:  109:    return p.substr(0, pos);
+call    0 returned 409
+        -:  110:}
+        -:  111:
+function _ZN4DBKP4Path9extensionERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 2 returned 100% blocks executed 74%
+        2:  112:std::string extension(const std::string& p) {
+        4:  113:    std::string name = fileName(p);
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 2
+call    4 never executed
+        2:  114:    size_t pos = name.find_last_of('.');
+call    0 returned 2
+        2:  115:    if (pos == std::string::npos || pos == 0) return "";
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1
+branch  2 taken 0 (fallthrough)
+branch  3 taken 1
+call    4 returned 1
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+call    9 never executed
+        1:  116:    return name.substr(pos);   /* 含点号 */
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  117:}
+        -:  118:
+function _ZN4DBKP4Path18baseNameWithoutExtERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  119:std::string baseNameWithoutExt(const std::string& p) {
+    #####:  120:    std::string name = fileName(p);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+    #####:  121:    size_t pos = name.find_last_of('.');
+call    0 never executed
+    #####:  122:    if (pos == std::string::npos || pos == 0) return name;
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+    #####:  123:    return name.substr(0, pos);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  124:}
+        -:  125:
+function _ZN4DBKP4Path10withSuffixERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 0 returned 0% blocks executed 0%
+    #####:  126:std::string withSuffix(const std::string& stem, const std::string& suffix) {
+    #####:  127:    if (suffix.empty() || suffix[0] != '.') return stem + suffix;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+    #####:  128:    return stem + suffix;
+call    0 never executed
+        -:  129:}
+        -:  130:
+function _ZN4DBKP4Path8relativeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 4 returned 100% blocks executed 51%
+        4:  131:std::string relative(const std::string& parent, const std::string& child) {
+        8:  132:    std::string p = normalize(parent), c = normalize(child);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+call    7 returned 4
+call    8 never executed
+call    9 never executed
+       4*:  133:    if (p == "/" ) { return c.size() && c[0] == '/' ? c.substr(1) : c; }
+call    0 returned 4
+branch  1 taken 0 (fallthrough)
+branch  2 taken 4
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+branch 10 never executed
+call   11 never executed
+branch 12 never executed
+branch 13 never executed
+call   14 never executed
+branch 15 never executed
+branch 16 never executed
+        4:  134:    if (c.size() < p.size()) return "";
+call    0 returned 4
+call    1 returned 4
+branch  2 taken 1 (fallthrough)
+branch  3 taken 3
+call    4 returned 1
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+call    9 never executed
+       3*:  135:    if (c.compare(0, p.size(), p) != 0) return "";
+call    0 returned 3
+call    1 returned 3
+branch  2 taken 3 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 0 (fallthrough)
+branch  5 taken 3
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+call   11 never executed
+        3:  136:    if (c.size() == p.size()) return "";
+call    0 returned 3
+call    1 returned 3
+branch  2 taken 1 (fallthrough)
+branch  3 taken 2
+call    4 returned 1
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0 (throw)
+call    8 returned 1
+call    9 never executed
+       2*:  137:    if (c[p.size()] == '/' || c[p.size()] == '\\') {
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 0 (fallthrough)
+branch  5 taken 2
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+branch 10 never executed
+branch 11 never executed
+branch 12 taken 2 (fallthrough)
+branch 13 taken 0
+        4:  138:        std::string r = c.substr(p.size() + 1);
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 2
+call    5 never executed
+      10*:  139:        for (size_t i = 0; i < r.size(); ++i) if (r[i] == '\\') r[i] = '/';
+call    0 returned 10
+branch  1 taken 8 (fallthrough)
+branch  2 taken 2
+call    3 returned 8
+branch  4 taken 8 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 8
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+        2:  140:        return r;
+call    0 returned 2
+        -:  141:    }
+    #####:  142:    return "";
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+        -:  143:}
+        -:  144:
+function _ZN4DBKP4Path9isSubPathERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 17 returned 100% blocks executed 81%
+       17:  145:bool isSubPath(const std::string& parent, const std::string& child) {
+        -:  146:    /* F6：三处（watch CLI、watch API、引擎重叠守卫）共用的"包含"判定。
+        -:  147:       顺序很关键，都是批次 4 踩过的坑：
+        -:  148:       1) 先解析真实路径 —— junction/symlink 指向内部时必须被看见；
+        -:  149:          解析失败（不存在/无权限）退回词法绝对化，不因此放行风险路径。
+        -:  150:       2) 再判相等。Path::relative 对"相等"返回空串，和"不是前缀"撞车，
+        -:  151:          所以绝不能只靠 relative 判包含。
+        -:  152:       3) 判子树时只认分隔符边界：c:/a 与 c:/ab 词法是前缀但不是父子。
+        -:  153:       Windows 路径大小写不敏感，比较前统一转小写。 */
+       34:  154:    std::string p, c;
+call    0 returned 17
+call    1 returned 17
+call    2 returned 17
+call    3 returned 17
+call    4 never executed
+call    5 never executed
+      17*:  155:    if (DBKP_IS_ERR(Platform::canonicalPath(parent, p)) || p.empty()) p = parent;
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 17 (fallthrough)
+branch  4 taken 0
+call    5 returned 17
+branch  6 taken 0 (fallthrough)
+branch  7 taken 17
+branch  8 taken 0 (fallthrough)
+branch  9 taken 17
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+      17*:  156:    if (DBKP_IS_ERR(Platform::canonicalPath(child, c)) || c.empty()) c = child;
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 17 (fallthrough)
+branch  4 taken 0
+call    5 returned 17
+branch  6 taken 0 (fallthrough)
+branch  7 taken 17
+branch  8 taken 0 (fallthrough)
+branch  9 taken 17
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+       17:  157:    p = normalize(p);
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 17
+call    4 returned 17
+       17:  158:    c = normalize(c);
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 17
+call    4 returned 17
+      17*:  159:    if (p.empty() || c.empty()) return false;
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0
+call    3 returned 17
+branch  4 taken 0 (fallthrough)
+branch  5 taken 17
+branch  6 taken 0 (fallthrough)
+branch  7 taken 17
+        -:  160:#if defined(DBKP_OS_WINDOWS)
+       34:  161:    std::string pl = p, cl = c;
+call    0 returned 17
+branch  1 taken 17 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 17
+branch  4 taken 17 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 17
+call    7 returned 17
+call    8 never executed
+call    9 never executed
+      962:  162:    for (size_t i = 0; i < pl.size(); ++i) pl[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(pl[i])));
+call    0 returned 962
+branch  1 taken 945 (fallthrough)
+branch  2 taken 17
+call    3 returned 945
+branch  4 taken 945 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 945
+branch  7 taken 945 (fallthrough)
+branch  8 taken 0 (throw)
+     1000:  163:    for (size_t i = 0; i < cl.size(); ++i) cl[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(cl[i])));
+call    0 returned 1000
+branch  1 taken 983 (fallthrough)
+branch  2 taken 17
+call    3 returned 983
+branch  4 taken 983 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 983
+branch  7 taken 983 (fallthrough)
+branch  8 taken 0 (throw)
+       17:  164:    if (pl == cl) return true;                     /* 相等也算包含：自喂的极端情况 */
+call    0 returned 17
+branch  1 taken 7 (fallthrough)
+branch  2 taken 10
+       10:  165:    if (cl.size() <= pl.size()) return false;
+call    0 returned 10
+call    1 returned 10
+branch  2 taken 3 (fallthrough)
+branch  3 taken 7
+        7:  166:    if (cl.compare(0, pl.size(), pl) != 0) return false;
+call    0 returned 7
+call    1 returned 7
+branch  2 taken 7 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 2 (fallthrough)
+branch  5 taken 5
+        5:  167:    return pl[pl.size() - 1] == '/' ? true : cl[pl.size()] == '/';
+call    0 returned 5
+call    1 returned 5
+branch  2 taken 5 (fallthrough)
+branch  3 taken 0 (throw)
+branch  4 taken 5 (fallthrough)
+branch  5 taken 0
+call    6 returned 5
+call    7 returned 5
+branch  8 taken 5 (fallthrough)
+branch  9 taken 0 (throw)
+branch 10 taken 4 (fallthrough)
+branch 11 taken 1
+        -:  168:#else
+        -:  169:    if (p == c) return true;
+        -:  170:    if (c.size() <= p.size()) return false;
+        -:  171:    if (c.compare(0, p.size(), p) != 0) return false;
+        -:  172:    return p[p.size() - 1] == '/' ? true : c[p.size()] == '/';
+        -:  173:#endif
+        -:  174:}
+        -:  175:
+function _ZN4DBKP4Path19isPathTraversalSafeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 258 returned 100% blocks executed 86%
+      258:  176:bool isPathTraversalSafe(const std::string& archivePath) {
+      258:  177:    if (archivePath.empty()) return false;
+call    0 returned 258
+branch  1 taken 3 (fallthrough)
+branch  2 taken 255
+      255:  178:    if (isAbsolute(archivePath)) return false;
+call    0 returned 255
+branch  1 taken 9 (fallthrough)
+branch  2 taken 246
+      492:  179:    std::stringstream ss(archivePath);
+call    0 returned 246
+call    1 returned 246
+branch  2 taken 246 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 246
+call    5 never executed
+      492:  180:    std::string seg;
+call    0 returned 246
+call    1 returned 246
+call    2 never executed
+      624:  181:    while (std::getline(ss, seg, '/')) {
+call    0 returned 624
+branch  1 taken 624 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 624
+branch  4 taken 624 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 388 (fallthrough)
+branch  7 taken 236
+      388:  182:        if (seg.empty()) continue;
+call    0 returned 388
+branch  1 taken 1 (fallthrough)
+branch  2 taken 387
+      387:  183:        if (seg == "..") return false;
+call    0 returned 387
+branch  1 taken 10 (fallthrough)
+branch  2 taken 377
+        -:  184:    }
+      236:  185:    return true;
+        -:  186:}
+        -:  187:
+function _ZN4DBKP4Path7iequalsERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 661 returned 100% blocks executed 100%
+      661:  188:bool iequals(const std::string& a, const std::string& b) {
+      661:  189:    if (a.size() != b.size()) return false;
+call    0 returned 661
+call    1 returned 661
+branch  2 taken 646 (fallthrough)
+branch  3 taken 15
+      781:  190:    for (size_t i = 0; i < a.size(); ++i) {
+call    0 returned 781
+branch  1 taken 775 (fallthrough)
+branch  2 taken 6
+      775:  191:        if (std::tolower(static_cast<unsigned char>(a[i])) !=
+call    0 returned 775
+      775:  192:            std::tolower(static_cast<unsigned char>(b[i]))) return false;
+call    0 returned 775
+branch  1 taken 9 (fallthrough)
+branch  2 taken 766
+        -:  193:    }
+        6:  194:    return true;
+        -:  195:}
+        -:  196:
+        -:  197:/* ---------------------------------------------------------- glob 匹配 */
+        -:  198:namespace {
+        -:  199:
+        -:  200:/** 解析 [..] 字符类；返回是否匹配，pos 推进到 ']' 之后 */
+function _ZN4DBKP4Path12_GLOBAL__N_114matchCharClassERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERyc called 8 returned 100% blocks executed 98%
+        8:  201:bool matchCharClass(const std::string& pat, size_t& pos, char c) {
+        8:  202:    size_t q = pos + 1;                           /* 跳过 '[' */
+        8:  203:    bool negate = false;
+        8:  204:    if (q < pat.size() && (pat[q] == '!' || pat[q] == '^')) { negate = true; ++q; }
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0
+call    3 returned 8
+branch  4 taken 6 (fallthrough)
+branch  5 taken 2
+call    6 returned 6
+branch  7 taken 0 (fallthrough)
+branch  8 taken 6
+branch  9 taken 2 (fallthrough)
+branch 10 taken 6
+        8:  205:    bool found = false;
+       22:  206:    while (q < pat.size() && pat[q] != ']') {
+call    0 returned 22
+branch  1 taken 22 (fallthrough)
+branch  2 taken 0
+call    3 returned 22
+branch  4 taken 14 (fallthrough)
+branch  5 taken 8
+branch  6 taken 14 (fallthrough)
+branch  7 taken 8
+       14:  207:        if (q + 2 < pat.size() && pat[q + 1] == '-' && pat[q + 2] != ']') {
+call    0 returned 14
+branch  1 taken 14 (fallthrough)
+branch  2 taken 0
+call    3 returned 14
+branch  4 taken 2 (fallthrough)
+branch  5 taken 12
+call    6 returned 2
+branch  7 taken 2 (fallthrough)
+branch  8 taken 0
+branch  9 taken 2 (fallthrough)
+branch 10 taken 12
+        2:  208:            if (c >= pat[q] && c <= pat[q + 2]) found = true;
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0
+call    3 returned 2
+branch  4 taken 1 (fallthrough)
+branch  5 taken 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 1
+        2:  209:            q += 3;
+        -:  210:        } else {
+       12:  211:            if (c == pat[q]) found = true;
+call    0 returned 12
+branch  1 taken 4 (fallthrough)
+branch  2 taken 8
+       12:  212:            ++q;
+        -:  213:        }
+        -:  214:    }
+       8*:  215:    if (q >= pat.size()) return false;            /* 方括号未闭合 */
+call    0 returned 8
+branch  1 taken 0 (fallthrough)
+branch  2 taken 8
+        8:  216:    pos = q + 1;
+        8:  217:    return found != negate;
+        -:  218:}
+        -:  219:
+        -:  220:} /* anonymous namespace */
+        -:  221:
+function _ZN4DBKP4Path9matchGlobERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_ called 68 returned 100% blocks executed 95%
+       68:  222:bool matchGlob(const std::string& pattern, const std::string& text) {
+       68:  223:    size_t p = 0, t = 0;
+       68:  224:    size_t starPos = std::string::npos, starText = 0;
+      420:  225:    while (t < text.size()) {
+call    0 returned 420
+branch  1 taken 366 (fallthrough)
+branch  2 taken 54
+      366:  226:        if (p < pattern.size() && pattern[p] == '?') { ++p; ++t; }
+call    0 returned 366
+branch  1 taken 337 (fallthrough)
+branch  2 taken 29
+call    3 returned 337
+branch  4 taken 2 (fallthrough)
+branch  5 taken 335
+branch  6 taken 2 (fallthrough)
+branch  7 taken 364
+      364:  227:        else if (p < pattern.size() && pattern[p] == '[') {
+call    0 returned 364
+branch  1 taken 335 (fallthrough)
+branch  2 taken 29
+call    3 returned 335
+branch  4 taken 8 (fallthrough)
+branch  5 taken 327
+branch  6 taken 8 (fallthrough)
+branch  7 taken 356
+        8:  228:            size_t next = p;
+        8:  229:            if (matchCharClass(pattern, next, text[t])) { p = next; ++t; }
+call    0 returned 8
+call    1 returned 8
+branch  2 taken 5 (fallthrough)
+branch  3 taken 3
+       3*:  230:            else if (starPos != std::string::npos) { p = starPos + 1; t = ++starText; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3
+        3:  231:            else return false;
+        -:  232:        }
+      356:  233:        else if (p < pattern.size() && pattern[p] == '*') { starPos = p++; starText = t; }
+call    0 returned 356
+branch  1 taken 327 (fallthrough)
+branch  2 taken 29
+call    3 returned 327
+branch  4 taken 44 (fallthrough)
+branch  5 taken 283
+branch  6 taken 44 (fallthrough)
+branch  7 taken 312
+      312:  234:        else if (p < pattern.size() && pattern[p] == text[t]) { ++p; ++t; }
+call    0 returned 312
+branch  1 taken 283 (fallthrough)
+branch  2 taken 29
+call    3 returned 283
+call    4 returned 283
+branch  5 taken 148 (fallthrough)
+branch  6 taken 135
+branch  7 taken 148 (fallthrough)
+branch  8 taken 164
+      164:  235:        else if (starPos != std::string::npos) { p = starPos + 1; t = ++starText; }
+branch  0 taken 153 (fallthrough)
+branch  1 taken 11
+       11:  236:        else return false;
+        -:  237:    }
+      54*:  238:    while (p < pattern.size() && pattern[p] == '*') ++p;
+call    0 returned 54
+branch  1 taken 33 (fallthrough)
+branch  2 taken 21
+call    3 returned 33
+branch  4 taken 0 (fallthrough)
+branch  5 taken 33
+branch  6 taken 0 (fallthrough)
+branch  7 taken 54
+       54:  239:    return p == pattern.size();
+call    0 returned 54
+        -:  240:}
+        -:  241:
+        -:  242:/* F8：语法预校验。规则严格对齐 matchCharClass/matchGlob 的方言：
+        -:  243:   - 每个 '[' 必须在串内闭合（未闭合时 matchCharClass 恒 false，整条模式永不匹配）；
+        -:  244:   - 字符类体非空（"[]" 同样恒 false）；
+        -:  245:   - 类体支持 !/^ 取反、a-z 形式的区间，区间上界 < 下界时该段永不匹配，视为非法。
+        -:  246:   目的：坏模式在"入口"就报出来，而不是匹配不到任何文件后产出 0 条目的空箱。 */
+function _ZN4DBKP4Path12validateGlobERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS6_ called 21 returned 100% blocks executed 86%
+       21:  247:bool validateGlob(const std::string& pattern, std::string& why) {
+       21:  248:    why.clear();
+call    0 returned 21
+       21:  249:    if (pattern.empty()) {
+call    0 returned 21
+branch  1 taken 1 (fallthrough)
+branch  2 taken 20
+        1:  250:        why = "glob 模式为空，不可能匹配任何文件";
+call    0 returned 1
+        1:  251:        return false;
+        -:  252:    }
+       20:  253:    size_t i = 0;
+      102:  254:    while (i < pattern.size()) {
+call    0 returned 102
+branch  1 taken 92 (fallthrough)
+branch  2 taken 10
+       92:  255:        if (pattern[i] != '[') { ++i; continue; }
+call    0 returned 92
+branch  1 taken 74 (fallthrough)
+branch  2 taken 18
+       18:  256:        size_t q = i + 1;
+       18:  257:        if (q < pattern.size() && (pattern[q] == '!' || pattern[q] == '^')) ++q;
+call    0 returned 18
+branch  1 taken 16 (fallthrough)
+branch  2 taken 2
+call    3 returned 16
+branch  4 taken 15 (fallthrough)
+branch  5 taken 1
+call    6 returned 15
+branch  7 taken 1 (fallthrough)
+branch  8 taken 14
+branch  9 taken 2 (fallthrough)
+branch 10 taken 16
+       18:  258:        const size_t bodyStart = q;
+       18:  259:        bool closed = false;
+       32:  260:        while (q < pattern.size()) {
+call    0 returned 32
+branch  1 taken 28 (fallthrough)
+branch  2 taken 4
+       28:  261:            if (pattern[q] == ']') { closed = true; break; }
+call    0 returned 28
+branch  1 taken 12 (fallthrough)
+branch  2 taken 16
+        -:  262:            /* 与 matchCharClass 完全相同的三元组判定：X-Y 且 Y 不是 ']' */
+       16:  263:            if (q + 2 < pattern.size() && pattern[q + 1] == '-' && pattern[q + 2] != ']') {
+call    0 returned 16
+branch  1 taken 13 (fallthrough)
+branch  2 taken 3
+call    3 returned 13
+branch  4 taken 9 (fallthrough)
+branch  5 taken 4
+call    6 returned 9
+branch  7 taken 8 (fallthrough)
+branch  8 taken 1
+branch  9 taken 8 (fallthrough)
+branch 10 taken 8
+        8:  264:                if (static_cast<unsigned char>(pattern[q + 2]) <
+call    0 returned 8
+        8:  265:                    static_cast<unsigned char>(pattern[q])) {
+call    0 returned 8
+branch  1 taken 2 (fallthrough)
+branch  2 taken 6
+        2:  266:                    why = "字符类区间上下界颠倒：[" + pattern.substr(q, 3) + "]";
+call    0 returned 2
+call    1 returned 2
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 2
+branch  5 taken 2 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 2
+call    8 returned 2
+call    9 returned 2
+call   10 returned 2
+call   11 never executed
+call   12 never executed
+call   13 never executed
+        2:  267:                    return false;
+        -:  268:                }
+        6:  269:                q += 3;
+        -:  270:            } else {
+        8:  271:                ++q;
+        -:  272:            }
+        -:  273:        }
+       16:  274:        if (!closed) { why = "字符类未闭合：'" + pattern.substr(i) + "' 缺少 ']'"; return false; }
+branch  0 taken 4 (fallthrough)
+branch  1 taken 12
+call    2 returned 4
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+branch  7 taken 4 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 4
+call   10 returned 4
+call   11 returned 4
+call   12 returned 4
+call   13 never executed
+call   14 never executed
+       12:  275:        if (q == bodyStart) { why = "字符类为空：'[]' 永远匹配不到任何名字"; return false; }
+branch  0 taken 4 (fallthrough)
+branch  1 taken 8
+call    2 returned 4
+        8:  276:        i = q + 1;
+        -:  277:    }
+       10:  278:    return true;
+        -:  279:}
+        -:  280:
+        -:  281:#if defined(DBKP_OS_WINDOWS)
+function _ZN4DBKP4Path10utf8ToWideERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 6955 returned 100% blocks executed 72%
+     6955:  282:std::wstring utf8ToWide(const std::string& utf8) {
+    6955*:  283:    if (utf8.empty()) return std::wstring();
+call    0 returned 6955
+branch  1 taken 0 (fallthrough)
+branch  2 taken 6955
+call    3 never executed
+     6955:  284:    int n = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), int(utf8.size()), nullptr, 0);
+call    0 returned 6955
+call    1 returned 6955
+call    2 returned 6955
+branch  3 taken 6955 (fallthrough)
+branch  4 taken 0 (throw)
+    6955*:  285:    if (n <= 0) return std::wstring();
+branch  0 taken 0 (fallthrough)
+branch  1 taken 6955
+call    2 never executed
+    13910:  286:    std::wstring w(size_t(n), L'\0');
+call    0 returned 6955
+call    1 returned 6955
+branch  2 taken 6955 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 6955
+call    5 never executed
+     6955:  287:    MultiByteToWideChar(CP_UTF8, 0, utf8.data(), int(utf8.size()), &w[0], n);
+call    0 returned 6955
+branch  1 taken 6955 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 6955
+call    4 returned 6955
+call    5 returned 6955
+branch  6 taken 6955 (fallthrough)
+branch  7 taken 0 (throw)
+     6955:  288:    return w;
+call    0 returned 6955
+        -:  289:}
+        -:  290:
+function _ZN4DBKP4Path10wideToUtf8ERKNSt7__cxx1112basic_stringIwSt11char_traitsIwESaIwEEE called 1852 returned 100% blocks executed 72%
+     1852:  291:std::string wideToUtf8(const std::wstring& wide) {
+    1852*:  292:    if (wide.empty()) return std::string();
+call    0 returned 1852
+branch  1 taken 0 (fallthrough)
+branch  2 taken 1852
+call    3 never executed
+     1852:  293:    int n = WideCharToMultiByte(CP_UTF8, 0, wide.data(), int(wide.size()),
+call    0 returned 1852
+call    1 returned 1852
+call    2 returned 1852
+branch  3 taken 1852 (fallthrough)
+branch  4 taken 0 (throw)
+        -:  294:                                nullptr, 0, nullptr, nullptr);
+    1852*:  295:    if (n <= 0) return std::string();
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1852
+call    2 never executed
+     3704:  296:    std::string s(size_t(n), '\0');
+call    0 returned 1852
+call    1 returned 1852
+branch  2 taken 1852 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 1852
+call    5 never executed
+     1852:  297:    WideCharToMultiByte(CP_UTF8, 0, wide.data(), int(wide.size()),
+call    0 returned 1852
+call    1 returned 1852
+branch  2 taken 1852 (fallthrough)
+branch  3 taken 0 (throw)
+     1852:  298:                        &s[0], n, nullptr, nullptr);
+call    0 returned 1852
+branch  1 taken 1852 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 1852
+     1852:  299:    return s;
+call    0 returned 1852
+        -:  300:}
+        -:  301:
+function _ZN4DBKP4Path7apiWideERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 6954 returned 100% blocks executed 54%
+     6954:  302:std::wstring apiWide(const std::string& path) {
+    13908:  303:    std::wstring w = utf8ToWide(path);
+call    0 returned 6954
+branch  1 taken 6954 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 6954
+call    4 never executed
+    6954*:  304:    if (w.empty()) return w;
+call    0 returned 6954
+branch  1 taken 0 (fallthrough)
+branch  2 taken 6954
+call    3 never executed
+    6954*:  305:    if (w.size() >= 4 && w.compare(0, 4, L"\\\\?\\") == 0) return w;   /* 已是扩展形式 */
+call    0 returned 6954
+branch  1 taken 6909 (fallthrough)
+branch  2 taken 45
+call    3 returned 6909
+branch  4 taken 6909 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 6909
+branch  8 taken 0 (fallthrough)
+branch  9 taken 6954
+call   10 never executed
+        -:  306:
+        -:  307:    /* 1) 绝对化 + 折叠 ./..：GetFullPathNameW 不做存在性检查，纯字符串处理 */
+    13908:  308:    std::vector<wchar_t> buf(8192);
+call    0 returned 6954
+call    1 returned 6954
+branch  2 taken 6954 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 6954
+call    5 never executed
+     6954:  309:    DWORD n = GetFullPathNameW(w.c_str(), DWORD(buf.size()), buf.data(), nullptr);
+call    0 returned 6954
+call    1 returned 6954
+call    2 returned 6954
+call    3 returned 6954
+branch  4 taken 6954 (fallthrough)
+branch  5 taken 0 (throw)
+   13908*:  310:    std::wstring abs = (n > 0 && n < buf.size()) ? std::wstring(buf.data(), n) : w;
+branch  0 taken 6954 (fallthrough)
+branch  1 taken 0
+call    2 returned 6954
+branch  3 taken 6954 (fallthrough)
+branch  4 taken 0
+call    5 returned 6954
+call    6 returned 6954
+call    7 returned 6954
+branch  8 taken 6954 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+branch 13 taken 6954 (fallthrough)
+branch 14 taken 0
+call   15 returned 6954
+branch 16 never executed
+branch 17 never executed
+call   18 never executed
+        -:  311:
+        -:  312:    /* 2) \\?\ 只认反斜杠 */
+  442887*:  313:    for (size_t i = 0; i < abs.size(); ++i) if (abs[i] == L'/') abs[i] = L'\\';
+call    0 returned 442887
+branch  1 taken 435933 (fallthrough)
+branch  2 taken 6954
+call    3 returned 435933
+branch  4 taken 435933 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 435933
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+        -:  314:
+        -:  315:    /* 3) 只在可能踩到 260 限制时才加前缀：短路径保持原样，
+        -:  316:     *    便于日志/比较里看到人类可读的路径，也避免前缀形式的语义差异 */
+     6954:  317:    if (abs.size() < 248) return abs;
+call    0 returned 6954
+branch  1 taken 6932 (fallthrough)
+branch  2 taken 22
+call    3 returned 6932
+      22*:  318:    if (abs.size() >= 2 && abs[0] == L'\\' && abs[1] == L'\\') {
+call    0 returned 22
+branch  1 taken 22 (fallthrough)
+branch  2 taken 0
+call    3 returned 22
+branch  4 taken 22 (fallthrough)
+branch  5 taken 0 (throw)
+branch  6 taken 0 (fallthrough)
+branch  7 taken 22
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+branch 11 never executed
+branch 12 never executed
+branch 13 taken 0 (fallthrough)
+branch 14 taken 22
+    #####:  319:        const std::wstring rest = abs.substr(2);           /* UNC: \\srv\share\... */
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+    #####:  320:        return std::wstring(L"\\\\?\\UNC\\") + rest;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+call   11 never executed
+        -:  321:    }
+       22:  322:    return std::wstring(L"\\\\?\\") + abs;
+call    0 returned 22
+call    1 returned 22
+branch  2 taken 22 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 22
+branch  5 taken 22 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 22
+call    8 returned 22
+call    9 never executed
+call   10 never executed
+        -:  323:}
+        -:  324:#endif /* DBKP_OS_WINDOWS */
+        -:  325:
+        -:  326:} /* namespace Path */
+        -:  327:} /* namespace DBKP */
+        -:  328:

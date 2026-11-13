@@ -1,0 +1,223 @@
+        -:    0:Source:src/Utils/Logger.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/Logger.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/Logger.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Logger.cpp
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Utils/Logger.h"
+        -:    5:
+        -:    6:#include <cstdio>
+        -:    7:#include <cstring>
+        -:    8:#include <ctime>
+        -:    9:#include <utility>
+        -:   10:#if defined(DBKP_OS_WINDOWS)
+        -:   11:#define dbkp_strcasecmp _stricmp
+        -:   12:#else
+        -:   13:#include <strings.h>
+        -:   14:#define dbkp_strcasecmp strcasecmp
+        -:   15:#endif
+        -:   16:
+        -:   17:namespace DBKP {
+        -:   18:
+function _ZN4DBKP6Logger8instanceEv called 567 returned 100% blocks executed 100%
+      567:   19:Logger& Logger::instance() {
+        -:   20:    static Logger s_logger;
+      567:   21:    return s_logger;
+        -:   22:}
+        -:   23:
+function _ZN4DBKP6Logger16setLevelFromTextERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:   24:void Logger::setLevelFromText(const std::string& text) {
+    #####:   25:    if (!dbkp_strcasecmp(text.c_str(), "quiet"))      m_level = LL_QUIET;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   26:    else if (!dbkp_strcasecmp(text.c_str(), "error")) m_level = LL_ERROR;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   27:    else if (!dbkp_strcasecmp(text.c_str(), "warn"))  m_level = LL_WARN;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   28:    else if (!dbkp_strcasecmp(text.c_str(), "info"))  m_level = LL_INFO;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   29:    else if (!dbkp_strcasecmp(text.c_str(), "debug")) m_level = LL_DEBUG;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   30:    else m_level = LL_INFO;
+    #####:   31:}
+        -:   32:
+        -:   33:namespace {
+        -:   34:/* 每个线程独立的日志接收器：并发备份任务之间不会串台 */
+        -:   35:thread_local Logger::ThreadSink g_threadSink;
+        -:   36:}
+        -:   37:
+function _ZN4DBKP6Logger13setThreadSinkESt8functionIFvNS_8LogLevelERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEEE called 0 returned 0% blocks executed 0%
+    #####:   38:void Logger::setThreadSink(ThreadSink sink) { g_threadSink = std::move(sink); }
+call    0 never executed
+call    1 never executed
+call    2 never executed
+function _ZN4DBKP6Logger13hasThreadSinkEv called 0 returned 0% blocks executed 0%
+    #####:   39:bool Logger::hasThreadSink() { return static_cast<bool>(g_threadSink); }
+call    0 never executed
+call    1 never executed
+        -:   40:
+function _ZN4DBKP6Logger5writeENS_8LogLevelEPKcRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 567 returned 100% blocks executed 37%
+      567:   41:void Logger::write(LogLevel lv, const char* tag, const std::string& msg) {
+      567:   42:    if (lv > m_level) return;
+branch  0 taken 288 (fallthrough)
+branch  1 taken 279
+        -:   43:
+      279:   44:    std::string line;
+call    0 returned 279
+call    1 never executed
+     279*:   45:    if (m_level >= LL_DEBUG && lv >= LL_INFO) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 279
+branch  2 never executed
+branch  3 never executed
+    #####:   46:        std::time_t now = std::time(nullptr);
+call    0 never executed
+    #####:   47:        char stamp[32] = {0};
+    #####:   48:        std::strftime(stamp, sizeof(stamp), "%H:%M:%S", std::localtime(&now));
+call    0 never executed
+    #####:   49:        line = std::string("[") + stamp + "][" + tag + "] " + msg;
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+call   10 never executed
+branch 11 never executed
+branch 12 never executed
+call   13 never executed
+branch 14 never executed
+branch 15 never executed
+call   16 never executed
+branch 17 never executed
+branch 18 never executed
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+call   23 never executed
+call   24 never executed
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+call   30 never executed
+call   31 never executed
+call   32 never executed
+      279:   50:    } else if (lv <= LL_WARN) {
+branch  0 taken 109 (fallthrough)
+branch  1 taken 170
+      109:   51:        line = std::string("[") + tag + "] " + msg;
+call    0 returned 109
+call    1 returned 109
+branch  2 taken 109 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 109
+branch  5 taken 109 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 109
+branch  8 taken 109 (fallthrough)
+branch  9 taken 0 (throw)
+call   10 returned 109
+branch 11 taken 109 (fallthrough)
+branch 12 taken 0 (throw)
+call   13 returned 109
+call   14 returned 109
+call   15 returned 109
+call   16 returned 109
+call   17 returned 109
+call   18 returned 109
+call   19 never executed
+call   20 never executed
+call   21 never executed
+call   22 never executed
+        -:   52:    } else {
+      170:   53:        line = msg;
+call    0 returned 170
+branch  1 taken 170 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   54:    }
+        -:   55:
+      279:   56:    if (g_threadSink) {
+call    0 returned 279
+call    1 returned 279
+branch  2 taken 0 (fallthrough)
+branch  3 taken 279
+        -:   57:        /* 服务端：日志交给任务缓冲；错误/告警同时进守护进程 stderr 便于排查 */
+    #####:   58:        g_threadSink(lv, line);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   59:        if (lv <= LL_WARN) {
+branch  0 never executed
+branch  1 never executed
+    #####:   60:            std::fprintf(stderr, "%s\n", line.c_str());
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+    #####:   61:            std::fflush(stderr);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+        -:   62:        }
+    #####:   63:        return;
+        -:   64:    }
+      279:   65:    std::FILE* out = (lv <= LL_WARN) ? stderr : stdout;
+branch  0 taken 109 (fallthrough)
+branch  1 taken 170
+call    2 returned 109
+branch  3 taken 109 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 170
+branch  6 taken 170 (fallthrough)
+branch  7 taken 0 (throw)
+      279:   66:    std::fprintf(out, "%s\n", line.c_str());
+call    0 returned 279
+call    1 returned 279
+      279:   67:    std::fflush(out);
+call    0 returned 279
+branch  1 taken 279 (fallthrough)
+branch  2 taken 0 (throw)
+        -:   68:}
+        -:   69:
+function _ZN4DBKP6Logger5errorERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 86 returned 100% blocks executed 100%
+       86:   70:void Logger::error(const std::string& msg) { ++m_errors;  write(LL_ERROR, "ERROR", msg); }
+call    0 returned 86
+function _ZN4DBKP6Logger4warnERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 23 returned 100% blocks executed 100%
+       23:   71:void Logger::warn (const std::string& msg) { ++m_warnings; write(LL_WARN,  "WARN ", msg); }
+call    0 returned 23
+function _ZN4DBKP6Logger4infoERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 170 returned 100% blocks executed 100%
+      170:   72:void Logger::info (const std::string& msg) { write(LL_INFO,  "INFO ", msg); }
+call    0 returned 170
+function _ZN4DBKP6Logger5debugERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 288 returned 100% blocks executed 100%
+      288:   73:void Logger::debug(const std::string& msg) { write(LL_DEBUG, "DEBUG", msg); }
+call    0 returned 288
+        -:   74:
+        -:   75:} /* namespace DBKP */

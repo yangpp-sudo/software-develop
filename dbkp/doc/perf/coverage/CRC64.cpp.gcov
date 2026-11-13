@@ -1,0 +1,80 @@
+        -:    0:Source:src/Utils/CRC64.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/CRC64.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Utils/CRC64.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  CRC64.cpp  -- CRC-64/ECMA-182（MSB-first，poly=0x42F0E1EBA9EA3693，init=0）
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Utils/CRC64.h"
+        -:    5:
+        -:    6:#include <cstring>
+        -:    7:#include <ctime>
+        -:    8:
+        -:    9:namespace DBKP {
+        -:   10:
+        -:   11:static const uint64_t kPoly64 = 0x42F0E1EBA9EA3693ull;
+        -:   12:static uint64_t s_table[256];
+        -:   13:static bool     s_ready = false;
+        -:   14:
+function _ZN4DBKP5CRC649initTableEv called 1 returned 100% blocks executed 100%
+        1:   15:void CRC64::initTable() {
+      257:   16:    for (unsigned i = 0; i < 256; ++i) {
+branch  0 taken 256 (fallthrough)
+branch  1 taken 1
+      256:   17:        uint64_t crc = uint64_t(i) << 56;
+     2304:   18:        for (int k = 0; k < 8; ++k) {
+branch  0 taken 2048 (fallthrough)
+branch  1 taken 256
+     2048:   19:            crc = (crc & 0x8000000000000000ull) ? ((crc << 1) ^ kPoly64) : (crc << 1);
+branch  0 taken 1024 (fallthrough)
+branch  1 taken 1024
+        -:   20:        }
+      256:   21:        s_table[i] = crc;
+        -:   22:    }
+        1:   23:    s_ready = true;
+        1:   24:}
+        -:   25:
+function _ZN4DBKP5CRC647computeEPKvyy called 1312 returned 100% blocks executed 86%
+     1312:   26:uint64_t CRC64::compute(const void* data, std::size_t len, uint64_t init) {
+    1312*:   27:    if (!s_ready) initTable();
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1312
+call    2 never executed
+     1312:   28:    const uint8_t* p = static_cast<const uint8_t*>(data);
+     1312:   29:    uint64_t crc = init;
+  5956678:   30:    for (std::size_t i = 0; i < len; ++i) {
+branch  0 taken 5955366 (fallthrough)
+branch  1 taken 1312
+  5955366:   31:        crc = (crc << 8) ^ s_table[uint8_t((crc >> 56) ^ p[i])];
+        -:   32:    }
+     1312:   33:    return crc;
+        -:   34:}
+        -:   35:
+function _ZN4DBKP5CRC646updateEPKvy called 333 returned 100% blocks executed 100%
+      333:   36:void CRC64::update(const void* data, std::size_t len) {
+      333:   37:    m_crc = compute(data, len, m_crc);
+call    0 returned 333
+      333:   38:}
+        -:   39:
+function _ZN4DBKP5CRC648toStringB5cxx11Ey called 184 returned 100% blocks executed 75%
+      184:   40:std::string CRC64::toString(uint64_t crc) {
+        -:   41:    static const char* kHex = "0123456789abcdef";
+        -:   42:    char out[17];
+     3128:   43:    for (int i = 0; i < 16; ++i) {
+branch  0 taken 2944 (fallthrough)
+branch  1 taken 184
+     2944:   44:        unsigned nibble = unsigned((crc >> ((15 - i) * 4)) & 0xF);
+     2944:   45:        out[i] = kHex[nibble];
+        -:   46:    }
+      184:   47:    out[16] = '\0';
+      184:   48:    return std::string(out);
+call    0 returned 184
+call    1 returned 184
+branch  2 taken 184 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 184
+call    5 never executed
+        -:   49:}
+        -:   50:
+        -:   51:} /* namespace DBKP */

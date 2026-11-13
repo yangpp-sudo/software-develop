@@ -1,0 +1,720 @@
+        -:    0:Source:src/Common/Serialize.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Common/Serialize.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Common/Serialize.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Serialize.cpp  -- 归档结构编解码（固定 512B 块 + 强制小端）
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Common/Serialize.h"
+        -:    5:
+        -:    6:#include <algorithm>
+        -:    7:#include <cstring>
+        -:    8:
+        -:    9:namespace DBKP {
+        -:   10:
+        -:   11:/* ------------------------------------------------------ 记录内字段偏移 */
+        -:   12:enum RecOffset {
+        -:   13:    RO_MAGIC = 0,   RO_TYPE = 4,    RO_FLAGS = 5,   RO_PATHLEN = 6,  RO_LINKLEN = 8,
+        -:   14:    RO_MODE = 10,   RO_UID = 14,    RO_GID = 18,
+        -:   15:    RO_MTIME = 22,  RO_MTIMENS = 30, RO_ATIME = 38,  RO_ATIMENS = 46, RO_CTIME = 54,
+        -:   16:    RO_INO = 62,    RO_NLINK = 70,  RO_DEV = 74,    RO_MAJOR = 78,   RO_MINOR = 82,
+        -:   17:    RO_SIZE = 86,   RO_STORED = 94, RO_CRC = 102,
+        -:   18:    RO_COMP = 110,  RO_CRYPTO = 111, RO_RSVD16 = 112,
+        -:   19:    RO_PATH = 114,  RO_LINK = 274,  RO_FREE = 370,
+        -:   20:};
+        -:   21:
+function _ZN4DBKP10appendLE16ERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEt called 0 returned 0% blocks executed 0%
+    #####:   22:void appendLE16(std::string& buf, uint16_t v) {
+    #####:   23:    buf.push_back(char(v & 0xFF)); buf.push_back(char((v >> 8) & 0xFF));
+call    0 never executed
+call    1 never executed
+    #####:   24:}
+function _ZN4DBKP10appendLE32ERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEj called 1 returned 100% blocks executed 100%
+        1:   25:void appendLE32(std::string& buf, uint32_t v) {
+        5:   26:    for (int i = 0; i < 4; ++i) buf.push_back(char((v >> (8 * i)) & 0xFF));
+branch  0 taken 4 (fallthrough)
+branch  1 taken 1
+call    2 returned 4
+        1:   27:}
+function _ZN4DBKP10appendLE64ERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEy called 1 returned 100% blocks executed 100%
+        1:   28:void appendLE64(std::string& buf, uint64_t v) {
+        9:   29:    for (int i = 0; i < 8; ++i) buf.push_back(char((v >> (8 * i)) & 0xFF));
+branch  0 taken 8 (fallthrough)
+branch  1 taken 1
+call    2 returned 8
+        1:   30:}
+function _ZN4DBKP8readLE16EPKh called 2601 returned 100% blocks executed 100%
+     2601:   31:uint16_t readLE16(const uint8_t* p) {
+     2601:   32:    return uint16_t(p[0]) | (uint16_t(p[1]) << 8);
+        -:   33:}
+function _ZN4DBKP8readLE32EPKh called 4320 returned 100% blocks executed 100%
+     4320:   34:uint32_t readLE32(const uint8_t* p) {
+     4320:   35:    uint32_t v = 0;
+    21600:   36:    for (int i = 0; i < 4; ++i) v |= uint32_t(p[i]) << (8 * i);
+branch  0 taken 17280 (fallthrough)
+branch  1 taken 4320
+     4320:   37:    return v;
+        -:   38:}
+function _ZN4DBKP8readLE64EPKh called 5783 returned 100% blocks executed 100%
+     5783:   39:uint64_t readLE64(const uint8_t* p) {
+     5783:   40:    uint64_t v = 0;
+    52047:   41:    for (int i = 0; i < 8; ++i) v |= uint64_t(p[i]) << (8 * i);
+branch  0 taken 46264 (fallthrough)
+branch  1 taken 5783
+     5783:   42:    return v;
+        -:   43:}
+        -:   44:
+        -:   45:/* ------------------------------------------------------ 通用块写入助手 */
+        -:   46:namespace {
+        -:   47:
+        -:   48:struct BlockWriter {
+        -:   49:    uint8_t* p;
+function _ZN4DBKP12_GLOBAL__N_111BlockWriter2u8Eyh called 3418 returned 100% blocks executed 100%
+     3418:   50:    void u8 (size_t off, uint8_t  v) { p[off] = v; }
+function _ZN4DBKP12_GLOBAL__N_111BlockWriter3u16Eyt called 2313 returned 100% blocks executed 100%
+     2313:   51:    void u16(size_t off, uint16_t v) { appendLE16Into(off, v); }
+call    0 returned 2313
+function _ZN4DBKP12_GLOBAL__N_111BlockWriter3u32Eyj called 4408 returned 100% blocks executed 100%
+    22040:   52:    void u32(size_t off, uint32_t v) { for (int i = 0; i < 4; ++i) p[off + i] = uint8_t((v >> (8 * i)) & 0xFF); }
+branch  0 taken 17632 (fallthrough)
+branch  1 taken 4408
+function _ZN4DBKP12_GLOBAL__N_111BlockWriter3u64Eyy called 6492 returned 100% blocks executed 100%
+    58428:   53:    void u64(size_t off, uint64_t v) { for (int i = 0; i < 8; ++i) p[off + i] = uint8_t((v >> (8 * i)) & 0xFF); }
+branch  0 taken 51936 (fallthrough)
+branch  1 taken 6492
+function _ZN4DBKP12_GLOBAL__N_111BlockWriter3rawEyRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEy called 1518 returned 100% blocks executed 100%
+     1518:   54:    void raw(size_t off, const std::string& s, size_t cap) {
+     1518:   55:        size_t n = s.size() < cap ? s.size() : cap;
+call    0 returned 1518
+branch  1 taken 1495 (fallthrough)
+branch  2 taken 23
+call    3 returned 1495
+     1518:   56:        if (n) std::memcpy(p + off, s.data(), n);
+branch  0 taken 753 (fallthrough)
+branch  1 taken 765
+call    2 returned 753
+     1518:   57:    }
+        -:   58:private:
+function _ZN4DBKP12_GLOBAL__N_111BlockWriter14appendLE16IntoEyt called 2313 returned 100% blocks executed 100%
+     2313:   59:    void appendLE16Into(size_t off, uint16_t v) {
+     2313:   60:        p[off] = uint8_t(v & 0xFF); p[off + 1] = uint8_t((v >> 8) & 0xFF);
+     2313:   61:    }
+        -:   62:};
+        -:   63:
+function _ZN4DBKP12_GLOBAL__N_19zeroBlockEPh called 685 returned 100% blocks executed 100%
+      685:   64:void zeroBlock(uint8_t* block) { std::memset(block, 0, BLOCK_SIZE); }
+        -:   65:
+        -:   66:} /* anonymous namespace */
+        -:   67:
+        -:   68:/* ------------------------------------------------------ 归档卷标 */
+function _ZN4DBKP19encodeArchiveHeaderERKNS_13ArchiveHeaderERSt6vectorIhSaIhEE called 265 returned 100% blocks executed 97%
+      265:   69:ErrCode encodeArchiveHeader(const ArchiveHeader& hdr, std::vector<uint8_t>& out512) {
+        -:   70:    /* sha256 归档带第二块（存整卷摘要）；其余模式维持旧布局 512B，
+        -:   71:       新旧归档在 payloadOffset / headerSize 两个字段里自描述，读取端不需要版本判断。
+        -:   72:       F10：加密归档再追加第三块（头部 HMAC），块位是否预留只看 headerHmac 是否为空
+        -:   73:       —— 不能按 cryptoAlg 判，否则非加密箱与既有单测的 512B/1024B 断言全会变。 */
+      265:   74:    const bool withDigest = hdr.checksum == CHK_SHA256;
+      265:   75:    const bool withHmac   = !hdr.headerHmac.empty();
+call    0 returned 265
+      265:   76:    const size_t total = BLOCK_SIZE
+      265:   77:                       + (withDigest ? BLOCK_SIZE : 0)
+branch  0 taken 10 (fallthrough)
+branch  1 taken 255
+      265:   78:                       + (withHmac   ? BLOCK_SIZE : 0);
+branch  0 taken 96 (fallthrough)
+branch  1 taken 169
+      265:   79:    out512.assign(total, 0);
+call    0 returned 265
+branch  1 taken 265 (fallthrough)
+branch  2 taken 0 (throw)
+      265:   80:    uint8_t* p = out512.data();
+call    0 returned 265
+      265:   81:    BlockWriter w{p};
+      265:   82:    w.u32(0,  hdr.magic);
+call    0 returned 265
+      265:   83:    w.u16(4,  hdr.version);
+call    0 returned 265
+branch  1 taken 265 (fallthrough)
+branch  2 taken 0 (throw)
+      265:   84:    w.u16(6,  static_cast<uint16_t>(total));   /* headerSize 与实际写出长度一致 */
+call    0 returned 265
+branch  1 taken 265 (fallthrough)
+branch  2 taken 0 (throw)
+      265:   85:    w.u8 (8,  hdr.compAlg);
+call    0 returned 265
+      265:   86:    w.u8 (9,  hdr.cryptoAlg);
+call    0 returned 265
+      265:   87:    w.u8 (10, hdr.checksum);
+call    0 returned 265
+      265:   88:    w.u8 (11, hdr.flags);
+call    0 returned 265
+      265:   89:    w.u64(12, hdr.payloadCrc);
+call    0 returned 265
+      265:   90:    w.u64(20, hdr.payloadOffset);
+call    0 returned 265
+      265:   91:    w.u64(28, hdr.payloadSize);
+call    0 returned 265
+      265:   92:    w.u64(36, hdr.rawSize);
+call    0 returned 265
+      265:   93:    w.u64(44, hdr.recordCount);
+call    0 returned 265
+      265:   94:    w.u64(52, hdr.fileCount);
+call    0 returned 265
+      265:   95:    w.u64(60, hdr.createTime);
+call    0 returned 265
+     4505:   96:    for (int i = 0; i < 16; ++i) p[68 + i] = hdr.salt[i];
+branch  0 taken 4240 (fallthrough)
+branch  1 taken 265
+      265:   97:    w.u16(84, hdr.kdfRounds);
+call    0 returned 265
+branch  1 taken 265 (fallthrough)
+branch  2 taken 0 (throw)
+      265:   98:    w.u16(86, uint16_t(hdr.sourcePath.size() > 256 ? 256 : hdr.sourcePath.size()));
+call    0 returned 265
+branch  1 taken 264 (fallthrough)
+branch  2 taken 1
+call    3 returned 264
+call    4 returned 265
+branch  5 taken 265 (fallthrough)
+branch  6 taken 0 (throw)
+      265:   99:    w.u16(88, uint16_t(hdr.comment.size() > 160 ? 160 : hdr.comment.size()));
+call    0 returned 265
+branch  1 taken 264 (fallthrough)
+branch  2 taken 1
+call    3 returned 264
+call    4 returned 265
+branch  5 taken 265 (fallthrough)
+branch  6 taken 0 (throw)
+      265:  100:    w.raw(90, hdr.sourcePath, 256);   /* 90..345  */
+call    0 returned 265
+      265:  101:    w.raw(346, hdr.comment, 166);     /* 346..511 */
+call    0 returned 265
+      265:  102:    if (withDigest) {
+branch  0 taken 10 (fallthrough)
+branch  1 taken 255
+        -:  103:        /* 扩展块（文件偏移 512..1023）：前 4 字节写幻数（和第一块同一个
+        -:  104:           ARCHIVE_MAGIC，供读取端识别“这确实是摘要块而非数据块”），
+        -:  105:           紧接的 32 字节才是整卷 SHA-256 摘要。 */
+       10:  106:        uint8_t* e = p + BLOCK_SIZE;
+       10:  107:        e[0] = static_cast<uint8_t>(ARCHIVE_MAGIC & 0xFF);
+       10:  108:        e[1] = static_cast<uint8_t>((ARCHIVE_MAGIC >> 8) & 0xFF);
+       10:  109:        e[2] = static_cast<uint8_t>((ARCHIVE_MAGIC >> 16) & 0xFF);
+       10:  110:        e[3] = static_cast<uint8_t>((ARCHIVE_MAGIC >> 24) & 0xFF);
+       10:  111:        const size_t n = hdr.payloadDigest.size() < ARCHIVE_DIGEST_SIZE
+call    0 returned 10
+       10:  112:                       ? hdr.payloadDigest.size() : ARCHIVE_DIGEST_SIZE;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 6
+call    2 returned 4
+       10:  113:        if (n) std::memcpy(e + 4, hdr.payloadDigest.data(), n);
+branch  0 taken 6 (fallthrough)
+branch  1 taken 4
+call    2 returned 6
+        -:  114:    }
+      265:  115:    if (withHmac) {
+branch  0 taken 96 (fallthrough)
+branch  1 taken 169
+        -:  116:        /* F10 头部 HMAC 块：布局仿摘要块 —— 前 4 字节幻数回显，紧接 32 字节
+        -:  117:           HMAC-SHA256，块内其余字节保持零。该块自身不在 HMAC 覆盖范围内，
+        -:  118:           所以调用方算 HMAC 时传的是"还没追加本块"的头部图像。 */
+       96:  119:        uint8_t* e = p + (withDigest ? ARCHIVE_HEADER_EXT : BLOCK_SIZE);
+branch  0 taken 6 (fallthrough)
+branch  1 taken 90
+       96:  120:        e[0] = static_cast<uint8_t>(ARCHIVE_HEADER_HMAC_TAG & 0xFF);
+       96:  121:        e[1] = static_cast<uint8_t>((ARCHIVE_HEADER_HMAC_TAG >> 8) & 0xFF);
+       96:  122:        e[2] = static_cast<uint8_t>((ARCHIVE_HEADER_HMAC_TAG >> 16) & 0xFF);
+       96:  123:        e[3] = static_cast<uint8_t>((ARCHIVE_HEADER_HMAC_TAG >> 24) & 0xFF);
+       96:  124:        const size_t n = hdr.headerHmac.size() < ARCHIVE_HEADER_HMAC_SIZE
+call    0 returned 96
+      96*:  125:                       ? hdr.headerHmac.size() : ARCHIVE_HEADER_HMAC_SIZE;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 96
+call    2 never executed
+       96:  126:        if (n) std::memcpy(e + 4, hdr.headerHmac.data(), n);
+branch  0 taken 96 (fallthrough)
+branch  1 taken 0
+call    2 returned 96
+        -:  127:    }
+      265:  128:    return E_OK;
+        -:  129:}
+        -:  130:
+function _ZN4DBKP19decodeArchiveHeaderEPKhRNS_13ArchiveHeaderES1_ called 306 returned 100% blocks executed 98%
+      306:  131:ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr, const uint8_t* ext512) {
+      306:  132:    if (readLE32(in512) != ARCHIVE_MAGIC) return E_INVALID_HEADER_RECORD;
+call    0 returned 306
+branch  1 taken 7 (fallthrough)
+branch  2 taken 299
+      299:  133:    hdr.magic         = readLE32(in512 + 0);
+call    0 returned 299
+      299:  134:    hdr.version       = readLE16(in512 + 4);
+call    0 returned 299
+      299:  135:    hdr.headerSize    = readLE16(in512 + 6);
+call    0 returned 299
+      299:  136:    hdr.compAlg       = in512[8];
+      299:  137:    hdr.cryptoAlg     = in512[9];
+      299:  138:    hdr.checksum      = in512[10];
+      299:  139:    hdr.flags         = in512[11];
+      299:  140:    hdr.payloadCrc    = readLE64(in512 + 12);
+call    0 returned 299
+      299:  141:    hdr.payloadOffset = readLE64(in512 + 20);
+call    0 returned 299
+      299:  142:    hdr.payloadSize   = readLE64(in512 + 28);
+call    0 returned 299
+      299:  143:    hdr.rawSize       = readLE64(in512 + 36);
+call    0 returned 299
+      299:  144:    hdr.recordCount   = readLE64(in512 + 44);
+call    0 returned 299
+      299:  145:    hdr.fileCount     = readLE64(in512 + 52);
+call    0 returned 299
+      299:  146:    hdr.createTime    = readLE64(in512 + 60);
+call    0 returned 299
+     5083:  147:    for (int i = 0; i < 16; ++i) hdr.salt[i] = in512[68 + i];
+branch  0 taken 4784 (fallthrough)
+branch  1 taken 299
+      299:  148:    hdr.kdfRounds     = readLE16(in512 + 84);
+call    0 returned 299
+      299:  149:    uint16_t srcLen   = readLE16(in512 + 86);
+call    0 returned 299
+      299:  150:    uint16_t comLen   = readLE16(in512 + 88);
+call    0 returned 299
+      299:  151:    if (srcLen > 256 || comLen > 166) return E_INVALID_HEADER_RECORD;
+branch  0 taken 298 (fallthrough)
+branch  1 taken 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 297
+      297:  152:    hdr.sourcePath.assign(reinterpret_cast<const char*>(in512 + 90), srcLen);
+call    0 returned 297
+      297:  153:    hdr.comment.assign(reinterpret_cast<const char*>(in512 + 346), comLen);
+call    0 returned 297
+      297:  154:    hdr.payloadDigest.clear();
+call    0 returned 297
+      297:  155:    hdr.headerHmac.clear();
+call    0 returned 297
+      297:  156:    const bool withDigest = hdr.checksum == CHK_SHA256;
+        -:  157:    /* F10：扩展区长度由 headerSize 自描述（512 的整数倍），摘要块在前、HMAC 块在后。 */
+      297:  158:    if (hdr.headerSize < BLOCK_SIZE || (hdr.headerSize % BLOCK_SIZE) != 0)
+branch  0 taken 296 (fallthrough)
+branch  1 taken 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 295
+        2:  159:        return E_INVALID_HEADER_RECORD;
+      295:  160:    const size_t extLen  = hdr.headerSize - BLOCK_SIZE;
+      295:  161:    const size_t hmacOff = withDigest ? BLOCK_SIZE : 0;
+branch  0 taken 15 (fallthrough)
+branch  1 taken 280
+      295:  162:    if (extLen > 0 && !ext512) return E_INVALID_HEADER_RECORD; /* 声明了扩展块却没给：卷标不完整 */
+branch  0 taken 114 (fallthrough)
+branch  1 taken 181
+branch  2 taken 1 (fallthrough)
+branch  3 taken 113
+      294:  163:    if (withDigest) {
+branch  0 taken 14 (fallthrough)
+branch  1 taken 280
+      14*:  164:        if (extLen < BLOCK_SIZE) return E_INVALID_HEADER_RECORD;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 14
+       14:  165:        if (readLE32(ext512) != ARCHIVE_MAGIC) return E_INVALID_HEADER_RECORD; /* 幻数回显，防把数据块当摘要块 */
+call    0 returned 14
+branch  1 taken 1 (fallthrough)
+branch  2 taken 13
+       13:  166:        hdr.payloadDigest.assign(ext512 + 4, ext512 + 4 + ARCHIVE_DIGEST_SIZE);
+call    0 returned 13
+        -:  167:    }
+      293:  168:    if (extLen >= hmacOff + BLOCK_SIZE) {
+branch  0 taken 107 (fallthrough)
+branch  1 taken 186
+      107:  169:        const uint8_t* h = ext512 + hmacOff;
+      107:  170:        if (readLE32(h) != ARCHIVE_HEADER_HMAC_TAG) return E_INVALID_HEADER_RECORD;
+call    0 returned 107
+branch  1 taken 2 (fallthrough)
+branch  2 taken 105
+      105:  171:        hdr.headerHmac.assign(h + 4, h + 4 + ARCHIVE_HEADER_HMAC_SIZE);
+call    0 returned 105
+        -:  172:    }
+      291:  173:    return E_OK;
+        -:  174:}
+        -:  175:
+        -:  176:/* ------------------------------------------------------ 文件记录写入 */
+        -:  177:namespace {
+        -:  178:
+        -:  179:/** 写一条主记录（path/link 的内联槽位由调用方裁好） */
+function _ZN4DBKP12_GLOBAL__N_115writeMainRecordEPhRKNS_10FileRecordERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESC_b called 494 returned 100% blocks executed 100%
+      494:  180:void writeMainRecord(uint8_t* block, const FileRecord& rec,
+        -:  181:                     const std::string& inlinePath, const std::string& inlineLink,
+        -:  182:                     bool hasExtend) {
+      494:  183:    zeroBlock(block);
+call    0 returned 494
+      494:  184:    BlockWriter w{block};
+      494:  185:    w.u32(RO_MAGIC, RECORD_MAGIC);
+call    0 returned 494
+      494:  186:    w.u8 (RO_TYPE, uint8_t(rec.type));
+call    0 returned 494
+      494:  187:    uint8_t flags = rec.flags;
+      494:  188:    if (hasExtend) flags |= RF_HAS_EXTEND;
+branch  0 taken 20 (fallthrough)
+branch  1 taken 474
+      494:  189:    w.u8 (RO_FLAGS, flags);
+call    0 returned 494
+      494:  190:    w.u16(RO_PATHLEN, uint16_t(rec.path.size()));
+call    0 returned 494
+call    1 returned 494
+branch  2 taken 494 (fallthrough)
+branch  3 taken 0 (throw)
+      494:  191:    w.u16(RO_LINKLEN, uint16_t(rec.link.size()));
+call    0 returned 494
+call    1 returned 494
+branch  2 taken 494 (fallthrough)
+branch  3 taken 0 (throw)
+      494:  192:    w.u32(RO_MODE, rec.mode);
+call    0 returned 494
+      494:  193:    w.u32(RO_UID, rec.uid);
+call    0 returned 494
+      494:  194:    w.u32(RO_GID, rec.gid);
+call    0 returned 494
+      494:  195:    w.u64(RO_MTIME, uint64_t(rec.mtimeSec));
+call    0 returned 494
+      494:  196:    w.u64(RO_MTIMENS, uint64_t(rec.mtimeNSec));
+call    0 returned 494
+      494:  197:    w.u64(RO_ATIME, uint64_t(rec.atimeSec));
+call    0 returned 494
+      494:  198:    w.u64(RO_ATIMENS, uint64_t(rec.atimeNSec));
+call    0 returned 494
+      494:  199:    w.u64(RO_CTIME, uint64_t(rec.ctimeSec));
+call    0 returned 494
+      494:  200:    w.u64(RO_INO, rec.ino);
+call    0 returned 494
+      494:  201:    w.u32(RO_NLINK, rec.nlink);
+call    0 returned 494
+      494:  202:    w.u32(RO_DEV, rec.dev);
+call    0 returned 494
+      494:  203:    w.u32(RO_MAJOR, rec.majorNum);
+call    0 returned 494
+      494:  204:    w.u32(RO_MINOR, rec.minorNum);
+call    0 returned 494
+      494:  205:    w.u64(RO_SIZE, uint64_t(rec.size));
+call    0 returned 494
+      494:  206:    w.u64(RO_STORED, uint64_t(rec.storedSize));
+call    0 returned 494
+      494:  207:    w.u64(RO_CRC, rec.crc);
+call    0 returned 494
+      494:  208:    w.u8 (RO_COMP, rec.compAlg);
+call    0 returned 494
+      494:  209:    w.u8 (RO_CRYPTO, rec.cryptoAlg);
+call    0 returned 494
+      494:  210:    w.raw(RO_PATH, inlinePath, REC_INLINE_PATH);
+call    0 returned 494
+      494:  211:    w.raw(RO_LINK, inlineLink, REC_INLINE_LINK);
+call    0 returned 494
+      494:  212:}
+        -:  213:
+        -:  214:/** 写一条扩展记录：把 chunk 依次铺进 path/link/free 三段（共 398B） */
+function _ZN4DBKP12_GLOBAL__N_117writeExtendRecordEPhRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 191 returned 100% blocks executed 100%
+      191:  215:void writeExtendRecord(uint8_t* block, const std::string& chunk) {
+      191:  216:    zeroBlock(block);
+call    0 returned 191
+      191:  217:    BlockWriter w{block};
+      191:  218:    w.u32(RO_MAGIC, RECORD_MAGIC);
+call    0 returned 191
+      191:  219:    w.u8 (RO_TYPE, uint8_t(FT_EXTEND));
+call    0 returned 191
+      191:  220:    w.u8 (RO_FLAGS, RF_NONE);
+call    0 returned 191
+      191:  221:    w.u64(RO_SIZE, uint64_t(chunk.size()));
+call    0 returned 191
+call    1 returned 191
+      191:  222:    const size_t slots[3] = { RO_PATH, RO_LINK, RO_FREE };
+      191:  223:    const size_t caps[3]  = { REC_INLINE_PATH, REC_INLINE_LINK, REC_INLINE_FREE };
+      191:  224:    size_t off = 0;
+      737:  225:    for (int s = 0; s < 3 && off < chunk.size(); ++s) {
+branch  0 taken 560 (fallthrough)
+branch  1 taken 177
+call    2 returned 560
+branch  3 taken 546 (fallthrough)
+branch  4 taken 14
+branch  5 taken 546 (fallthrough)
+branch  6 taken 191
+      546:  226:        size_t n = chunk.size() - off;
+call    0 returned 546
+      546:  227:        if (n > caps[s]) n = caps[s];
+branch  0 taken 355 (fallthrough)
+branch  1 taken 191
+      546:  228:        std::memcpy(block + slots[s], chunk.data() + off, n);
+call    0 returned 546
+      546:  229:        off += n;
+        -:  230:    }
+      191:  231:}
+        -:  232:
+        -:  233:} /* anonymous namespace */
+        -:  234:
+function _ZN4DBKP12encodeRecordERKNS_10FileRecordERSt6vectorIhSaIhEE called 495 returned 100% blocks executed 79%
+      495:  235:ErrCode encodeRecord(const FileRecord& rec, std::vector<uint8_t>& out) {
+      495:  236:    if (rec.path.size() > 0xFFFF || rec.link.size() > 0xFFFF) return E_PATH_TOO_LONG;
+call    0 returned 495
+branch  1 taken 494 (fallthrough)
+branch  2 taken 1
+call    3 returned 494
+branch  4 taken 0 (fallthrough)
+branch  5 taken 494
+branch  6 taken 1 (fallthrough)
+branch  7 taken 494
+        -:  237:
+        -:  238:    /* 超出内联槽位的部分：先 path 尾巴，再 link 尾巴，顺序拼接成一条尾巴流 */
+      988:  239:    std::string tail;
+call    0 returned 494
+call    1 returned 494
+call    2 never executed
+      988:  240:    std::string inlinePath = rec.path.substr(0, REC_INLINE_PATH);
+call    0 returned 494
+branch  1 taken 494 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 494
+call    4 never executed
+      494:  241:    std::string inlineLink = rec.link.substr(0, REC_INLINE_LINK);
+call    0 returned 494
+branch  1 taken 494 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 never executed
+      494:  242:    if (rec.path.size() > REC_INLINE_PATH) tail += rec.path.substr(REC_INLINE_PATH);
+call    0 returned 494
+branch  1 taken 14 (fallthrough)
+branch  2 taken 480
+call    3 returned 14
+branch  4 taken 14 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 14
+branch  7 taken 14 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 14
+call   10 never executed
+      494:  243:    if (rec.link.size() > REC_INLINE_LINK) tail += rec.link.substr(REC_INLINE_LINK);
+call    0 returned 494
+branch  1 taken 7 (fallthrough)
+branch  2 taken 487
+call    3 returned 7
+branch  4 taken 7 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 7
+branch  7 taken 7 (fallthrough)
+branch  8 taken 0 (throw)
+call    9 returned 7
+call   10 never executed
+        -:  244:
+      685:  245:    for (size_t off = 0; off < tail.size(); off += REC_EXTEND_PAYLOAD) {
+call    0 returned 685
+branch  1 taken 191 (fallthrough)
+branch  2 taken 494
+      191:  246:        size_t before = out.size();
+call    0 returned 191
+      191:  247:        out.resize(before + BLOCK_SIZE);
+call    0 returned 191
+branch  1 taken 191 (fallthrough)
+branch  2 taken 0 (throw)
+      191:  248:        writeExtendRecord(out.data() + before, tail.substr(off, REC_EXTEND_PAYLOAD));
+call    0 returned 191
+branch  1 taken 191 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 191
+call    4 returned 191
+call    5 returned 191
+        -:  249:    }
+        -:  250:
+      494:  251:    size_t before = out.size();
+call    0 returned 494
+      494:  252:    out.resize(before + BLOCK_SIZE);
+call    0 returned 494
+branch  1 taken 494 (fallthrough)
+branch  2 taken 0 (throw)
+      494:  253:    writeMainRecord(out.data() + before, rec, inlinePath, inlineLink, !tail.empty());
+call    0 returned 494
+call    1 returned 494
+call    2 returned 494
+branch  3 taken 494 (fallthrough)
+branch  4 taken 0 (throw)
+      494:  254:    return E_OK;
+call    0 returned 494
+        -:  255:}
+        -:  256:
+function _ZN4DBKP13CRecordReader9pushBlockEPKh called 434 returned 100% blocks executed 89%
+      434:  257:ErrCode CRecordReader::pushBlock(const uint8_t* block512) {
+      434:  258:    if (readLE32(block512) != RECORD_MAGIC) return E_INVALID_HEADER_RECORD;
+call    0 returned 434
+branch  1 taken 1 (fallthrough)
+branch  2 taken 433
+      433:  259:    const uint8_t type = block512[RO_TYPE];
+        -:  260:
+      433:  261:    if (type == uint8_t(FT_EXTEND)) {
+branch  0 taken 26 (fallthrough)
+branch  1 taken 407
+       26:  262:        uint64_t n = readLE64(block512 + RO_SIZE);
+call    0 returned 26
+      26*:  263:        if (n > REC_EXTEND_PAYLOAD) return E_INVALID_HEADER_RECORD;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 26
+       26:  264:        size_t remain = size_t(n);
+       26:  265:        const size_t slots[3] = { RO_PATH, RO_LINK, RO_FREE };
+       26:  266:        const size_t caps[3]  = { REC_INLINE_PATH, REC_INLINE_LINK, REC_INLINE_FREE };
+       79:  267:        for (int s = 0; s < 3 && remain; ++s) {
+branch  0 taken 66 (fallthrough)
+branch  1 taken 13
+branch  2 taken 53 (fallthrough)
+branch  3 taken 13
+       53:  268:            size_t take = remain < caps[s] ? remain : caps[s];
+branch  0 taken 19 (fallthrough)
+branch  1 taken 34
+       53:  269:            m_extraPath.append(reinterpret_cast<const char*>(block512 + slots[s]), take);
+call    0 returned 53
+branch  1 taken 53 (fallthrough)
+branch  2 taken 0 (throw)
+       53:  270:            remain -= take;
+        -:  271:        }
+       26:  272:        return E_OK;
+        -:  273:    }
+        -:  274:
+      814:  275:    FileRecord rec;
+call    0 returned 407
+call    1 returned 407
+call    2 never executed
+      407:  276:    rec.type       = char(type);
+      407:  277:    rec.flags      = block512[RO_FLAGS];
+      407:  278:    const uint16_t pathLen = readLE16(block512 + RO_PATHLEN);
+call    0 returned 407
+      407:  279:    const uint16_t linkLen = readLE16(block512 + RO_LINKLEN);
+call    0 returned 407
+      407:  280:    rec.mode       = readLE32(block512 + RO_MODE);
+call    0 returned 407
+      407:  281:    rec.uid        = readLE32(block512 + RO_UID);
+call    0 returned 407
+      407:  282:    rec.gid        = readLE32(block512 + RO_GID);
+call    0 returned 407
+      407:  283:    rec.mtimeSec   = int64_t(readLE64(block512 + RO_MTIME));
+call    0 returned 407
+      407:  284:    rec.mtimeNSec  = int64_t(readLE64(block512 + RO_MTIMENS));
+call    0 returned 407
+      407:  285:    rec.atimeSec   = int64_t(readLE64(block512 + RO_ATIME));
+call    0 returned 407
+      407:  286:    rec.atimeNSec  = int64_t(readLE64(block512 + RO_ATIMENS));
+call    0 returned 407
+      407:  287:    rec.ctimeSec   = int64_t(readLE64(block512 + RO_CTIME));
+call    0 returned 407
+      407:  288:    rec.ino        = readLE64(block512 + RO_INO);
+call    0 returned 407
+      407:  289:    rec.nlink      = readLE32(block512 + RO_NLINK);
+call    0 returned 407
+      407:  290:    rec.dev        = readLE32(block512 + RO_DEV);
+call    0 returned 407
+      407:  291:    rec.majorNum   = readLE32(block512 + RO_MAJOR);
+call    0 returned 407
+      407:  292:    rec.minorNum   = readLE32(block512 + RO_MINOR);
+call    0 returned 407
+      407:  293:    rec.size       = int64_t(readLE64(block512 + RO_SIZE));
+call    0 returned 407
+      407:  294:    rec.storedSize = int64_t(readLE64(block512 + RO_STORED));
+call    0 returned 407
+      407:  295:    rec.crc        = readLE64(block512 + RO_CRC);
+call    0 returned 407
+      407:  296:    rec.compAlg    = block512[RO_COMP];
+      407:  297:    rec.cryptoAlg  = block512[RO_CRYPTO];
+        -:  298:
+      407:  299:    const size_t inlinePath = pathLen < REC_INLINE_PATH ? pathLen : REC_INLINE_PATH;
+      407:  300:    rec.path.assign(reinterpret_cast<const char*>(block512 + RO_PATH), inlinePath);
+call    0 returned 407
+branch  1 taken 407 (fallthrough)
+branch  2 taken 0 (throw)
+      407:  301:    const size_t inlineLink = linkLen < REC_INLINE_LINK ? linkLen : REC_INLINE_LINK;
+      407:  302:    rec.link.assign(reinterpret_cast<const char*>(block512 + RO_LINK), inlineLink);
+call    0 returned 407
+branch  1 taken 407 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  303:
+      407:  304:    if (rec.flags & RF_HAS_EXTEND) {
+branch  0 taken 18 (fallthrough)
+branch  1 taken 389
+        -:  305:        /* 尾巴流 = path 超出部分 + link 超出部分 */
+       18:  306:        const size_t needPath = pathLen > REC_INLINE_PATH ? pathLen - REC_INLINE_PATH : 0;
+branch  0 taken 12 (fallthrough)
+branch  1 taken 6
+       18:  307:        const size_t needLink = linkLen > REC_INLINE_LINK ? linkLen - REC_INLINE_LINK : 0;
+branch  0 taken 7 (fallthrough)
+branch  1 taken 11
+      18*:  308:        if (m_extraPath.size() < needPath + needLink) return E_TRUNCATED_ARCHIVE;
+call    0 returned 18
+branch  1 taken 0 (fallthrough)
+branch  2 taken 18
+       18:  309:        rec.path.append(m_extraPath, 0, needPath);
+call    0 returned 18
+branch  1 taken 18 (fallthrough)
+branch  2 taken 0 (throw)
+       18:  310:        rec.link.append(m_extraPath, needPath, needLink);
+call    0 returned 18
+branch  1 taken 18 (fallthrough)
+branch  2 taken 0 (throw)
+       18:  311:        m_extraPath.clear();
+call    0 returned 18
+      389:  312:    } else if (!m_extraPath.empty()) {
+call    0 returned 389
+branch  1 taken 0 (fallthrough)
+branch  2 taken 389
+    #####:  313:        m_extraPath.clear();
+call    0 never executed
+    #####:  314:        return E_INVALID_HEADER_RECORD;   /* 扩展记录后面缺少主记录 */
+        -:  315:    }
+        -:  316:
+      407:  317:    m_rec   = rec;
+call    0 returned 407
+branch  1 taken 407 (fallthrough)
+branch  2 taken 0 (throw)
+      407:  318:    m_ready = true;
+      407:  319:    return E_OK;
+        -:  320:}
+        -:  321:
+function _ZN4DBKP13CRecordReader4takeEv called 407 returned 100% blocks executed 100%
+      407:  322:FileRecord CRecordReader::take() {
+      407:  323:    m_ready = false;
+      407:  324:    return std::move(m_rec);
+call    0 returned 407
+call    1 returned 407
+        -:  325:}
+        -:  326:
+function _ZN4DBKP18decodeRecordBlocksERKSt6vectorIhSaIhEERNS_10FileRecordE called 27 returned 100% blocks executed 84%
+       27:  327:ErrCode decodeRecordBlocks(const std::vector<uint8_t>& bytes, FileRecord& rec) {
+      27*:  328:    if (bytes.empty() || bytes.size() % BLOCK_SIZE) return E_INVALID_DATA_RECORD;
+call    0 returned 27
+branch  1 taken 27 (fallthrough)
+branch  2 taken 0
+call    3 returned 27
+branch  4 taken 0 (fallthrough)
+branch  5 taken 27
+branch  6 taken 0 (fallthrough)
+branch  7 taken 27
+       54:  329:    CRecordReader reader;
+call    0 returned 27
+call    1 returned 27
+call    2 never executed
+       50:  330:    for (size_t off = 0; off < bytes.size(); off += BLOCK_SIZE) {
+call    0 returned 50
+branch  1 taken 49 (fallthrough)
+branch  2 taken 1
+       49:  331:        ErrCode e = reader.pushBlock(bytes.data() + off);
+call    0 returned 49
+call    1 returned 49
+branch  2 taken 49 (fallthrough)
+branch  3 taken 0 (throw)
+       74:  332:        if (DBKP_IS_ERR(e)) return e;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 48
+       48:  333:        if (reader.hasRecord()) { rec = reader.take(); return E_OK; }
+call    0 returned 48
+branch  1 taken 25 (fallthrough)
+branch  2 taken 23
+call    3 returned 25
+call    4 returned 25
+call    5 returned 25
+        -:  334:    }
+        1:  335:    return E_TRUNCATED_ARCHIVE;
+        -:  336:}
+        -:  337:
+        -:  338:} /* namespace DBKP */
+        -:  339:
+        -:  340:
+        -:  341:

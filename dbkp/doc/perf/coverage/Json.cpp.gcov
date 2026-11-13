@@ -1,0 +1,1201 @@
+        -:    0:Source:src/Web/Json.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/Json.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Web/Json.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Json.cpp  -- 见 Json.h 的设计说明
+        -:    3: * ==========================================================================*/
+        -:    4:#include "Web/Json.h"
+        -:    5:
+        -:    6:#include <cmath>
+        -:    7:#include <cstdio>
+        -:    8:#include <cstdlib>
+        -:    9:
+        -:   10:namespace DBKP {
+        -:   11:
+        -:   12:namespace {
+        -:   13:
+        -:   14:const int kMaxDepth = 64;
+        -:   15:
+function _ZN4DBKP12_GLOBAL__N_18indentToERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEii called 0 returned 0% blocks executed 0%
+    #####:   16:void indentTo(std::string& oss, int indent, int depth) {
+    #####:   17:    if (indent <= 0) return;
+branch  0 never executed
+branch  1 never executed
+    #####:   18:    oss.append(static_cast<std::size_t>(indent * depth), ' ');
+call    0 never executed
+        -:   19:}
+        -:   20:
+function _ZN4DBKP12_GLOBAL__N_14isWsEc called 75 returned 100% blocks executed 88%
+      75*:   21:bool isWs(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+branch  0 taken 75 (fallthrough)
+branch  1 taken 0
+branch  2 taken 75 (fallthrough)
+branch  3 taken 0
+branch  4 taken 75 (fallthrough)
+branch  5 taken 0
+branch  6 taken 0 (fallthrough)
+branch  7 taken 75
+function _ZN4DBKP12_GLOBAL__N_17isDigitEc called 14 returned 100% blocks executed 100%
+       14:   22:bool isDigit(char c) { return c >= '0' && c <= '9'; }
+branch  0 taken 9 (fallthrough)
+branch  1 taken 5
+branch  2 taken 8 (fallthrough)
+branch  3 taken 1
+        -:   23:
+        -:   24:} /* anonymous namespace */
+        -:   25:
+        -:   26:/* ------------------------------------------------------------ 构造函数 */
+function _ZN4DBKP10CJsonValue10makeObjectEv called 7 returned 100% blocks executed 100%
+        7:   27:CJsonValue CJsonValue::makeObject() { return CJsonValue(KIND_OBJECT); }
+call    0 returned 7
+function _ZN4DBKP10CJsonValue9makeArrayEv called 1 returned 100% blocks executed 100%
+        1:   28:CJsonValue CJsonValue::makeArray()  { return CJsonValue(KIND_ARRAY); }
+call    0 returned 1
+        -:   29:
+function _ZN4DBKP10CJsonValue10makeStringERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 13 returned 100% blocks executed 83%
+       13:   30:CJsonValue CJsonValue::makeString(const std::string& s) {
+       13:   31:    CJsonValue v(KIND_STRING);
+call    0 returned 13
+       13:   32:    v.m_str = s;
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+       13:   33:    return v;
+        -:   34:}
+function _ZN4DBKP10CJsonValue7makeIntEx called 11 returned 100% blocks executed 100%
+       11:   35:CJsonValue CJsonValue::makeInt(int64_t n) {
+       11:   36:    CJsonValue v(KIND_INT);
+call    0 returned 11
+       11:   37:    v.m_num = n;
+       11:   38:    return v;
+        -:   39:}
+function _ZN4DBKP10CJsonValue10makeDoubleEd called 2 returned 100% blocks executed 100%
+        2:   40:CJsonValue CJsonValue::makeDouble(double d) {
+        2:   41:    CJsonValue v(KIND_DOUBLE);
+call    0 returned 2
+        2:   42:    v.m_dnum = d;
+        2:   43:    return v;
+        -:   44:}
+function _ZN4DBKP10CJsonValue8makeBoolEb called 2 returned 100% blocks executed 100%
+        2:   45:CJsonValue CJsonValue::makeBool(bool b) {
+        2:   46:    CJsonValue v(KIND_BOOL);
+call    0 returned 2
+        2:   47:    v.m_bool = b;
+        2:   48:    return v;
+        -:   49:}
+        -:   50:
+        -:   51:/* -------------------------------------------------------------- 读取值 */
+function _ZNK4DBKP10CJsonValue6asBoolEb called 1 returned 100% blocks executed 50%
+        1:   52:bool CJsonValue::asBool(bool def) const {
+        1:   53:    if (m_kind == KIND_BOOL) return m_bool;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+    #####:   54:    if (m_kind == KIND_INT)  return m_num != 0;
+branch  0 never executed
+branch  1 never executed
+    #####:   55:    return def;
+        -:   56:}
+        -:   57:
+function _ZNK4DBKP10CJsonValue5asIntEx called 2 returned 100% blocks executed 14%
+        2:   58:int64_t CJsonValue::asInt(int64_t def) const {
+        2:   59:    if (m_kind == KIND_INT)    return m_num;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+    #####:   60:    if (m_kind == KIND_DOUBLE) return static_cast<int64_t>(m_dnum);
+branch  0 never executed
+branch  1 never executed
+    #####:   61:    if (m_kind == KIND_BOOL)   return m_bool ? 1 : 0;
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:   62:    if (m_kind == KIND_STRING) {
+branch  0 never executed
+branch  1 never executed
+        -:   63:        /* 浏览器表单里数字常是字符串：宽容一次 */
+    #####:   64:        char* end = nullptr;
+    #####:   65:        const long long v = std::strtoll(m_str.c_str(), &end, 10);
+call    0 never executed
+call    1 never executed
+    #####:   66:        if (end && end != m_str.c_str()) return static_cast<int64_t>(v);
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+        -:   67:    }
+    #####:   68:    return def;
+        -:   69:}
+        -:   70:
+function _ZNK4DBKP10CJsonValue8asDoubleEd called 1 returned 100% blocks executed 50%
+        1:   71:double CJsonValue::asDouble(double def) const {
+        1:   72:    if (m_kind == KIND_DOUBLE) return m_dnum;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+    #####:   73:    if (m_kind == KIND_INT)    return static_cast<double>(m_num);
+branch  0 never executed
+branch  1 never executed
+    #####:   74:    return def;
+        -:   75:}
+        -:   76:
+function _ZNK4DBKP10CJsonValue8asStringERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 7 returned 100% blocks executed 24%
+        7:   77:std::string CJsonValue::asString(const std::string& def) const {
+        7:   78:    if (m_kind == KIND_STRING) return m_str;
+branch  0 taken 7 (fallthrough)
+branch  1 taken 0
+call    2 returned 7
+    #####:   79:    if (m_kind == KIND_INT)    return std::to_string(m_num);
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+    #####:   80:    if (m_kind == KIND_BOOL)   return m_bool ? "true" : "false";
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+call    8 never executed
+call    9 never executed
+    #####:   81:    return def;
+call    0 never executed
+        -:   82:}
+        -:   83:
+        -:   84:/* ---------------------------------------------------------- 对象访问 */
+function _ZN4DBKP10CJsonValueixERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 29 returned 100% blocks executed 76%
+       29:   85:CJsonValue& CJsonValue::operator[](const std::string& key) {
+      29*:   86:    if (m_kind != KIND_OBJECT) { m_kind = KIND_OBJECT; m_items.clear(); }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 29
+call    2 never executed
+       68:   87:    for (std::size_t i = 0; i < m_members.size(); ++i)
+call    0 returned 68
+branch  1 taken 40 (fallthrough)
+branch  2 taken 28
+       40:   88:        if (m_members[i].first == key) return m_members[i].second;
+call    0 returned 40
+call    1 returned 40
+branch  2 taken 1 (fallthrough)
+branch  3 taken 39
+call    4 returned 1
+       28:   89:    m_members.push_back(std::make_pair(key, CJsonValue()));
+call    0 returned 28
+call    1 returned 28
+branch  2 taken 28 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 28
+branch  5 taken 28 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 28
+call    8 returned 28
+call    9 never executed
+call   10 never executed
+       28:   90:    return m_members.back().second;
+call    0 returned 28
+        -:   91:}
+        -:   92:
+function _ZNK4DBKP10CJsonValue4findERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 16 returned 100% blocks executed 91%
+       16:   93:const CJsonValue* CJsonValue::find(const std::string& key) const {
+       41:   94:    for (std::size_t i = 0; i < m_members.size(); ++i)
+call    0 returned 41
+branch  1 taken 41 (fallthrough)
+branch  2 taken 0
+       41:   95:        if (m_members[i].first == key) return &m_members[i].second;
+call    0 returned 41
+call    1 returned 41
+branch  2 taken 16 (fallthrough)
+branch  3 taken 25
+call    4 returned 16
+    #####:   96:    return nullptr;
+        -:   97:}
+        -:   98:
+function _ZNK4DBKP10CJsonValue9getStringERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS6_ called 0 returned 0% blocks executed 0%
+    #####:   99:bool CJsonValue::getString(const std::string& key, std::string& out) const {
+    #####:  100:    const CJsonValue* v = find(key);
+call    0 never executed
+    #####:  101:    if (!v || !v->isString()) return false;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+    #####:  102:    out = v->m_str;
+call    0 never executed
+    #####:  103:    return true;
+        -:  104:}
+        -:  105:
+function _ZNK4DBKP10CJsonValue6getIntERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERx called 0 returned 0% blocks executed 0%
+    #####:  106:bool CJsonValue::getInt(const std::string& key, int64_t& out) const {
+    #####:  107:    const CJsonValue* v = find(key);
+call    0 never executed
+    #####:  108:    if (!v || !v->isNumber()) return false;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+    #####:  109:    out = v->asInt(0);
+call    0 never executed
+    #####:  110:    return true;
+        -:  111:}
+        -:  112:
+function _ZNK4DBKP10CJsonValue7getBoolERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERb called 0 returned 0% blocks executed 0%
+    #####:  113:bool CJsonValue::getBool(const std::string& key, bool& out) const {
+    #####:  114:    const CJsonValue* v = find(key);
+call    0 never executed
+    #####:  115:    if (!v || !(v->isBool() || v->isNumber())) return false;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+branch  6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+    #####:  116:    out = v->asBool(false);
+call    0 never executed
+    #####:  117:    return true;
+        -:  118:}
+        -:  119:
+function _ZNK4DBKP10CJsonValue6memberERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKS0_ called 0 returned 0% blocks executed 0%
+    #####:  120:const CJsonValue& CJsonValue::member(const std::string& key, const CJsonValue& def) const {
+    #####:  121:    const CJsonValue* v = find(key);
+call    0 never executed
+    #####:  122:    return v ? *v : def;
+branch  0 never executed
+branch  1 never executed
+        -:  123:}
+        -:  124:
+function _ZN4DBKP10CJsonValue6removeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 0 returned 0% blocks executed 0%
+    #####:  125:void CJsonValue::remove(const std::string& key) {
+    #####:  126:    for (std::size_t i = 0; i < m_members.size(); ++i) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  127:        if (m_members[i].first == key) { m_members.erase(m_members.begin() + i); return; }
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+        -:  128:    }
+        -:  129:}
+        -:  130:
+        -:  131:/* ---------------------------------------------------------- 数组访问 */
+function _ZN4DBKP10CJsonValue9push_backERKS0_ called 6 returned 100% blocks executed 75%
+        6:  132:void CJsonValue::push_back(const CJsonValue& v) {
+       6*:  133:    if (m_kind != KIND_ARRAY) { m_kind = KIND_ARRAY; m_members.clear(); }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 6
+call    2 never executed
+        6:  134:    m_items.push_back(v);
+call    0 returned 6
+        6:  135:}
+        -:  136:
+function _ZNK4DBKP10CJsonValue2atEy called 0 returned 0% blocks executed 0%
+    #####:  137:const CJsonValue& CJsonValue::at(std::size_t i) const {
+    #####:  138:    static const CJsonValue kNull;
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+call    5 never executed
+call    6 never executed
+call    7 never executed
+    #####:  139:    if (m_kind == KIND_ARRAY && i < m_items.size()) return m_items[i];
+branch  0 never executed
+branch  1 never executed
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+    #####:  140:    return kNull;
+        -:  141:}
+        -:  142:
+function _ZNK4DBKP10CJsonValue2atERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 16 returned 100% blocks executed 92%
+       16:  143:const CJsonValue& CJsonValue::at(const std::string& key) const {
+       16:  144:    static const CJsonValue kNull;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 15
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+call    5 returned 1
+call    6 returned 1
+call    7 returned 1
+       16:  145:    const CJsonValue* v = find(key);
+call    0 returned 16
+      16*:  146:    return v ? *v : kNull;     /* handler 里 j.at("data").at("state") 这类链式取值不炸 */
+branch  0 taken 16 (fallthrough)
+branch  1 taken 0
+        -:  147:}
+        -:  148:
+function _ZN4DBKP10CJsonValue11removeNullsEv called 0 returned 0% blocks executed 0%
+    #####:  149:void CJsonValue::removeNulls() {
+    #####:  150:    if (m_kind != KIND_OBJECT) return;
+branch  0 never executed
+branch  1 never executed
+    #####:  151:    for (std::size_t i = 0; i < m_members.size(); ) {
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  152:        if (m_members[i].second.isNull()) m_members.erase(m_members.begin() + i);
+call    0 never executed
+call    1 never executed
+branch  2 never executed
+branch  3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+    #####:  153:        else ++i;
+        -:  154:    }
+        -:  155:}
+        -:  156:
+        -:  157:/* ------------------------------------------------------------ 序列化 */
+function _ZN4DBKP10CJsonValue6escapeERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 23 returned 100% blocks executed 42%
+       23:  158:std::string CJsonValue::escape(const std::string& text) {
+       23:  159:    std::string out;
+call    0 returned 23
+       23:  160:    out.reserve(text.size() + 8);
+call    0 returned 23
+call    1 returned 23
+branch  2 taken 23 (fallthrough)
+branch  3 taken 0 (throw)
+      150:  161:    for (std::size_t i = 0; i < text.size(); ++i) {
+call    0 returned 150
+branch  1 taken 127 (fallthrough)
+branch  2 taken 23
+      127:  162:        const unsigned char c = static_cast<unsigned char>(text[i]);
+call    0 returned 127
+      127:  163:        switch (c) {
+branch  0 taken 0
+branch  1 taken 0
+branch  2 taken 0
+branch  3 taken 0
+branch  4 taken 0
+branch  5 taken 0
+branch  6 taken 0
+branch  7 taken 127
+    #####:  164:        case '"':  out += "\\\""; break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  165:        case '\\': out += "\\\\"; break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  166:        case '\b': out += "\\b";  break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  167:        case '\f': out += "\\f";  break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  168:        case '\n': out += "\\n";  break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  169:        case '\r': out += "\\r";  break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  170:        case '\t': out += "\\t";  break;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+      127:  171:        default:
+      127:  172:            if (c < 0x20) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 127
+        -:  173:                char buf[8];
+    #####:  174:                std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  175:                out += buf;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+        -:  176:            } else {
+      127:  177:                out += static_cast<char>(c);   /* UTF-8 字节原样输出 */
+call    0 returned 127
+branch  1 taken 127 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  178:            }
+        -:  179:        }
+        -:  180:    }
+       23:  181:    return out;
+        -:  182:}
+        -:  183:
+function _ZNK4DBKP10CJsonValue6dumpToERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEii called 23 returned 100% blocks executed 73%
+       23:  184:void CJsonValue::dumpTo(std::string& oss, int indent, int depth) const {
+       23:  185:    const bool pretty = indent > 0;
+       23:  186:    switch (m_kind) {
+branch  0 taken 0
+branch  1 taken 1
+branch  2 taken 6
+branch  3 taken 1
+branch  4 taken 7
+branch  5 taken 1
+branch  6 taken 7
+branch  7 taken 0
+    #####:  187:    case KIND_NULL: oss += "null"; break;
+call    0 never executed
+       1*:  188:    case KIND_BOOL: oss += m_bool ? "true" : "false"; break;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+call    2 returned 1
+        6:  189:    case KIND_INT:  oss += std::to_string(m_num); break;
+call    0 returned 6
+call    1 returned 6
+branch  2 taken 6 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 6
+call    5 never executed
+call    6 never executed
+        1:  190:    case KIND_DOUBLE: {
+        -:  191:        char buf[40];
+        1:  192:        std::snprintf(buf, sizeof(buf), "%.15g", m_dnum);
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  193:        oss += buf;
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  194:        break;
+        -:  195:    }
+        7:  196:    case KIND_STRING: oss += '"'; oss += escape(m_str); oss += '"'; break;
+call    0 returned 7
+call    1 returned 7
+call    2 returned 7
+branch  3 taken 7 (fallthrough)
+branch  4 taken 0 (throw)
+call    5 returned 7
+call    6 returned 7
+call    7 never executed
+call    8 never executed
+        1:  197:    case KIND_ARRAY:
+       1*:  198:        if (m_items.empty()) { oss += "[]"; break; }
+call    0 returned 1
+branch  1 taken 0 (fallthrough)
+branch  2 taken 1
+call    3 never executed
+        1:  199:        oss += '[';
+call    0 returned 1
+        3:  200:        for (std::size_t i = 0; i < m_items.size(); ++i) {
+call    0 returned 3
+branch  1 taken 2 (fallthrough)
+branch  2 taken 1
+        2:  201:            if (i) oss += ',';
+branch  0 taken 1 (fallthrough)
+branch  1 taken 1
+call    2 returned 1
+       2*:  202:            if (pretty) { oss += '\n'; indentTo(oss, indent, depth + 1); }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+call    2 never executed
+call    3 never executed
+        2:  203:            m_items[i].dumpTo(oss, indent, depth + 1);
+call    0 returned 2
+call    1 returned 2
+        1:  204:        }
+       1*:  205:        if (pretty) { oss += '\n'; indentTo(oss, indent, depth); }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+call    3 never executed
+        1:  206:        oss += ']';
+call    0 returned 1
+        1:  207:        break;
+        7:  208:    case KIND_OBJECT:
+       7*:  209:        if (m_members.empty()) { oss += "{}"; break; }
+call    0 returned 7
+branch  1 taken 0 (fallthrough)
+branch  2 taken 7
+call    3 never executed
+        7:  210:        oss += '{';
+call    0 returned 7
+       23:  211:        for (std::size_t i = 0; i < m_members.size(); ++i) {
+call    0 returned 23
+branch  1 taken 16 (fallthrough)
+branch  2 taken 7
+       16:  212:            if (i) oss += ',';
+branch  0 taken 9 (fallthrough)
+branch  1 taken 7
+call    2 returned 9
+      16*:  213:            if (pretty) { oss += '\n'; indentTo(oss, indent, depth + 1); }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 16
+call    2 never executed
+call    3 never executed
+       16:  214:            oss += '"'; oss += escape(m_members[i].first); oss += '"';
+call    0 returned 16
+call    1 returned 16
+call    2 returned 16
+call    3 returned 16
+branch  4 taken 16 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 16
+call    7 returned 16
+call    8 never executed
+       16:  215:            oss += ':';
+call    0 returned 16
+      16*:  216:            if (pretty) oss += ' ';
+branch  0 taken 0 (fallthrough)
+branch  1 taken 16
+call    2 never executed
+       16:  217:            m_members[i].second.dumpTo(oss, indent, depth + 1);
+call    0 returned 16
+call    1 returned 16
+        7:  218:        }
+       7*:  219:        if (pretty) { oss += '\n'; indentTo(oss, indent, depth); }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 7
+call    2 never executed
+call    3 never executed
+        7:  220:        oss += '}';
+call    0 returned 7
+        7:  221:        break;
+        -:  222:    }
+       23:  223:}
+        -:  224:
+function _ZNK4DBKP10CJsonValue4dumpB5cxx11Ei called 5 returned 100% blocks executed 83%
+        5:  225:std::string CJsonValue::dump(int indent) const {
+        5:  226:    std::string oss;
+call    0 returned 5
+        5:  227:    dumpTo(oss, indent, 0);
+call    0 returned 5
+branch  1 taken 5 (fallthrough)
+branch  2 taken 0 (throw)
+        5:  228:    return oss;
+        -:  229:}
+        -:  230:
+function _ZN4DBKP10CJsonValue6skipWsERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERy called 81 returned 100% blocks executed 80%
+       81:  231:void CJsonValue::skipWs(const std::string& s, std::size_t& i) {
+      81*:  232:    while (i < s.size() && isWs(s[i])) ++i;
+call    0 returned 81
+branch  1 taken 75 (fallthrough)
+branch  2 taken 6
+call    3 returned 75
+call    4 returned 75
+branch  5 taken 0 (fallthrough)
+branch  6 taken 75
+branch  7 taken 0 (fallthrough)
+branch  8 taken 81
+       81:  233:}
+        -:  234:
+function _ZN4DBKP10CJsonValue10appendUtf8ERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEj called 3 returned 100% blocks executed 79%
+        3:  235:void CJsonValue::appendUtf8(std::string& out, unsigned cp) {
+        3:  236:    if (cp < 0x80) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3
+    #####:  237:        out += static_cast<char>(cp);
+call    0 never executed
+        3:  238:    } else if (cp < 0x800) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3
+    #####:  239:        out += static_cast<char>(0xC0 | (cp >> 6));
+call    0 never executed
+    #####:  240:        out += static_cast<char>(0x80 | (cp & 0x3F));
+call    0 never executed
+        3:  241:    } else if (cp < 0x10000) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 1
+        2:  242:        out += static_cast<char>(0xE0 | (cp >> 12));
+call    0 returned 2
+        2:  243:        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+call    0 returned 2
+        2:  244:        out += static_cast<char>(0x80 | (cp & 0x3F));
+call    0 returned 2
+        -:  245:    } else {
+        1:  246:        out += static_cast<char>(0xF0 | (cp >> 18));
+call    0 returned 1
+        1:  247:        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+call    0 returned 1
+        1:  248:        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+call    0 returned 1
+        1:  249:        out += static_cast<char>(0x80 | (cp & 0x3F));
+call    0 returned 1
+        -:  250:    }
+        3:  251:}
+        -:  252:
+function _ZN4DBKP10CJsonValue14parseStringRawERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERyRS6_SA_ called 20 returned 100% blocks executed 72%
+       20:  253:bool CJsonValue::parseStringRaw(const std::string& s, std::size_t& i,
+        -:  254:                                std::string& out, std::string& err) {
+      20*:  255:    if (i >= s.size() || s[i] != '"') { err = "expected string"; return false; }
+call    0 returned 20
+branch  1 taken 20 (fallthrough)
+branch  2 taken 0
+call    3 returned 20
+branch  4 taken 0 (fallthrough)
+branch  5 taken 20
+branch  6 taken 0 (fallthrough)
+branch  7 taken 20
+call    8 never executed
+       20:  256:    ++i;
+       20:  257:    out.clear();
+call    0 returned 20
+      108:  258:    while (i < s.size()) {
+call    0 returned 108
+branch  1 taken 108 (fallthrough)
+branch  2 taken 0
+      108:  259:        const unsigned char c = static_cast<unsigned char>(s[i]);
+call    0 returned 108
+      108:  260:        if (c == '"') { ++i; return true; }
+branch  0 taken 19 (fallthrough)
+branch  1 taken 89
+      89*:  261:        if (c < 0x20) { err = "raw control char in string"; return false; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 89
+call    2 never executed
+       89:  262:        if (c != '\\') { out += static_cast<char>(c); ++i; continue; }
+branch  0 taken 80 (fallthrough)
+branch  1 taken 9
+call    2 returned 80
+        9:  263:        ++i;
+       9*:  264:        if (i >= s.size()) break;
+call    0 returned 9
+branch  1 taken 0 (fallthrough)
+branch  2 taken 9
+        9:  265:        const char e = s[i++];
+call    0 returned 9
+        9:  266:        switch (e) {
+branch  0 taken 1
+branch  1 taken 1
+branch  2 taken 1
+branch  3 taken 0
+branch  4 taken 0
+branch  5 taken 1
+branch  6 taken 0
+branch  7 taken 1
+branch  8 taken 3
+branch  9 taken 1
+        1:  267:        case '"': out += '"'; break;
+call    0 returned 1
+        1:  268:        case '\\': out += '\\'; break;
+call    0 returned 1
+        1:  269:        case '/': out += '/'; break;
+call    0 returned 1
+    #####:  270:        case 'b': out += '\b'; break;
+call    0 never executed
+    #####:  271:        case 'f': out += '\f'; break;
+call    0 never executed
+        1:  272:        case 'n': out += '\n'; break;
+call    0 returned 1
+    #####:  273:        case 'r': out += '\r'; break;
+call    0 never executed
+        1:  274:        case 't': out += '\t'; break;
+call    0 returned 1
+        3:  275:        case 'u': {
+       3*:  276:            if (i + 4 > s.size()) { err = "truncated \\u"; return false; }
+call    0 returned 3
+branch  1 taken 0 (fallthrough)
+branch  2 taken 3
+call    3 never executed
+        3:  277:            unsigned cp = 0;
+        3:  278:            bool bad = false;
+       15:  279:            for (int k = 0; k < 4; ++k) {
+branch  0 taken 12 (fallthrough)
+branch  1 taken 3
+       12:  280:                const char h = s[i++];
+call    0 returned 12
+        -:  281:                unsigned d;
+       12:  282:                if (h >= '0' && h <= '9') d = static_cast<unsigned>(h - '0');
+branch  0 taken 12 (fallthrough)
+branch  1 taken 0
+branch  2 taken 8 (fallthrough)
+branch  3 taken 4
+        4:  283:                else if (h >= 'a' && h <= 'f') d = static_cast<unsigned>(h - 'a') + 10;
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+branch  2 taken 4 (fallthrough)
+branch  3 taken 0
+    #####:  284:                else if (h >= 'A' && h <= 'F') d = static_cast<unsigned>(h - 'A') + 10;
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  285:                else { bad = true; break; }
+       12:  286:                cp = cp * 16u + d;
+        -:  287:            }
+       3*:  288:            if (bad) { err = "bad hex digit in \\u"; return false; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3
+call    2 never executed
+        -:  289:            /* 代理对 \uD834\uDD1E -> U+1D11E：不让一个 emoji 拖垮整个请求 */
+        1:  290:            if (cp >= 0xD800u && cp <= 0xDBFFu && i + 6 <= s.size() &&
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+        4:  291:                s[i] == '\\' && s[i + 1] == 'u') {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 2
+call    2 returned 1
+branch  3 taken 1 (fallthrough)
+branch  4 taken 0
+call    5 returned 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 0
+branch  8 taken 1 (fallthrough)
+branch  9 taken 2
+        1:  292:                unsigned lo = 0;
+        1:  293:                std::size_t save = i;
+        1:  294:                i += 2;
+        1:  295:                bool ok = true;
+        5:  296:                for (int k = 0; k < 4; ++k) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 1
+        4:  297:                    const char h = s[i++];
+call    0 returned 4
+        -:  298:                    unsigned d;
+        4:  299:                    if (h >= '0' && h <= '9') d = static_cast<unsigned>(h - '0');
+branch  0 taken 4 (fallthrough)
+branch  1 taken 0
+branch  2 taken 2 (fallthrough)
+branch  3 taken 2
+        2:  300:                    else if (h >= 'a' && h <= 'f') d = static_cast<unsigned>(h - 'a') + 10;
+branch  0 taken 2 (fallthrough)
+branch  1 taken 0
+branch  2 taken 2 (fallthrough)
+branch  3 taken 0
+    #####:  301:                    else if (h >= 'A' && h <= 'F') d = static_cast<unsigned>(h - 'A') + 10;
+branch  0 never executed
+branch  1 never executed
+branch  2 never executed
+branch  3 never executed
+    #####:  302:                    else { ok = false; break; }
+        4:  303:                    lo = lo * 16u + d;
+        -:  304:                }
+        1:  305:                if (ok && lo >= 0xDC00u && lo <= 0xDFFFu)
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0
+        1:  306:                    cp = 0x10000u + ((cp - 0xD800u) << 10) + (lo - 0xDC00u);
+    #####:  307:                else { i = save; cp = 0xFFFDu; }
+       2*:  308:            } else if (cp >= 0xD800u && cp <= 0xDFFFu) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 2
+branch  2 never executed
+branch  3 never executed
+    #####:  309:                cp = 0xFFFDu;               /* 孤立代理项 -> 替换字符 */
+        -:  310:            }
+        3:  311:            appendUtf8(out, cp);
+call    0 returned 3
+        3:  312:            break;
+        -:  313:        }
+        1:  314:        default: err = std::string("bad escape \\") + e; return false;
+call    0 returned 1
+call    1 returned 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 1
+branch  5 taken 1 (fallthrough)
+branch  6 taken 0 (throw)
+call    7 returned 1
+call    8 returned 1
+call    9 returned 1
+call   10 returned 1
+call   11 never executed
+call   12 never executed
+        -:  315:        }
+        -:  316:    }
+    #####:  317:    err = "unterminated string";
+call    0 never executed
+    #####:  318:    return false;
+        -:  319:}
+        -:  320:
+function _ZN4DBKP10CJsonValue14parseNumberRawERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERyRS0_RS6_ called 6 returned 100% blocks executed 86%
+        6:  321:bool CJsonValue::parseNumberRaw(const std::string& s, std::size_t& i,
+        -:  322:                                CJsonValue& out, std::string& err) {
+        6:  323:    const std::size_t start = i;
+        6:  324:    bool dbl = false;
+        6:  325:    if (i < s.size() && (s[i] == '-' || s[i] == '+')) ++i;
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0
+call    3 returned 6
+branch  4 taken 5 (fallthrough)
+branch  5 taken 1
+call    6 returned 5
+branch  7 taken 0 (fallthrough)
+branch  8 taken 5
+branch  9 taken 1 (fallthrough)
+branch 10 taken 5
+       15:  326:    while (i < s.size()) {
+call    0 returned 15
+branch  1 taken 14 (fallthrough)
+branch  2 taken 1
+       14:  327:        const char c = s[i];
+call    0 returned 14
+       14:  328:        if (isDigit(c)) { ++i; continue; }
+call    0 returned 14
+branch  1 taken 8 (fallthrough)
+branch  2 taken 6
+        6:  329:        if (c == '.' || c == 'e' || c == 'E' || c == '+' || c == '-') { dbl = true; ++i; continue; }
+branch  0 taken 5 (fallthrough)
+branch  1 taken 1
+branch  2 taken 5 (fallthrough)
+branch  3 taken 0
+branch  4 taken 5 (fallthrough)
+branch  5 taken 0
+branch  6 taken 5 (fallthrough)
+branch  7 taken 0
+branch  8 taken 0 (fallthrough)
+branch  9 taken 5
+        5:  330:        break;
+        -:  331:    }
+       6*:  332:    if (i == start) { err = "bad number"; return false; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 6
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+       12:  333:    const std::string text = s.substr(start, i - start);
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 6
+call    4 never executed
+        6:  334:    char* end = nullptr;
+        6:  335:    if (!dbl) {
+branch  0 taken 5 (fallthrough)
+branch  1 taken 1
+        5:  336:        const long long v = std::strtoll(text.c_str(), &end, 10);
+call    0 returned 5
+call    1 returned 5
+        5:  337:        if (end && *end == '\0') { out = CJsonValue::makeInt(static_cast<int64_t>(v)); return true; }
+branch  0 taken 5 (fallthrough)
+branch  1 taken 0
+branch  2 taken 5 (fallthrough)
+branch  3 taken 0
+call    4 returned 5
+call    5 returned 5
+call    6 returned 5
+        -:  338:    }
+        1:  339:    end = nullptr;
+        1:  340:    const double d = std::strtod(text.c_str(), &end);
+call    0 returned 1
+call    1 returned 1
+       1*:  341:    if (!end || end == text.c_str()) { err = "bad number"; return false; }
+branch  0 taken 1 (fallthrough)
+branch  1 taken 0
+call    2 returned 1
+branch  3 taken 0 (fallthrough)
+branch  4 taken 1
+branch  5 taken 0 (fallthrough)
+branch  6 taken 1
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+        1:  342:    out = CJsonValue::makeDouble(d);
+call    0 returned 1
+call    1 returned 1
+call    2 returned 1
+        1:  343:    return true;
+        -:  344:}
+        -:  345:
+function _ZN4DBKP10CJsonValue10parseValueERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERyRS0_RS6_ called 25 returned 100% blocks executed 76%
+       25:  346:bool CJsonValue::parseValue(const std::string& s, std::size_t& i,
+        -:  347:                            CJsonValue& out, std::string& err) {
+       25:  348:    skipWs(s, i);
+call    0 returned 25
+       25:  349:    if (i >= s.size()) { err = "unexpected end"; return false; }
+call    0 returned 25
+branch  1 taken 1 (fallthrough)
+branch  2 taken 24
+call    3 returned 1
+       24:  350:    const char c = s[i];
+call    0 returned 24
+       24:  351:    if (c == '{') {
+branch  0 taken 8 (fallthrough)
+branch  1 taken 16
+        8:  352:        ++i;
+        8:  353:        out = CJsonValue(KIND_OBJECT);
+call    0 returned 8
+call    1 returned 8
+call    2 returned 8
+        8:  354:        skipWs(s, i);
+call    0 returned 8
+       8*:  355:        if (i < s.size() && s[i] == '}') { ++i; return true; }
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0
+call    3 returned 8
+branch  4 taken 0 (fallthrough)
+branch  5 taken 8
+branch  6 taken 0 (fallthrough)
+branch  7 taken 8
+        8:  356:        int count = 0;
+        -:  357:        for (;;) {
+      21*:  358:            if (++count > kMaxDepth * 64) { err = "object too large"; return false; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 13
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+       13:  359:            std::string key;
+call    0 returned 13
+call    1 never executed
+       13:  360:            skipWs(s, i);
+call    0 returned 13
+      13*:  361:            if (!parseStringRaw(s, i, key, err)) return false;
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 13
+       13:  362:            skipWs(s, i);
+call    0 returned 13
+      13*:  363:            if (i >= s.size() || s[i] != ':') { err = "expected ':'"; return false; }
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0
+call    3 returned 13
+branch  4 taken 0 (fallthrough)
+branch  5 taken 13
+branch  6 taken 0 (fallthrough)
+branch  7 taken 13
+call    8 never executed
+branch  9 never executed
+branch 10 never executed
+       13:  364:            ++i;
+       13:  365:            CJsonValue val;
+call    0 returned 13
+call    1 never executed
+       13:  366:            if (!parseValue(s, i, val, err)) return false;
+call    0 returned 13
+branch  1 taken 13 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 12
+       12:  367:            out[key] = val;
+call    0 returned 12
+branch  1 taken 12 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 12
+branch  4 taken 12 (fallthrough)
+branch  5 taken 0 (throw)
+       12:  368:            skipWs(s, i);
+call    0 returned 12
+      12*:  369:            if (i >= s.size()) { err = "unterminated object"; return false; }
+call    0 returned 12
+branch  1 taken 0 (fallthrough)
+branch  2 taken 12
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+       12:  370:            if (s[i] == ',') { ++i; continue; }
+call    0 returned 12
+branch  1 taken 5 (fallthrough)
+branch  2 taken 7
+        7:  371:            if (s[i] == '}') { ++i; return true; }
+call    0 returned 7
+branch  1 taken 6 (fallthrough)
+branch  2 taken 1
+        1:  372:            err = "expected ',' or '}'";
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0 (throw)
+        1:  373:            return false;
+        5:  374:        }
+        -:  375:    }
+       16:  376:    if (c == '[') {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 14
+        2:  377:        ++i;
+        2:  378:        out = CJsonValue(KIND_ARRAY);
+call    0 returned 2
+call    1 returned 2
+call    2 returned 2
+        2:  379:        skipWs(s, i);
+call    0 returned 2
+       2*:  380:        if (i < s.size() && s[i] == ']') { ++i; return true; }
+call    0 returned 2
+branch  1 taken 2 (fallthrough)
+branch  2 taken 0
+call    3 returned 2
+branch  4 taken 0 (fallthrough)
+branch  5 taken 2
+branch  6 taken 0 (fallthrough)
+branch  7 taken 2
+        2:  381:        int count = 0;
+        -:  382:        for (;;) {
+       6*:  383:            if (++count > kMaxDepth * 64) { err = "array too large"; return false; }
+branch  0 taken 0 (fallthrough)
+branch  1 taken 4
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+        4:  384:            CJsonValue val;
+call    0 returned 4
+call    1 never executed
+       4*:  385:            if (!parseValue(s, i, val, err)) return false;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 4
+        4:  386:            out.push_back(val);
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        4:  387:            skipWs(s, i);
+call    0 returned 4
+        4:  388:            if (i >= s.size()) { err = "unterminated array"; return false; }
+call    0 returned 4
+branch  1 taken 1 (fallthrough)
+branch  2 taken 3
+call    3 returned 1
+branch  4 taken 1 (fallthrough)
+branch  5 taken 0 (throw)
+        3:  389:            if (s[i] == ',') { ++i; continue; }
+call    0 returned 3
+branch  1 taken 2 (fallthrough)
+branch  2 taken 1
+        1:  390:            if (s[i] == ']') { ++i; return true; }
+call    0 returned 1
+branch  1 taken 1 (fallthrough)
+branch  2 taken 0
+    #####:  391:            err = "expected ',' or ']'";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  392:            return false;
+        2:  393:        }
+        -:  394:    }
+       14:  395:    if (c == '"') {
+branch  0 taken 7 (fallthrough)
+branch  1 taken 7
+       14:  396:        std::string str;
+call    0 returned 7
+call    1 returned 7
+call    2 never executed
+        7:  397:        if (!parseStringRaw(s, i, str, err)) return false;
+call    0 returned 7
+branch  1 taken 7 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 1 (fallthrough)
+branch  4 taken 6
+        6:  398:        out = CJsonValue::makeString(str);
+call    0 returned 6
+branch  1 taken 6 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 6
+call    4 returned 6
+        6:  399:        return true;
+        -:  400:    }
+        7:  401:    if (s.compare(i, 4, "true") == 0)  { i += 4; out = CJsonValue::makeBool(true);  return true; }
+call    0 returned 7
+branch  1 taken 1 (fallthrough)
+branch  2 taken 6
+call    3 returned 1
+call    4 returned 1
+call    5 returned 1
+       6*:  402:    if (s.compare(i, 5, "false") == 0) { i += 5; out = CJsonValue::makeBool(false); return true; }
+call    0 returned 6
+branch  1 taken 0 (fallthrough)
+branch  2 taken 6
+call    3 never executed
+call    4 never executed
+call    5 never executed
+       6*:  403:    if (s.compare(i, 4, "null") == 0)  { i += 4; out = CJsonValue();                return true; }
+call    0 returned 6
+branch  1 taken 0 (fallthrough)
+branch  2 taken 6
+call    3 never executed
+call    4 never executed
+call    5 never executed
+        6:  404:    return parseNumberRaw(s, i, out, err);
+call    0 returned 6
+        -:  405:}
+        -:  406:
+function _ZN4DBKP10CJsonValue5parseERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS0_RS6_ called 8 returned 100% blocks executed 65%
+        8:  407:bool CJsonValue::parse(const std::string& text, CJsonValue& out, std::string& err) {
+        8:  408:    std::size_t i = 0;
+        -:  409:    /* 允许 BOM：记事本保存过的配置文件很常见 */
+      15*:  410:    if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF &&
+call    0 returned 8
+call    1 returned 7
+branch  2 taken 0 (fallthrough)
+branch  3 taken 7
+      15*:  411:        static_cast<unsigned char>(text[1]) == 0xBB &&
+branch  0 taken 7 (fallthrough)
+branch  1 taken 1
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 taken 0 (fallthrough)
+branch  6 taken 8
+    #####:  412:        static_cast<unsigned char>(text[2]) == 0xBF)
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  413:        i = 3;
+        8:  414:    if (!out.parseValue(text, i, out, err)) {
+call    0 returned 8
+branch  1 taken 8 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 4 (fallthrough)
+branch  4 taken 4
+        -:  415:        char buf[48];
+        4:  416:        std::snprintf(buf, sizeof(buf), " at offset %llu",
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  417:                      static_cast<unsigned long long>(i));
+        4:  418:        err = "json parse error: " + err + buf;
+call    0 returned 4
+branch  1 taken 4 (fallthrough)
+branch  2 taken 0 (throw)
+call    3 returned 4
+branch  4 taken 4 (fallthrough)
+branch  5 taken 0 (throw)
+call    6 returned 4
+call    7 returned 4
+call    8 returned 4
+call    9 never executed
+        4:  419:        return false;
+        -:  420:    }
+        4:  421:    skipWs(text, i);
+call    0 returned 4
+       4*:  422:    if (i != text.size()) { err = "json parse error: trailing content"; return false; }
+call    0 returned 4
+branch  1 taken 0 (fallthrough)
+branch  2 taken 4
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+        4:  423:    return true;
+        -:  424:}
+        -:  425:
+        -:  426:} /* namespace DBKP */

@@ -1,0 +1,376 @@
+        -:    0:Source:src/Codec/Huffman.cpp
+        -:    0:Graph:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/Huffman.gcno
+        -:    0:Data:C:\Users\user\Desktop\develop\software-develop\dbkp\objcov\src\Codec/Huffman.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:/* ============================================================================
+        -:    2: *  Huffman.cpp  -- 规范（canonical）Huffman，从零实现
+        -:    3: *
+        -:    4: *  与讲义第 7 讲一致的两点设计：
+        -:    5: *    1. 码长表随流下发（256 字节），解码端据此重建规范码，无需重建树；
+        -:    6: *    2. 单符号/空输入特判，避免退化的 Kraft 和。
+        -:    7: *  额外加固：树深超过 kMaxCodeLen 时自动退化为"定长 8bit 存储"，
+        -:    8: *            保证任何输入都能解码（讲义实现未处理该边界）。
+        -:    9: * ==========================================================================*/
+        -:   10:#include "Codec/Codecs.h"
+        -:   11:
+        -:   12:#include <algorithm>
+        -:   13:#include <cstring>
+        -:   14:#include <functional>
+        -:   15:#include <queue>
+        -:   16:
+        -:   17:namespace DBKP {
+        -:   18:
+        -:   19:namespace {
+        -:   20:
+        -:   21:struct Node {
+        -:   22:    uint64_t weight;
+        -:   23:    int left, right;
+        -:   24:    int symbol;         /* 叶子 >= 0 */
+        -:   25:};
+        -:   26:
+        -:   27:} /* anonymous namespace */
+        -:   28:
+function _ZN4DBKP8CHuffman16buildCodeLengthsEPKjPh called 55 returned 100% blocks executed 76%
+       55:   29:void CHuffman::buildCodeLengths(const uint32_t freq[256], uint8_t len[256]) {
+       55:   30:    std::memset(len, 0, 256);
+       55:   31:    std::vector<Node> nodes;
+call    0 returned 55
+call    1 never executed
+       55:   32:    nodes.reserve(512);
+call    0 returned 55
+branch  1 taken 55 (fallthrough)
+branch  2 taken 0 (throw)
+       55:   33:    int used = 0, only = -1;
+    14135:   34:    for (int s = 0; s < 256; ++s) {
+branch  0 taken 14080 (fallthrough)
+branch  1 taken 55
+    14080:   35:        if (freq[s]) { nodes.push_back(Node{freq[s], -1, -1, s}); ++used; only = s; }
+branch  0 taken 3084 (fallthrough)
+branch  1 taken 10996
+call    2 returned 3084
+branch  3 taken 3084 (fallthrough)
+branch  4 taken 0 (throw)
+        -:   36:    }
+       55:   37:    if (used == 0) return;                            /* 空输入 */
+branch  0 taken 2 (fallthrough)
+branch  1 taken 53
+       53:   38:    if (used == 1) {                                  /* 单符号：两个长度为 1 的码 */
+branch  0 taken 9 (fallthrough)
+branch  1 taken 44
+        9:   39:        len[only] = 1;
+        9:   40:        len[(only + 1) & 0xFF] = 1;
+        9:   41:        return;
+        -:   42:    }
+        -:   43:
+        -:   44:    typedef std::pair<uint64_t, int> Item;            /* (weight, nodeIndex) */
+       88:   45:    std::priority_queue<Item, std::vector<Item>, std::greater<Item> > pq;
+call    0 returned 44
+call    1 returned 44
+call    2 never executed
+     3119:   46:    for (size_t i = 0; i < nodes.size(); ++i) pq.push(Item(nodes[i].weight, int(i)));
+call    0 returned 3119
+branch  1 taken 3075 (fallthrough)
+branch  2 taken 44
+call    3 returned 3075
+call    4 returned 3075
+call    5 returned 3075
+branch  6 taken 3075 (fallthrough)
+branch  7 taken 0 (throw)
+     3075:   47:    while (pq.size() > 1) {
+call    0 returned 3075
+branch  1 taken 3031 (fallthrough)
+branch  2 taken 44
+     3031:   48:        Item a = pq.top(); pq.pop();
+call    0 returned 3031
+call    1 returned 3031
+branch  2 taken 3031 (fallthrough)
+branch  3 taken 0 (throw)
+     3031:   49:        Item b = pq.top(); pq.pop();
+call    0 returned 3031
+call    1 returned 3031
+branch  2 taken 3031 (fallthrough)
+branch  3 taken 0 (throw)
+        -:   50:        Node parent;
+     3031:   51:        parent.weight = a.first + b.first;
+     3031:   52:        parent.left = a.second; parent.right = b.second; parent.symbol = -1;
+     3031:   53:        nodes.push_back(parent);
+call    0 returned 3031
+branch  1 taken 3031 (fallthrough)
+branch  2 taken 0 (throw)
+     3031:   54:        pq.push(Item(parent.weight, static_cast<int>(nodes.size()) - 1));
+call    0 returned 3031
+call    1 returned 3031
+call    2 returned 3031
+branch  3 taken 3031 (fallthrough)
+branch  4 taken 0 (throw)
+        -:   55:    }
+        -:   56:
+        -:   57:    /* 迭代求深度，避免超深树递归爆栈 */
+        -:   58:    struct Frame { int idx; int depth; };
+       88:   59:    std::vector<Frame> stack;
+call    0 returned 44
+call    1 returned 44
+call    2 never executed
+       44:   60:    stack.push_back(Frame{static_cast<int>(nodes.size()) - 1, 0});
+call    0 returned 44
+call    1 returned 44
+branch  2 taken 44 (fallthrough)
+branch  3 taken 0 (throw)
+       44:   61:    int maxDepth = 0;
+       44:   62:    bool overflow = false;
+     6150:   63:    while (!stack.empty()) {
+call    0 returned 6150
+branch  1 taken 6106 (fallthrough)
+branch  2 taken 44
+     6106:   64:        Frame f = stack.back(); stack.pop_back();
+call    0 returned 6106
+call    1 returned 6106
+     6106:   65:        const Node& n = nodes[f.idx];
+call    0 returned 6106
+     6106:   66:        if (n.symbol >= 0) {
+branch  0 taken 3075 (fallthrough)
+branch  1 taken 3031
+    3075*:   67:            len[n.symbol] = static_cast<uint8_t>(f.depth == 0 ? 1 : f.depth);
+branch  0 taken 3075 (fallthrough)
+branch  1 taken 0
+     3075:   68:            if (f.depth > maxDepth) maxDepth = f.depth;
+branch  0 taken 76 (fallthrough)
+branch  1 taken 2999
+     3075:   69:            continue;
+        -:   70:        }
+    3031*:   71:        if (f.depth + 1 > kMaxCodeLen) overflow = true;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3031
+     3031:   72:        if (n.left  >= 0) stack.push_back(Frame{n.left,  f.depth + 1});
+branch  0 taken 3031 (fallthrough)
+branch  1 taken 0
+call    2 returned 3031
+branch  3 taken 3031 (fallthrough)
+branch  4 taken 0 (throw)
+     3031:   73:        if (n.right >= 0) stack.push_back(Frame{n.right, f.depth + 1});
+branch  0 taken 3031 (fallthrough)
+branch  1 taken 0
+call    2 returned 3031
+branch  3 taken 3031 (fallthrough)
+branch  4 taken 0 (throw)
+        -:   74:    }
+       44:   75:    if (overflow || maxDepth > kMaxCodeLen) {         /* 退化：定长 8bit 存储 */
+branch  0 taken 44 (fallthrough)
+branch  1 taken 0
+branch  2 taken 0 (fallthrough)
+branch  3 taken 44
+    #####:   76:        std::memset(len, 0, 256);
+    #####:   77:        for (int s = 0; s < 256; ++s) len[s] = 8;
+branch  0 never executed
+branch  1 never executed
+        -:   78:    }
+        -:   79:}
+        -:   80:
+function _ZN4DBKP8CHuffman19buildCanonicalCodesEPKhPj called 55 returned 100% blocks executed 100%
+       55:   81:void CHuffman::buildCanonicalCodes(const uint8_t len[256], uint32_t code[256]) {
+        -:   82:    uint32_t count[kMaxCodeLen + 2];
+       55:   83:    std::memset(count, 0, sizeof(count));
+    14135:   84:    for (int s = 0; s < 256; ++s) if (len[s] && len[s] <= kMaxCodeLen) ++count[len[s]];
+branch  0 taken 14080 (fallthrough)
+branch  1 taken 55
+branch  2 taken 3093 (fallthrough)
+branch  3 taken 10987
+branch  4 taken 3093 (fallthrough)
+branch  5 taken 0
+        -:   85:    uint32_t next[kMaxCodeLen + 2];
+       55:   86:    next[1] = 0;
+     1320:   87:    for (int l = 2; l <= kMaxCodeLen; ++l) next[l] = (next[l - 1] + count[l - 1]) << 1;
+branch  0 taken 1265 (fallthrough)
+branch  1 taken 55
+       55:   88:    std::memset(code, 0, sizeof(uint32_t) * 256);
+        -:   89:    uint32_t cur[kMaxCodeLen + 2];
+       55:   90:    std::memcpy(cur, next, sizeof(cur));
+    14135:   91:    for (int s = 0; s < 256; ++s)
+branch  0 taken 14080 (fallthrough)
+branch  1 taken 55
+    14080:   92:        if (len[s] && len[s] <= kMaxCodeLen) code[s] = cur[len[s]]++;
+branch  0 taken 3093 (fallthrough)
+branch  1 taken 10987
+branch  2 taken 3093 (fallthrough)
+branch  3 taken 0
+       55:   93:}
+        -:   94:
+function _ZN4DBKP8CHuffman6encodeERKSt6vectorIhSaIhEERS3_ called 55 returned 100% blocks executed 91%
+       55:   95:ErrCode CHuffman::encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+        -:   96:    uint32_t freq[256];
+       55:   97:    std::memset(freq, 0, sizeof(freq));
+  3544977:   98:    for (size_t i = 0; i < in.size(); ++i) ++freq[in[i]];
+call    0 returned 3544977
+branch  1 taken 3544922 (fallthrough)
+branch  2 taken 55
+call    3 returned 3544922
+        -:   99:
+        -:  100:    uint8_t len[256];
+       55:  101:    buildCodeLengths(freq, len);
+call    0 returned 55
+branch  1 taken 55 (fallthrough)
+branch  2 taken 0 (throw)
+        -:  102:    uint32_t code[256];
+       55:  103:    buildCanonicalCodes(len, code);
+call    0 returned 55
+        -:  104:
+       55:  105:    out.clear();
+call    0 returned 55
+       55:  106:    Codec::putHeader(out, static_cast<uint16_t>(CODEC_MAGIC_HUFF & 0xFFFFu), 1, 0,
+call    0 returned 55
+branch  1 taken 55 (fallthrough)
+branch  2 taken 0 (throw)
+       55:  107:                     static_cast<uint64_t>(in.size()));
+call    0 returned 55
+       55:  108:    out.insert(out.end(), len, len + 256);
+call    0 returned 55
+call    1 returned 55
+call    2 returned 55
+branch  3 taken 55 (fallthrough)
+branch  4 taken 0 (throw)
+       55:  109:    if (in.empty()) return E_OK;
+call    0 returned 55
+branch  1 taken 2 (fallthrough)
+branch  2 taken 53
+        -:  110:
+       53:  111:    Codec::BitWriter w(out);
+call    0 returned 53
+  3544975:  112:    for (size_t i = 0; i < in.size(); ++i) {
+call    0 returned 3544975
+branch  1 taken 3544922 (fallthrough)
+branch  2 taken 53
+  3544922:  113:        const uint8_t l = len[in[i]];
+call    0 returned 3544922
+ 3544922*:  114:        if (l == 0) return E_COMPRESS_FAIL;         /* 频表与数据不一致 */
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3544922
+  3544922:  115:        w.writeMsb(code[in[i]], l);
+call    0 returned 3544922
+call    1 returned 3544922
+branch  2 taken 3544922 (fallthrough)
+branch  3 taken 0 (throw)
+        -:  116:    }
+       53:  117:    w.flush();
+call    0 returned 53
+branch  1 taken 53 (fallthrough)
+branch  2 taken 0 (throw)
+       53:  118:    return E_OK;
+        -:  119:}
+        -:  120:
+function _ZN4DBKP8CHuffman6decodeERKSt6vectorIhSaIhEERS3_ called 34 returned 100% blocks executed 81%
+       34:  121:ErrCode CHuffman::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
+       34:  122:    uint8_t ver = 0, flags = 0;
+       34:  123:    uint64_t rawLen = 0;
+       34:  124:    std::size_t start = 0;
+       34:  125:    if (!Codec::readHeader(in, static_cast<uint16_t>(CODEC_MAGIC_HUFF & 0xFFFFu),
+call    0 returned 34
+branch  1 taken 34 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 4 (fallthrough)
+branch  4 taken 30
+        4:  126:                           ver, flags, rawLen, start)) return E_COMPRESS_FAIL;
+      30*:  127:    if (ver != 1) return E_COMPRESS_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 30
+       30:  128:    if (in.size() < start + 256) return E_TRUNCATED_ARCHIVE;
+call    0 returned 30
+branch  1 taken 1 (fallthrough)
+branch  2 taken 29
+       29:  129:    if (rawLen == 0) { out.clear(); return E_OK; }
+branch  0 taken 2 (fallthrough)
+branch  1 taken 27
+call    2 returned 2
+        -:  130:
+       27:  131:    const uint8_t* len = in.data() + start;
+call    0 returned 27
+        -:  132:    uint32_t count[kMaxCodeLen + 2];
+       27:  133:    std::memset(count, 0, sizeof(count));
+       27:  134:    uint64_t kraft = 0;
+     6691:  135:    for (int s = 0; s < 256; ++s) {
+branch  0 taken 6665 (fallthrough)
+branch  1 taken 26
+     6665:  136:        if (len[s] > kMaxCodeLen) return E_COMPRESS_FAIL;
+branch  0 taken 1 (fallthrough)
+branch  1 taken 6664
+     6664:  137:        if (len[s]) { ++count[len[s]]; kraft += uint64_t(1) << (kMaxCodeLen - len[s]); }
+branch  0 taken 1849 (fallthrough)
+branch  1 taken 4815
+        -:  138:    }
+        -:  139:    /* 完备前缀码：Kraft 和必须恰为 2^kMaxCodeLen */
+      26*:  140:    if (kraft != (uint64_t(1) << kMaxCodeLen)) return E_COMPRESS_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 26
+        -:  141:
+        -:  142:    uint32_t offset[kMaxCodeLen + 2];
+       26:  143:    offset[1] = 0;
+      650:  144:    for (int l = 1; l <= kMaxCodeLen; ++l) offset[l + 1] = offset[l] + count[l];
+branch  0 taken 624 (fallthrough)
+branch  1 taken 26
+       52:  145:    std::vector<int> sorted(256, 0);
+call    0 returned 26
+call    1 returned 26
+branch  2 taken 26 (fallthrough)
+branch  3 taken 0 (throw)
+call    4 returned 26
+call    5 returned 26
+call    6 never executed
+        -:  146:    {
+        -:  147:        uint32_t fill[kMaxCodeLen + 2];
+       26:  148:        std::memcpy(fill, offset, sizeof(fill));
+     6682:  149:        for (int s = 0; s < 256; ++s) if (len[s]) sorted[fill[len[s]]++] = s;
+branch  0 taken 6656 (fallthrough)
+branch  1 taken 26
+branch  2 taken 1849 (fallthrough)
+branch  3 taken 4807
+call    4 returned 1849
+        -:  150:    }
+        -:  151:
+       26:  152:    out.assign(static_cast<size_t>(rawLen), 0);
+call    0 returned 26
+branch  1 taken 26 (fallthrough)
+branch  2 taken 0 (throw)
+       26:  153:    Codec::BitReader r(in.data() + start + 256, in.size() - start - 256);
+call    0 returned 26
+call    1 returned 26
+call    2 returned 26
+  3478548:  154:    for (size_t i = 0; i < out.size(); ++i) {
+call    0 returned 3478548
+branch  1 taken 3478522 (fallthrough)
+branch  2 taken 26
+  3478522:  155:        uint32_t c = 0, first = 0;
+  3478522:  156:        int index = 0;
+  3478522:  157:        bool found = false;
+ 19325330:  158:        for (int l = 1; l <= kMaxCodeLen; ++l) {
+branch  0 taken 19325330 (fallthrough)
+branch  1 taken 0
+ 19325330:  159:            uint32_t bit = 0;
+19325330*:  160:            if (!r.read(bit, 1)) return E_COMPRESS_FAIL;
+call    0 returned 19325330
+branch  1 taken 19325330 (fallthrough)
+branch  2 taken 0 (throw)
+branch  3 taken 0 (fallthrough)
+branch  4 taken 19325330
+ 19325330:  161:            c |= bit;                       /* 先读的位在高位：见末尾 c <<= 1 */
+ 19325330:  162:            if (c < first + count[l]) {
+branch  0 taken 3478522 (fallthrough)
+branch  1 taken 15846808
+  3478522:  163:                out[i] = static_cast<uint8_t>(sorted[index + int(c - first)]);
+call    0 returned 3478522
+call    1 returned 3478522
+  3478522:  164:                found = true;
+  3478522:  165:                break;
+        -:  166:            }
+ 15846808:  167:            index += int(count[l]);
+ 15846808:  168:            first = (first + count[l]) << 1;
+ 15846808:  169:            c <<= 1;
+        -:  170:        }
+ 3478522*:  171:        if (!found) return E_COMPRESS_FAIL;
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3478522
+        -:  172:    }
+       26:  173:    return E_OK;
+        -:  174:}
+        -:  175:
+        -:  176:} /* namespace DBKP */
+        -:  177:

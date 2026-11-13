@@ -72,8 +72,19 @@ BIN     := bin
 APP     := $(BIN)/bk$(EXE)
 APPDAEMON := $(BIN)/bkd$(EXE)
 APPTEST := $(BIN)/bk_test$(EXE)
+APPGT   := $(BIN)/bk_gtest$(EXE)
 
-.PHONY: all clean test demo gtest dirs server
+# ---- 批次10：vendored GoogleTest（third_party/googletest, release-1.12.1）-----
+# 不依赖系统 libgtest，也不需要 CMake：直接把 googletest/src/gtest-all.cc 一起编。
+# release-1.12.1 只要求 C++14，g++ 8.1.0 可编（更新的 v1.14+ 要 C++17 且用到
+# GCC8 尚未提供的特性，故不用 HEAD）。入口不用 gtest_main.cc，改用
+# test/test_wb_main.cpp —— 它在真实 gtest 下补上和迷你框架一样的临时沙箱 chdir，
+# 否则老用例会把 ttest_* 目录拉进源码树。
+GTEST_ROOT := third_party/googletest/googletest
+GTEST_CC   := $(GTEST_ROOT)/src/gtest-all.cc
+GTEST_INC  := -isystem $(GTEST_ROOT)/include -I $(GTEST_ROOT)
+
+.PHONY: all clean test demo gtest test-gtest coverage dirs server
 
 all: dirs $(APP) $(APPDAEMON)
 
@@ -102,6 +113,39 @@ $(APPTEST): $(LIB_OBJ) $(TEST_OBJ)
 
 test: dirs $(APPTEST)
 	$(APPTEST)
+
+# ---- 批次10：使用 vendored GoogleTest 编译并运行全部用例 ---------------------
+# 真实 gtest 与迷你框架的 TEST 宏注册的注册表不同，二者的 .o 不能混用，
+# 所以测试代码单独编到 objg/，产品库 obj/ 复用（src/ 不含 TestFramework.h）。
+OBJG      := objg
+GT_TEST_O := $(TEST_SRC:%.cpp=$(OBJG)/%.o)
+
+$(OBJG)/gtest-all.o: $(GTEST_CC)
+	$(call MKDIR_P,$(@D))
+	$(CXX) $(CXXSTD) $(OPT) $(GTEST_INC) -pthread -c $< -o $@
+
+$(OBJG)/%.o: %.cpp
+	$(call MKDIR_P,$(@D))
+	$(CXX) $(CPPFLAGS) $(GTEST_INC) -DDBKP_USE_REAL_GTEST=1 -c $< -o $@
+
+$(APPGT): $(LIB_OBJ) $(GT_TEST_O) $(OBJG)/gtest-all.o
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(SYS_LIBS)
+
+test-gtest: dirs $(APPGT)
+	$(APPGT)
+
+# ---- 批次10：覆盖率（gcov/gcovr）。独立 objcov/ 目录，避免污染常规构建 ------
+# COVFLAGS 覆盖 Makefile 里的 OPT（-O2 会让 gcov 把被优化掉的行算成"未执行"，
+# 统计口径虚低），并额外加 --coverage 生成 .gcno/.gcda。
+# 批次10 修正：原来这里写的是 objcov/src/Codec/Codec.o、objcov/src/Crypto/Crypto.o，
+# 但仓库里根本没有 Codec.cpp / Crypto.cpp（实际文件是 Huffman/LZ77/BitIo/CodecFactory
+# 和 Aes/ChaCha20/CryptoCodecs/Des/Sha256），gcov 找不到对象直接报错。
+# 现在把"跑插桩测试 + 收集 gcov + 出 gcovr HTML"整体交给 script/coverage_run.ps1，
+# Makefile 只负责触发，跨平台行为一致。
+COVFLAGS := -O0 -g --coverage
+coverage:
+	$(MAKE) OBJ=objcov OPT="$(COVFLAGS)" test-gtest
+	-powershell -ExecutionPolicy Bypass -File script/coverage_run.ps1
 
 # ---- 使用系统 GoogleTest（Ubuntu: sudo apt install libgtest-dev） -----------
 gtest: dirs $(LIB_OBJ) $(TEST_SRC)

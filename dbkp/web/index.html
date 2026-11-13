@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================================
      dbkp Web 控制台（单文件；零构建、零外部依赖）
-     只依赖 bkd 暴露的 /api/*。打开 http://127.0.0.1:8080/ 即可使用。
+     只依赖 bkd 暴露的 /api/*。用浏览器打开 bkd 监听的地址即可（如 http://127.0.0.1:8099/）。
    ==========================================================================-->
 <html lang="zh-CN">
 
@@ -629,6 +629,95 @@
       cursor: pointer;
       margin: 0 3px;
     }
+
+    /* ---------------- 批次9：呈现补齐 + 易用性改版 --------------- */
+    /* 勾选框统一网格：主表单 5 个与高级过滤 4 个共用，避免 flex 行里宽窄不一 */
+    .checks {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 6px 16px;
+      margin-top: 10px;
+    }
+
+    .checks label {
+      display: flex;
+      align-items: center;
+      margin: 0;
+      font-size: 13px;
+      color: var(--fg);
+    }
+
+    .checks input[type=checkbox] {
+      margin: 0 6px 0 0;
+    }
+
+    /* 卡片 h2 下的一行说明：第一次见的人先知道这张卡干什么 */
+    .cdesc {
+      font-size: 12px;
+      color: var(--dim);
+      margin: -4px 0 10px;
+      line-height: 1.6;
+    }
+
+    /* 表单分区小标题：① 来源与目标 / ② 算法与安全 / ③ 过滤 / ④ 开关 / ⑤ 提交 */
+    .sect {
+      margin: 16px 0 4px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--dim);
+    }
+
+    .sect.first {
+      margin-top: 8px;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    /* copy 模式：打包参数不生效的提示条 */
+    #copyWarn {
+      color: var(--warn);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    /* 时间预设选中后回显的实际范围 */
+    #mtimeRange {
+      color: var(--ok);
+      font-size: 11px;
+      min-height: 14px;
+      margin-top: 6px;
+    }
+
+    /* 条目表：硬链接行（nlink>1）高亮底色，声明在 nth-child(even) 之后才盖得住 */
+    .etab tbody tr.hl td {
+      background: #2a2410;
+    }
+
+    /* 任务卡片上的 mode 标签 */
+    .tag-mode {
+      border-color: #2b6ea8;
+      color: #7ec8ff;
+    }
+
+    /* 非备份任务：整个筛选面板置灰且不可交互（buildBody 只在 backup 时发送 filter） */
+    .flt.off {
+      opacity: .45;
+      pointer-events: none;
+    }
+
+    /* 非备份任务：打包参数置灰时的说明条 */
+    #packWarn {
+      color: var(--dim);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    input:disabled,
+    select:disabled {
+      opacity: .45;
+    }
   </style>
 </head>
 
@@ -655,6 +744,8 @@
 
     <section class="card hide" id="taskCard">
       <h2>新建任务</h2>
+      <div class="cdesc">选来源 → 选目标 → 选算法 → 提交。目标是 .dbkp 文件 = 打包成单文件归档；是目录 = 逐文件复制。切换类型后，与当前任务无关的参数会自动置灰。</div>
+      <div class="sect first">① 任务类型与路径</div>
       <div class="row">
         <div><label>类型</label>
           <select id="type">
@@ -666,44 +757,48 @@
         </div>
         <div><label>形态（备份时有效）</label>
           <select id="mode">
-            <option value="auto">auto 自动判断</option>
-            <option value="archive">archive 单文件归档</option>
-            <option value="copy">copy 逐文件复制</option>
+            <option value="auto">auto 自动判断（目标以 .dbkp 结尾→单文件归档，否则→目录复制）</option>
+            <option value="archive">archive 单文件归档（强制，生成 .dbkp）</option>
+            <option value="copy">copy 目录复制（强制，不压缩不加密）</option>
           </select>
         </div>
       </div>
-      <label>来源 source（备份=源目录；还原/校验=归档或备份目录；相对路径按数据根解析）</label>
+      <label>来源 source（备份=源目录；还原/校验/对比=归档或备份目录；相对路径按数据根解析）</label>
       <div class="row">
         <div><input id="source" placeholder="webview 或 D:/data/docs"></div>
         <div style="flex:0 0 auto;display:flex;align-items:flex-end">
           <button class="ghost" id="btnBrowseSrc">浏览…</button>
         </div>
       </div>
-      <label>目标 destination（以 .dbkp 结尾=归档；否则=目标目录）</label>
+      <label>目标 destination（备份=归档文件或目标目录；还原=目标目录；对比=源目录；校验留空=验归档、填目录=验备份目录）</label>
       <div class="row">
         <div><input id="destination" placeholder="out/docs.dbkp"></div>
         <div style="flex:0 0 auto;display:flex;align-items:flex-end">
           <button class="ghost" id="btnBrowseDst">浏览…</button>
         </div>
       </div>
+      <div class="sect">② 算法与安全</div>
       <div class="row">
         <div><label>压缩算法</label><select id="algorithm"></select></div>
         <div><label>加密算法</label>
           <select id="crypto">
-            <option value="none">none 不加密</option>
+            <option value="none">none 不加密（默认）</option>
             <option value="aes256">AES-256-CBC</option>
             <option value="des-ede">DES-EDE-CBC(3DES)</option>
             <option value="chacha20">ChaCha20</option>
           </select>
         </div>
         <div><label>校验和</label><select id="checksum">
+            <option value="none" selected>none（默认，不记录校验和）</option>
             <option value="crc64">CRC64</option>
             <option value="sha256">SHA-256</option>
-            <option value="none">none</option>
           </select></div>
       </div>
       <label>密码（加密算法非 none 时必填）</label>
       <input type="password" id="jobPassword">
+      <div id="copyWarn" class="hide">copy 模式不打包：压缩算法、加密、密码、校验和都不生效（引擎按文件字节复制）。要加密请把形态改成 archive。</div>
+      <div id="packWarn" class="hide">仅备份任务使用这些打包参数：还原/校验/对比从归档头读取算法，需要时只填密码即可。</div>
+      <div class="sect">③ 过滤（可选）</div>
       <!-- 备份筛选：对照实验指导 5.pdf《参考界面·备份设置》的六页筛选逻辑。
          文件类型 / 时间 / 文件大小 / 排除用户（组）/ 排除文件名称 / 排除目录
          全部映射到 /api/jobs 的 filter 字段（与 CLI 同名参数同语义）。 -->
@@ -742,15 +837,17 @@
         <div class="fpane" id="paneTime">
           <div class="frow" style="margin-top:6px">
             <label><input type="checkbox" id="mtimeOn"> 修改时间</label>
-            <input type="datetime-local" id="mtimeAfter" step="60">
+            <input type="datetime-local" id="mtimeAfter" step="60" maxlength="10">
             <span class="dash">–</span>
-            <input type="datetime-local" id="mtimeBefore" step="60">
+            <input type="datetime-local" id="mtimeBefore" step="60" maxlength="10">
           </div>
           <div class="fquick">
             <button type="button" class="ghost" data-days="7">最近 7 天</button>
-            <button type="button" class="ghost" data-days="30">最近 30 天</button>
+            <button type="button" class="ghost" data-days="30">最近一个月</button>
+            <button type="button" class="ghost" data-days="180">最近半年</button>
             <button type="button" class="ghost" data-days="365">最近一年</button>
           </div>
+          <div id="mtimeRange"></div>
           <div class="fhint">区间含义：修改时间 ≥ 起始 且 ≤ 结束，留空一侧表示不限；勾选后才生效（等同 CLI --newer-than / --older-than）。<br>
             参考界面里的“创建时间”本系统未采集，故只提供修改时间筛选。</div>
         </div>
@@ -825,11 +922,11 @@
         <!-- 遍历选项：保留原来的高级开关，不再单独占一块界面 -->
         <details class="fopts">
           <summary>遍历选项（深度 / 链接 / 跨设备）</summary>
-          <div class="row" style="flex-wrap:wrap;margin-top:6px">
-            <div><label><input type="checkbox" id="followSymlinks"> 跟随符号链接</label></div>
-            <div><label><input type="checkbox" id="noCrossDevice"> 不跨设备</label></div>
-            <div><label><input type="checkbox" id="skipSpecials"> 跳过特殊文件</label></div>
-            <div><label><input type="checkbox" id="includeDirs" checked> 目录入档</label></div>
+          <div class="checks">
+            <label><input type="checkbox" id="followSymlinks"> 跟随符号链接</label>
+            <label><input type="checkbox" id="noCrossDevice"> 不跨设备</label>
+            <label><input type="checkbox" id="skipSpecials"> 跳过特殊文件</label>
+            <label><input type="checkbox" id="includeDirs" checked> 目录入档</label>
           </div>
           <label>最大深度 maxDepth（空=不限）</label>
           <input id="maxDepth" placeholder="空=不限">
@@ -840,27 +937,28 @@
           <button type="button" class="ghost" id="btnFilterReset">清空筛选</button>
         </div>
       </div>
-      <div class="row" style="margin-top:10px">
-        <div><label><input type="checkbox" id="preserveMeta" checked> 保留元数据</label></div>
-        <div><label><input type="checkbox" id="verifyAfter" checked> 备份后校验</label></div>
-        <div><label><input type="checkbox" id="overwrite"> 允许覆盖</label></div>
-      </div>
-      <div class="row">
-        <div><label><input type="checkbox" id="hardlinkDedupe" checked> 硬链接去重</label></div>
-        <div><label><input type="checkbox" id="skipPayloadVerify"> 还原时跳过整卷校验</label></div>
+      <div class="sect">④ 附加选项</div>
+      <div class="checks">
+        <label><input type="checkbox" id="preserveMeta" checked> 保留元数据</label>
+        <label><input type="checkbox" id="verifyAfter" checked> 备份后校验</label>
+        <label><input type="checkbox" id="overwrite"> 允许覆盖</label>
+        <label><input type="checkbox" id="hardlinkDedupe" checked> 硬链接去重</label>
+        <label><input type="checkbox" id="skipPayloadVerify"> 还原时跳过整卷校验</label>
       </div>
       <label>备注 comment（写进归档卷标，留空则用默认值）</label>
       <input id="comment" placeholder="毕业季备份">
       <label>任务名（留空则自动用 类型:来源）</label>
       <input id="label">
+      <div class="sect">⑤ 提交</div>
       <div id="formHint"></div>
       <div style="margin-top:8px"><button id="btnSubmit">提交任务</button></div>
     </section>
 
     <section class="card">
       <h2>任务列表 <span class="meta" id="jobHint">（SSE 实时进度）</span></h2>
+      <div class="cdesc">所有备份/还原/校验任务的进度与日志；“读卷标”可查看任意已有 .dbkp 的内容清单。</div>
       <div id="jobs">
-        <div class="meta">还没有任务。</div>
+        <div class="meta">还没有任务。在左侧“新建任务”提交第一个备份试试（来源选个目录，目标填 out/demo.dbkp）。</div>
       </div>
       <div class="row" style="margin-top:10px">
         <div>
@@ -893,7 +991,7 @@
     <!-- 定时备份：与“实时备份”同一套卡片样式；后端 /api/schedule 支持启动/状态/停止 -->
     <section class="card">
       <h2>定时备份 <span class="meta">（按间隔自动备份·bk schedule 的 Web 入口）</span></h2>
-      <div class="meta" style="margin-bottom:8px">每隔一个间隔生成一份带时间戳的 .dbkp，跑满指定轮次后自动停止；保留份数 &gt; 0 时每轮滚动删除最旧的归档。</div>
+      <div class="cdesc">每隔一个间隔生成一份带时间戳的 .dbkp，跑满指定轮次后自动停止；保留份数 &gt; 0 时每轮滚动删除最旧的归档。</div>
       <label>源目录（备份对象）</label>
       <div class="row">
         <div><input id="schSource" placeholder="webview 或 D:/data/docs"></div>
@@ -939,7 +1037,7 @@
 
     <section class="card">
       <h2>实时备份 <span class="meta">（自动感知文件变化·bk watch 的 Web 入口）</span></h2>
-      <div class="meta" style="margin-bottom:8px">开启后后台常驻监听源目录，一旦有新增/修改/删除，去抖一段时间自动生成一份 .dbkp 归档。</div>
+      <div class="cdesc">开启后后台常驻监听源目录，一旦有新增/修改/删除，去抖一段时间自动生成一份 .dbkp 归档。</div>
       <label>源目录（被监听）</label>
       <div class="row">
         <div><input id="watchSource" placeholder="webview 或 D:/data/docs"></div>
@@ -1044,7 +1142,9 @@
         + ' / ' + (info.capabilities ? info.capabilities.os : '');
       $('cap').textContent = info.capabilities
         ? ('软链 ' + yn(info.capabilities.symlink) + ' · 硬链 ' + yn(info.capabilities.hardlink)
-          + ' · 属主 ' + yn(info.capabilities.owner)) : '';
+          + ' · 属主 ' + yn(info.capabilities.owner) + ' · 管道 ' + yn(info.capabilities.fifo)
+          + ' · 设备节点 ' + yn(info.capabilities.deviceNode)
+          + ' · 纳秒时间 ' + yn(info.capabilities.nanoTime)) : '';
       window.CAPS = info.capabilities || null;
       initOwnerCapability();   /* 平台不支持属主时置灰“排除用户（组）”页 */
       pollSchedule();          /* 后台可能有在跑的定时任务，登录后立即回显 */
@@ -1056,7 +1156,7 @@
       /* 双击打开 index.html（file://）时 fetch 打不到服务，表现就是"点什么都没反应"，
          与其卡在登录卡片，不如把话说清楚。 */
       if (window.location.protocol === 'file:') {
-        showLogin('请用 http://127.0.0.1:8080/ 打开（现在是 file://，接口调不通）');
+        showLogin('请用 ' + window.location.origin + '/ 打开（现在是 file://，接口调不通）');
         return;
       }
       let info;
@@ -1095,11 +1195,14 @@
       sel.innerHTML = '';
       (cfg.algorithms || []).forEach((a) => {
         const op = document.createElement('option');
-        op.value = a; op.textContent = a;
-        if (a === cfg.defaultAlgorithm) op.selected = true;
+        op.value = a;
+        /* 默认选 none（不压缩）：不选就是“什么都不做”，要压缩再手动选。
+           服务端 defaultAlgorithm 仍供 CLI/脚本使用，这里不再拿它当界面默认。 */
+        op.textContent = a + (a === 'none' ? '（默认）' : '');
+        if (a === 'none') op.selected = true;
         sel.appendChild(op);
       });
-      /* 实时备份 / 定时备份面板的压缩算法下拉：与主表单同源，默认选中 defaultAlgorithm */
+      /* 实时备份 / 定时备份面板的压缩算法下拉：与主表单同源，默认也是 none */
       ['watchAlgo', 'schAlgo'].forEach((id) => {
         const wsel = $(id);
         if (!wsel) return;
@@ -1107,7 +1210,7 @@
         (cfg.algorithms || []).forEach((a) => {
           const op = document.createElement('option');
           op.value = a; op.textContent = a;
-          if (a === cfg.defaultAlgorithm) op.selected = true;
+          if (a === 'none') op.selected = true;
           wsel.appendChild(op);
         });
       });
@@ -1256,7 +1359,7 @@
       sum.classList.toggle('on', parts.length > 0);
     }
 
-    function filterChanged() { refreshFilterSummary(); onFieldInteract(); }
+    function filterChanged() { refreshFilterSummary(); paintMtimeRange(); onFieldInteract(); }
 
     function selectFilterTab(paneId) {
       const tabs = $('fltTabs') ? $('fltTabs').querySelectorAll('.ftab') : [];
@@ -1271,6 +1374,16 @@
       $('mtimeAfter').disabled = !on;
       $('mtimeBefore').disabled = !on;
       if (!on) { $('mtimeAfter').value = ''; $('mtimeBefore').value = ''; }
+    }
+
+    /* 两个框都填上后回显实际范围：避免“只改了起始”被误读为“只筛了之后” */
+    function paintMtimeRange() {
+      const el = $('mtimeRange');
+      if (!el) return;
+      const a = $('mtimeAfter').value, b = $('mtimeBefore').value;
+      el.textContent = (a || b)
+        ? ('已选：' + (a ? a.replace('T', ' ') : '不限') + ' ~ ' + (b ? b.replace('T', ' ') : '不限'))
+        : '';
     }
 
     /* 浏览回来的绝对目录 -> 源目录内的相对 glob（不在源内返回 null） */
@@ -1329,8 +1442,10 @@
           const days = parseInt(quicks[i].dataset.days, 10) || 7;
           $('mtimeOn').checked = true;
           syncMtimeEnabled();
+          /* 预设是完整区间：起始=当前时间回推，结束=当前时间；
+             只填一侧会让“最近半年”实际变成“半年以前都能备”。 */
           $('mtimeAfter').value = toLocalInput(new Date(Date.now() - days * 86400000));
-          $('mtimeBefore').value = '';
+          $('mtimeBefore').value = toLocalInput(new Date());
           filterChanged();
         };
       }
@@ -1373,14 +1488,57 @@
     }
 
     initFilterUi();
+    syncControls();   /* 首屏按默认类型 backup 同步一次置灰状态 */
+
+    /* 按任务类型置灰用不到的控件。依据后端 Spec.parse / makeTask 的真实读取范围：
+       - backup  读 mode / 算法 / 加密 / 校验和 / filter / preserveMeta / verifyAfter / hardlinkDedupe；
+       - restore 读 password / preserveMeta / overwrite / skipPayloadVerify；
+       - verify  读 password（算法记在归档头里），对比同样只读 password。
+       只置灰不清值——切回适用的类型时，用户原来的选择还在。 */
+    function syncControls() {
+      const type = $('type').value;
+      const isBackup = type === 'backup';
+      const isRestore = type === 'restore';
+      const isCopy = isBackup && $('mode').value === 'copy';
+      const off = (id, cond) => { const el = $(id); if (el) el.disabled = !!cond; };
+
+      /* 形态只有备份用：还原/校验由来源后缀判定，对比固定按归档 */
+      off('mode', !isBackup);
+      /* 打包参数只有 backup（且非 copy）会读；其余类型从归档头取算法 */
+      ['algorithm', 'crypto', 'checksum'].forEach((id) => off(id, !isBackup || isCopy));
+      off('jobPassword', isBackup && isCopy);   /* 还原/校验/对比填密码解密是正常用法 */
+
+      /* 开关按类型分开：备份 3 个 / 还原 3 个 / 校验与对比都不读 */
+      off('preserveMeta', !(isBackup || isRestore));
+      off('verifyAfter', !isBackup);
+      off('hardlinkDedupe', !isBackup || isCopy);
+      off('overwrite', !isRestore);
+      off('skipPayloadVerify', !isRestore);
+      /* 备注写进归档卷标，只有新建归档（backup）有意义 */
+      off('comment', !isBackup);
+
+      /* 筛选面板只对 backup 生效（buildBody 只在 backup 时发送 filter） */
+      const flt = $('fltBox');
+      if (flt) {
+        flt.classList.toggle('off', !isBackup);
+        flt.setAttribute('aria-disabled', isBackup ? 'false' : 'true');
+      }
+
+      const copyWarn = $('copyWarn');
+      if (copyWarn) copyWarn.classList.toggle('hide', !isCopy);
+      const packWarn = $('packWarn');
+      if (packWarn) packWarn.classList.toggle('hide', isBackup);
+    }
 
     function buildBody() {
       const type = $('type').value;
+      const isCopy = type === 'backup' && $('mode').value === 'copy';
       const body = {
         type, label: $('label').value,
         source: $('source').value.trim(),
         destination: $('destination').value.trim(),
-        password: $('jobPassword').value,
+        /* copy 不打包，密码不参与；残留值不清会撞后端“给了 password 却没选加密”的拒绝 */
+        password: isCopy ? '' : $('jobPassword').value,
         preserveMeta: $('preserveMeta').checked,
         verifyAfter: $('verifyAfter').checked,
         overwrite: $('overwrite').checked,
@@ -1394,8 +1552,11 @@
       if (type === 'backup') {
         body.mode = $('mode').value;
         body.algorithm = $('algorithm').value;
-        body.crypto = $('crypto').value;
-        body.checksum = $('checksum').value;
+        /* copy 分支不读加密/校验和，不送避免残留值干扰后端 F5 反向校验 */
+        if (!isCopy) {
+          body.crypto = $('crypto').value;
+          body.checksum = $('checksum').value;
+        }
         const f = collectFilter();   /* 六维筛选：字段名与后端 applyFilterJson 一一对应 */
         if (Object.keys(f).length) body.filter = f;
       }
@@ -1417,7 +1578,9 @@
       if (type !== 'verify' && !dst) add(['destination'], '目标路径不能为空');
       if (type === 'backup') {
         const crypto = $('crypto').value;
-        if (crypto !== 'none' && !$('jobPassword').value)
+        /* copy 模式不打包，密码不会参与加密；跳过必填校验，否则置灰的控件会
+           把用户卡在“必须填密码”上（后端 copy 分支也不看 crypto/password）。 */
+        if ($('mode').value !== 'copy' && crypto !== 'none' && !$('jobPassword').value)
           add(['crypto', 'jobPassword'], '已选加密算法 ' + crypto + '，必须填写密码');
         const mode = $('mode').value;
         if (dst) {
@@ -1449,7 +1612,9 @@
         if (dst && looksAbsPath(dst) && !withinRoot(dst)) add(['destination'], '目标超出数据根，不允许访问：' + CFG.dataRoot);
       }
       const md = $('maxDepth').value.trim();
-      if (md !== '' && (Number.isNaN(parseInt(md, 10)) || parseInt(md, 10) < 0)) add(['maxDepth'], '最大深度必须是不小于 0 的整数');
+      /* 最大深度属于筛选面板（只对 backup 生效），其他类型不参与校验，
+         否则置灰的旧值会把用户卡在无法编辑的报错上 */
+      if (type === 'backup' && md !== '' && (Number.isNaN(parseInt(md, 10)) || parseInt(md, 10) < 0)) add(['maxDepth'], '最大深度必须是不小于 0 的整数');
       /* ---- 筛选面板：非法尺寸/时间后端是“静默忽略”的，必须在前端挡住 ---- */
       if (type === 'backup') {
         const minRaw = $('minSize').value.trim(), maxRaw = $('maxSize').value.trim();
@@ -1462,6 +1627,16 @@
           const b = parseFloat(maxRaw) * (mul[$('maxSizeUnit').value] || 1);
           if (a > b) add(['minSize', 'maxSize'], '最小尺寸不能大于最大尺寸');
         }
+        /* 年份必须是 4 位：阻止“20266-01-01”这种手输值被浏览器当成合法日期。
+           放在区间先后比较之前，否则 20266 会先报“起始晚于结束”，掩盖真正的错因。 */
+        ['mtimeAfter', 'mtimeBefore'].forEach((id) => {
+          const v = $(id).value;
+          if (!v) return;
+          const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v);
+          const y = parseInt(v.slice(0, 4), 10);
+          if (v.length > 16 || !m || y < 1000 || y > 9999)
+            add([id], '年份是 4 位数字，例 2026');
+        });
         if ($('mtimeOn').checked && $('mtimeAfter').value && $('mtimeBefore').value &&
           $('mtimeAfter').value > $('mtimeBefore').value)
           add(['mtimeAfter', 'mtimeBefore'], '“修改时间”的起始不能晚于结束');
@@ -1497,7 +1672,7 @@
       return fails;
     }
 
-    function onFieldInteract() { touchedForm = true; paintValidation(false); }
+    function onFieldInteract() { touchedForm = true; paintValidation(false); syncControls(); }
 
     async function submitJob() {
       const fails = paintValidation(true);
@@ -1505,6 +1680,7 @@
       $('btnSubmit').disabled = true;
       try {
         const r = await api('/api/jobs', { method: 'POST', body: JSON.stringify(buildBody()) });
+        rememberJobMode(r.data.id, r.data.mode);
         toast('任务 #' + r.data.id + ' 已受理（' + r.data.mode + '）');
         watchJob(r.data.id); refreshJobs();
       } catch (e) { toast('提交失败：' + e.message, true); }
@@ -1520,9 +1696,27 @@
       return v.toFixed(v >= 100 ? 0 : 1) + ' ' + u[i];
     };
 
+    /* 任务卡片的 mode 标签：GET /api/jobs 不返回 mode，只有提交响应里有；
+       用 sessionStorage 记住“本页提交过的任务 id→mode”，刷新后仍能回显。 */
+    const JOB_MODE = (() => {
+      try {
+        const o = JSON.parse(sessionStorage.getItem('dbkp.jobmode') || '{}');
+        return (o && typeof o === 'object') ? o : {};
+      } catch (e) { return {}; }
+    })();
+    function rememberJobMode(id, mode) {
+      if (!id || !mode) return;
+      JOB_MODE[id] = mode;
+      try { sessionStorage.setItem('dbkp.jobmode', JSON.stringify(JOB_MODE)); }
+      catch (e) { /* 隐私模式下不持久化，本次会话内仍可用 */ }
+    }
+
     function renderJobs(list) {
       const box = $('jobs');
-      if (!list || !list.length) { box.innerHTML = '<div class="meta">还没有任务。</div>'; return; }
+      if (!list || !list.length) {
+        box.innerHTML = '<div class="meta">还没有任务。在左侧“新建任务”提交第一个备份试试（来源选个目录，目标填 out/demo.dbkp）。</div>';
+        return;
+      }
       box.innerHTML = '';
       list.forEach((j) => box.appendChild(renderJob(j)));
       restoreOpenLogs();   /* 5 秒兜底重绘不能把用户展开着的日志收掉 */
@@ -1534,9 +1728,11 @@
       d.dataset.id = j.id;
       const pct = Math.round((j.ratio || 0) * 100);
       const done = j.state === 'succeeded' || j.state === 'failed' || j.state === 'canceled';
+      const jobMode = JOB_MODE[j.id];
       d.innerHTML =
         '<div class="t"><b class="s-' + j.state + '">' + j.state + '</b>' +
         '<span class="tag">' + j.type + '</span>' +
+        (jobMode ? '<span class="tag tag-mode">' + escapeHtml(jobMode) + '</span>' : '') +
         '<span class="tag">#' + j.id + '</span>' +
         '<span style="flex:1"></span>' +
         (done ? '' : '<button class="ghost" data-act="cancel">取消</button> ') +
@@ -1661,7 +1857,8 @@
         $('statOut').classList.remove('hide');
         $('statOut').textContent =
           '归档: ' + d.path + '\n算法: ' + d.algorithm + '   加密: ' + d.crypto +
-          '\n条目: ' + d.fileCount + ' (目录 ' + d.dirCount + ', 链接 ' + d.linkCount + ')' +
+          '\n条目: ' + d.fileCount + ' (目录 ' + d.dirCount + ', 链接 ' + d.linkCount +
+          ', 特殊 ' + (d.specialCount || 0) + ')' +
           '\n原始: ' + fmtBytes(d.rawBytes) + ' → 存成: ' + fmtBytes(d.storedBytes) +
           '   压缩比: ' + ((d.ratio || 1) * 100).toFixed(1) + '%' +
           '\n校验: ' + (d.checksum || 'crc64') + '   头大小: ' + (d.headerSize || 512) + 'B' +
@@ -1674,21 +1871,52 @@
     }
 
     /* 条目清单：元数据一直在归档里，这里把它摊开。带 link 的行在路径后补一句目标。 */
+    const TYPE_TEXT = {
+      '-': '文件', 'D': '目录', 'L': '符号链接', 'B': '块设备', 'C': '字符设备',
+      'F': '管道(FIFO)', 'S': '套接字', 'H': '硬链接', 'X': '扩展记录',
+    };
+    const typeText = (t) => TYPE_TEXT[t] || ('未知(' + (t || '?') + ')');
+
+    /* 权限：mode=0 表示归档没采集到，显示 — 而不是容易误解的 0000 */
+    const fmtPerm = (mode) => mode ? ('0' + (mode & 0o7777).toString(8)).slice(-4) : '—';
+
+    /* 修改时间：秒 + 纳秒余数 → 毫秒精度本地时间；mtime=0（未采集）显示 — */
+    function fmtMtime(sec, ns) {
+      if (!sec) return '—';
+      const ms = Math.round((ns || 0) / 1e6);
+      const d = new Date(sec * 1000 + ms);
+      const p2 = (n) => (n < 10 ? '0' : '') + n;
+      return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' +
+        p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()) + '.' +
+        String(ms).padStart(3, '0');
+    }
+
     function renderEntries(d) {
       const box = $('statEntries');
       const list = d.entries || [];
       if (!list.length) { box.innerHTML = ''; return; }
+      /* 属主是 POSIX 概念：Windows 上 capabilities.owner=false，uid/gid 恒为 0，
+         显示 0:0 会被误认为“记录错了”，按平台置 — 并在 title 里说明原因。 */
+      const ownerOk = !(window.CAPS && window.CAPS.owner === false);
       let html = '<div class="meta">条目（共 ' + (d.entriesTotal || list.length) +
-        ' 条，显示前 ' + list.length + '）：</div>' +
-        '<table class="etab"><thead><tr><th>路径</th><th>类</th><th>原始</th>' +
-        '<th>存成</th><th>算法</th><th>CRC64</th></tr></thead><tbody>';
+        ' 条，显示前 ' + list.length + ' 条）：</div>' +
+        '<table class="etab"><thead><tr><th>路径</th><th>类型</th><th>修改时间</th>' +
+        '<th>权限</th><th>属主</th><th>链接数</th><th>原始</th><th>存成</th>' +
+        '<th>算法</th><th>加密</th><th>CRC64</th></tr></thead><tbody>';
       list.forEach((e) => {
-        html += '<tr><td class="path">' + escapeHtml(e.path) +
+        const hl = (e.nlink || 0) > 1;      /* 硬链接：同 inode 多路径，行底色高亮 */
+        html += '<tr' + (hl ? ' class="hl"' : '') + '><td class="path">' + escapeHtml(e.path) +
           (e.link ? ' <span class="meta">→ ' + escapeHtml(e.link) + '</span>' : '') + '</td>' +
-          '<td>' + escapeHtml(e.type) + '</td>' +
+          '<td title="' + escapeHtml(e.type || '') + '">' + escapeHtml(typeText(e.type)) + '</td>' +
+          '<td>' + fmtMtime(e.mtime, e.mtimeNs) + '</td>' +
+          '<td>' + fmtPerm(e.mode) + '</td>' +
+          '<td' + (ownerOk ? '' : ' title="当前平台不支持该项（POSIX 概念）"') + '>' +
+          (ownerOk ? (escapeHtml(String(e.uid)) + ':' + escapeHtml(String(e.gid))) : '—') + '</td>' +
+          '<td>' + (e.nlink || 0) + '</td>' +
           '<td>' + fmtBytes(e.size || 0) + '</td>' +
           '<td>' + fmtBytes(e.storedSize || 0) + '</td>' +
           '<td>' + escapeHtml(e.algorithm || '') + '</td>' +
+          '<td>' + escapeHtml(e.crypto || 'none') + '</td>' +
           '<td>' + escapeHtml(e.crc64 || '') + '</td></tr>';
       });
       html += '</tbody></table>';

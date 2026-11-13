@@ -56,7 +56,24 @@
       padding: 18px 20px 40px;
       display: grid;
       gap: 18px;
-      grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+      /* 卡片是无包裹层直接排在网格里的 2x2：新建任务 ↔ 任务列表 同行、定时备份 ↔ 实时备份
+         同列，所以加宽左列会等量挤窄右列。原先左列锁在 430px，② 区三个下拉挤成一堆；
+         宽屏放到 560px，窗口变窄时由下面两个断点逐级收回，保证右列的条目表不缩水。 */
+      grid-template-columns: minmax(380px, 560px) minmax(0, 1fr);
+    }
+
+    @media (max-width: 1400px) {
+      main {
+        grid-template-columns: minmax(360px, 480px) minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 1180px) {
+      /* 故意不用 1150 这种整值：实测小窗口下浏览器求值的视口宽是 1150.38 这种亚像素值，
+         max-width:1150px 刚好不命中，断点会在临界分屏下抖来抖去。 */
+      main {
+        grid-template-columns: minmax(330px, 420px) minmax(0, 1fr);
+      }
     }
 
     @media (max-width: 900px) {
@@ -146,6 +163,25 @@
 
     .row>div {
       flex: 1;
+    }
+
+    /* 装下拉的行（① 区类型/形态、② 区压缩/加密/校验和）：宁可换行也不把选中项文字压到截断，
+       窄栏下靠 flex-basis 自然掉行。 */
+    .row.wrap {
+      flex-wrap: wrap;
+    }
+
+    .row.wrap>div {
+      /* 160px 而不是 150px：实测极窄窗口（约 395-415px）下两项并排时 “archive 单文件归档” 会裁 ~9px，
+         抬高到 160 能让它在容器不够宽时提前掉成一列一项。 */
+      flex: 1 1 160px;
+      min-width: 160px;
+    }
+
+    /* 文件大小单位下拉：72px 下“bytes” 会被原生箭头挤到临界 */
+    #minSizeUnit,
+    #maxSizeUnit {
+      min-width: 88px;
     }
 
     button {
@@ -746,23 +782,24 @@
       <h2>新建任务</h2>
       <div class="cdesc">选来源 → 选目标 → 选算法 → 提交。目标是 .dbkp 文件 = 打包成单文件归档；是目录 = 逐文件复制。切换类型后，与当前任务无关的参数会自动置灰。</div>
       <div class="sect first">① 任务类型与路径</div>
-      <div class="row">
+      <div class="row wrap">
         <div><label>类型</label>
           <select id="type">
             <option value="backup">备份 backup</option>
             <option value="restore">还原 restore</option>
             <option value="verify">校验 verify</option>
-            <option value="compare">对比 compare（归档 vs 源目录）</option>
+            <option value="compare">对比 compare</option>
           </select>
         </div>
         <div><label>形态（备份时有效）</label>
           <select id="mode">
-            <option value="auto">auto 自动判断（目标以 .dbkp 结尾→单文件归档，否则→目录复制）</option>
-            <option value="archive">archive 单文件归档（强制，生成 .dbkp）</option>
-            <option value="copy">copy 目录复制（强制，不压缩不加密）</option>
+            <option value="auto">auto 自动判断</option>
+            <option value="archive">archive 单文件归档</option>
+            <option value="copy">copy 目录复制</option>
           </select>
         </div>
       </div>
+      <div class="fhint">对比 compare = 归档 vs 源目录逐条比对。形态：auto = 目标以 .dbkp 结尾则单文件归档、否则目录复制；archive / copy 为强制指定，其中 copy 不压缩不加密。</div>
       <label>来源 source（备份=源目录；还原/校验/对比=归档或备份目录；相对路径按数据根解析）</label>
       <div class="row">
         <div><input id="source" placeholder="webview 或 D:/data/docs"></div>
@@ -778,18 +815,18 @@
         </div>
       </div>
       <div class="sect">② 算法与安全</div>
-      <div class="row">
-        <div><label>压缩算法</label><select id="algorithm"></select></div>
-        <div><label>加密算法</label>
+      <div class="row wrap">
+        <div><label>压缩算法（默认 none = 不压缩）</label><select id="algorithm"></select></div>
+        <div><label>加密算法（默认 none = 不加密）</label>
           <select id="crypto">
-            <option value="none">none 不加密（默认）</option>
+            <option value="none">none 不加密</option>
             <option value="aes256">AES-256-CBC</option>
             <option value="des-ede">DES-EDE-CBC(3DES)</option>
             <option value="chacha20">ChaCha20</option>
           </select>
         </div>
-        <div><label>校验和</label><select id="checksum">
-            <option value="none" selected>none（默认，不记录校验和）</option>
+        <div><label>校验和（默认 none = 不记录）</label><select id="checksum">
+            <option value="none" selected>none 不记录</option>
             <option value="crc64">CRC64</option>
             <option value="sha256">SHA-256</option>
           </select></div>
@@ -1009,7 +1046,7 @@
       <label>文件名前缀 prefix（留空 = 源目录名）</label>
       <input id="schPrefix" placeholder="留空自动">
       <div class="row">
-        <div><label>间隔 interval</label><input id="schInterval" value="5m" placeholder="90s / 5m / 2h / 1d"></div>
+        <div><label>间隔 interval</label><input id="schInterval" value="5m" placeholder="90s/5m/2h/1d"></div>
         <div><label>轮次 times</label><input id="schTimes" value="3" placeholder=">=1"></div>
         <div><label>保留份数 keep</label><input id="schKeep" value="0" placeholder="0=不限"></div>
       </div>

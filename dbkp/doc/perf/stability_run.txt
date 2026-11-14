@@ -1,6 +1,6 @@
 ﻿============================================================================
- dbkp 稳定性测试  运行时间: 2026-11-14 00:29:16
- 被测程序: C:\Users\user\Desktop\develop\software-develop\dbkp\bin\bk.exe
+ dbkp 稳定性测试  运行时间: 2026-11-14 15:51:22
+ 被测程序: D:\大四上\软件开发综合实验\dbkp\bin\bk.exe
  轮次: 50 轮 round-trip；定时备份 --every 5s --times 20 --keep 3
  失败即停：任一轮退出码非 0 或逐字节对比不一致立即终止并记录轮号
 ============================================================================
@@ -14,26 +14,26 @@ round 20/50 OK  archive=540 KB
 round 30/50 OK  archive=540 KB
 round 40/50 OK  archive=540 KB
 round 50/50 OK  archive=540 KB
-round-trip 结果: 50 轮全部通过，总耗时 26.8s，平均 0.54s/轮
+round-trip 结果: 50 轮全部通过，总耗时 10.3s，平均 0.21s/轮
 
 --- ② 定时备份 bk schedule --every 5s --times 20 --keep 3 ---
-schedule 退出码: 0   实际耗时: 99.5s（理论 ~95s：20 次 x 5s 间隔）
+schedule 退出码: 0   实际耗时: 96.9s（理论 ~95s：20 次 x 5s 间隔）
 schedule 输出（末 15 行）:
-scheduled backup #18 -> C:\Users\user\AppData\Local\Temp\dbkp_stab_20808\sched_dst/sched_src-20261114-003110-525.dbkp
-retention: removed sched_src-20261114-003055-272.dbkp
+scheduled backup #18 -> C:\Users\yangp\AppData\Local\Temp\dbkp_stab_13236\sched_dst/sched_src-20261114-155259-654.dbkp
+retention: removed sched_src-20261114-155244-477.dbkp
 backup mode = archive
 archive written: 3 entries, 266240 -> 266240 bytes (payload 267776)
 verified 3 entries into .
 post-backup verify: archive is consistent
-scheduled backup #19 -> C:\Users\user\AppData\Local\Temp\dbkp_stab_20808\sched_dst/sched_src-20261114-003115-600.dbkp
-retention: removed sched_src-20261114-003100-345.dbkp
+scheduled backup #19 -> C:\Users\yangp\AppData\Local\Temp\dbkp_stab_13236\sched_dst/sched_src-20261114-155304-726.dbkp
+retention: removed sched_src-20261114-155249-548.dbkp
 backup mode = archive
 archive written: 3 entries, 266240 -> 266240 bytes (payload 267776)
 verified 3 entries into .
 post-backup verify: archive is consistent
-scheduled backup #20 -> C:\Users\user\AppData\Local\Temp\dbkp_stab_20808\sched_dst/sched_src-20261114-003120-678.dbkp
-retention: removed sched_src-20261114-003105-448.dbkp
-schedule ok: 20 backup(s) into C:\Users\user\AppData\Local\Temp\dbkp_stab_20808\sched_dst, keep=3
+scheduled backup #20 -> C:\Users\yangp\AppData\Local\Temp\dbkp_stab_13236\sched_dst/sched_src-20261114-155309-792.dbkp
+retention: removed sched_src-20261114-155254-595.dbkp
+schedule ok: 20 backup(s) into C:\Users\yangp\AppData\Local\Temp\dbkp_stab_13236\sched_dst, keep=3
 归档目录内 .dbkp 数量: 3  （--keep 3 期望 <= 3）
 残留 .tmp 数量: 0  （期望 0，无半成品输出）
 

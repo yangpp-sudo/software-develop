@@ -23,3 +23,10 @@ dbkp/tmp/
 # 调试草稿区：界面验收截图、一次性探针脚本与提交消息临时文件
 # 只做过程留证，不入库；确实要提交其中的脚本时用 git add -f _probe/<file>
 _probe/
+
+# web_full_test.ps1 每次运行自建自清的数据根，残留产物不入库
+dbkp/_webtest_demo/
+
+# GoogleTest 全量链接产物约 104 MB，超过 GitHub 单文件上限，需要时
+# mingw32-make test-gtest 重建，不入库
+dbkp/bin/bk_gtest.exe

@@ -75,6 +75,12 @@ public:
     void setKeepHistory(std::size_t n) { m_keepHistory = n; }
     void setMaxLogLines(std::size_t n) { m_maxLogLines = n; }
 
+    /** C15：待处理队列上限（默认 64）。0 视为 1，杜绝"配 0 = 不限"。
+     *  仅允许在启动期、任何 submit 之前设置；运行时读用原子量，无数据竞争。 */
+    void setMaxPending(std::size_t n) { m_maxPending.store(n ? n : 1); }
+    std::size_t maxPending() const { return m_maxPending.load(); }
+    std::size_t pendingCount() const;
+
     static const char* stateName(State s);
     static CJsonValue toJson(const Info& info, bool withLog);
 
@@ -119,6 +125,7 @@ private:
     long long   m_nextId = 1;
     std::size_t m_keepHistory = 64;
     std::size_t m_maxLogLines = 200;
+    std::atomic<std::size_t> m_maxPending{64};     /* C15：m_pending 的硬上限 */
     bool        m_accepting = true;                /* stop() 后置 false */
     std::atomic<unsigned long long> m_revision;    /* 状态变化计数，SSE 靠它判新 */
 

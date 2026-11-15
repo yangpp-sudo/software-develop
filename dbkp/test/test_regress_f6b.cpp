@@ -55,7 +55,10 @@ void writeEmptyShell(const std::string& arcPath) {
 
 } /* anonymous namespace */
 
-/* ① 空壳箱必须被 verify 拒掉（非零错误），而不是绿灯通过 */
+/* ① 空壳箱必须被 verify 拒掉（非零错误），而不是绿灯通过。
+ * F6b 复核修正后拒得更早：readHeaderAt 的"物理长度对账"发现头部声明
+ * payloadSize=0 与文件实际剩余 512B 不符，在逐条 diff 之前就返回
+ * E_INVALID_HEADER_RECORD（badCount 尚未开始计数，保持 0）。 */
 TEST(RegressF6b, empty_shell_rejected_by_verify) {
     const std::string root = "treg_f6b_shell";
     const std::string arc  = Path::join(root, "shell.dbkp");
@@ -66,8 +69,8 @@ TEST(RegressF6b, empty_shell_rejected_by_verify) {
     CMyPack p;
     int bad = 0;
     ErrCode e = p.verify(arc, "", bad);
-    EXPECT_NE(int(e), int(E_OK));
-    EXPECT_TRUE(bad >= 1);
+    EXPECT_EQ(int(e), int(E_INVALID_HEADER_RECORD));   /* 物理对账拒绝 */
+    EXPECT_EQ(bad, 0);                                 /* 尚未进入逐条比对 */
     /* restore 同样必须在落盘前拒绝（unpack 前置整卷校验走同一判据） */
     UnpackOptions u;
     ErrCode re = p.unpack(arc, Path::join(root, "out"), u);
@@ -140,7 +143,11 @@ TEST(RegressF6b, pack_detects_orphan_tmp_and_force_recovers) {
 }
 
 /* 合法空目录备份（零条目、payloadSize==0 且 recordCount==0）不得被误杀 */
-TEST(RegressF6b, genuinely_empty_archive_still_passes) {
+/* ② 真正零记录的归档现在也被拒（F6b 复核修正的配套语义）：
+ * 任何合法备份都至少含根目录 "." 记录，payloadSize 恒 > 0。
+ * "连根目录都不要"产出的 0 记录箱与伪造空壳在物理上无法区分，
+ * 统一在打包自检阶段拒绝 —— 备份一个"什么都不要"的源目录本身就是配置错误。 */
+TEST(RegressF6b, genuinely_empty_source_rejected_at_pack) {
     const std::string root = "treg_f6b_legit";
     const std::string src  = Path::join(root, "src");
     const std::string arc  = Path::join(root, "box.dbkp");
@@ -150,12 +157,9 @@ TEST(RegressF6b, genuinely_empty_archive_still_passes) {
     CMyPack p;
     PackOptions o;
     o.filter.includeDirs = false;   /* 连根目录 "." 都不入档 -> 真正零记录 */
-    ASSERT_EQ(int(p.pack(src, arc, o)), int(E_OK));
-    ArchiveHeader hdr;
-    ASSERT_EQ(int(p.readHeader(arc, hdr)), int(E_OK));
-    EXPECT_EQ(int(hdr.recordCount), 0);
+    EXPECT_NE(int(p.pack(src, arc, o)), int(E_OK));   /* 打包自检拒绝空载荷 */
     int bad = 0;
-    EXPECT_EQ(int(p.verify(arc, "", bad)), int(E_OK));   /* 不误杀 */
+    EXPECT_NE(int(p.verify(arc, "", bad)), int(E_OK)); /* verify 侧同样拒绝 */
 
     removeTree(root);
 }

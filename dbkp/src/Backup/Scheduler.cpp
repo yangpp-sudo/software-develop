@@ -37,6 +37,10 @@ int CScheduler::parseInterval(const std::string& text, bool* okOut) {
 }
 
 std::string CScheduler::makeArchiveName(const std::string& dir, const std::string& prefix) {
+    /* A1 纵深防御：即使某个调用方漏了入口校验，也绝不让带 .. / 分隔符的
+       prefix 参与路径拼接（会把备份箱写到目标目录外，且 retention 前缀匹配失效）。
+       非法 prefix 一律降级成 "backup"，保证落点恒在 dir 内。 */
+    const std::string safePrefix = Path::isSafeNameComponent(prefix) ? prefix : std::string("backup");
     std::time_t now = std::time(nullptr);
     struct tm tmv;
     std::memset(&tmv, 0, sizeof(tmv));
@@ -52,7 +56,7 @@ std::string CScheduler::makeArchiveName(const std::string& dir, const std::strin
         std::chrono::system_clock::now().time_since_epoch()).count() % 1000;
     char stamp[48];
     std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &tmv);
-    std::string stem = prefix + "-" + stamp;
+    std::string stem = safePrefix + "-" + stamp;
     char tail[8];
     std::snprintf(tail, sizeof(tail), "%03ld", ms);
     stem += std::string("-") + tail;   /* 毫秒段：同秒不同毫秒直接分开 */
@@ -68,6 +72,7 @@ std::string CScheduler::makeArchiveName(const std::string& dir, const std::strin
 
 int CScheduler::applyRetention(const std::string& dir, const std::string& prefix, int keep) {
     if (keep <= 0) return 0;
+    if (!Path::isSafeNameComponent(prefix)) return 0;   /* A1：非法 prefix 不参与删除决策 */
     std::vector<Platform::DirEntry> items;
     if (DBKP_IS_ERR(Platform::listDir(dir, items))) return 0;
     std::vector<std::string> archives;
@@ -109,6 +114,14 @@ ErrCode CScheduler::run(const ScheduleOptions& opt, std::atomic<bool>* stopFlag)
     }
     if (prefix.empty()) prefix = Path::fileName(Path::normalize(opt.backup.source));
     if (prefix.empty() || prefix == ".") prefix = "backup";
+    /* A1：--prefix 是拼进归档文件名再参与删除的不可信输入。含 .. / 分隔符 /
+       绝对形态时必须明确拒绝（不是静默降级），否则备份箱会写到目标目录之外，
+       且 --keep 保留策略因前缀匹配不到而完全失效，旧箱永远不清理。 */
+    if (!Path::isSafeNameComponent(prefix)) {
+        LOG_ERR("unsafe --prefix (refused): " + prefix +
+                " — must be a single filename component without path separators or '..'");
+        return E_INVALID_PARAMETER;
+    }
     if (DBKP_IS_ERR(Platform::exists(dir))) Platform::makeDirTree(dir);
 
     ErrCode last = E_OK;

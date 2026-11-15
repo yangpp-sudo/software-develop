@@ -343,10 +343,10 @@ TEST(WbRestoreGuard, symlinkWindowsTargetRejected) {
     EXPECT_NE(int(Platform::exists(Path::join(sb.dest, "link.txt"))), int(E_OK));
 }
 
-/* B1-14 verifyOnly 早退分支（MyPack.cpp:590）：符号链接条目在只校验模式下
- * 先于 link 关卡返回 E_OK —— 这是"判定顺序"的路径覆盖，也说明 verifyOnly
- * 根本不碰磁盘（目标目录保持 0 条目）。 */
-TEST(WbRestoreGuard, verifyOnlySkipsLinkGuardAndWritesNothing) {
+/* B1-14 verifyOnly 早退分支（N8 复核修正后）：link 目标的 isPathTraversalSafe
+ * 检查已前置到 restoreEntry 开头、早于任何 verifyOnly 早退 —— 恶意 link 即使
+ * 在只校验模式下也会被拒绝（verify 不再"自洽放行"）。目标目录保持 0 条目。 */
+TEST(WbRestoreGuard, verifyOnlyRejectsMaliciousLinkAndWritesNothing) {
     WbSandbox sb("vonly");
     std::vector<Part> parts;
     parts.push_back(wbSymlink("link.txt", "/etc/shadow"));
@@ -357,18 +357,17 @@ TEST(WbRestoreGuard, verifyOnlySkipsLinkGuardAndWritesNothing) {
     CMyPack pack;
     UnpackOptions opt;
     opt.verifyOnly = true;
-    ASSERT_EQ(int(pack.unpack(sb.arc, sb.dest, opt)), int(E_OK));
+    /* 绝对路径 link 目标 → N8 前置关卡拒绝；restore 走同一关卡同样拒绝 */
+    EXPECT_EQ(int(pack.unpack(sb.arc, sb.dest, opt)), int(E_INVALID_PARAMETER));
     EXPECT_EQ(wbCountEntries(sb.dest), -1);   /* 目录都没被创建 */
 }
 
-/* B1-15 反斜杠变体 "..\..\evil.txt"：实现按 '/' 切段（PathUtil.cpp:181），
- * 整串只是一个段，不等于 ".." -> 判为"安全"，而 absOf/normalize 会真把它
- * 折叠到目标目录之外。本用例把这一实现现状钉在测试里（沙箱内两层目录，
- * 逃逸落点仍在 root 之内，跑完自清），整改建议见 doc/05。 */
-TEST(WbRestoreGuard, backslashDotDotCurrentlyAllowedByPredicate) {
+/* B1-15 反斜杠变体 "..\..\evil.txt"（N1 修复后语义）：实现先把 '\' 归一成
+ * '/' 再逐段检查，"..\" 不再是盲区 —— 谓词直接拒绝，unpack 在落盘前
+ * 拒绝该记录，目标目录外不出现任何文件。 */
+TEST(WbRestoreGuard, backslashDotDotRejectedByPredicate) {
     const std::string evil = "..\\..\\twb_escape.txt";
-    EXPECT_TRUE(Path::isPathTraversalSafe(evil));              /* 实现：允许 */
-    EXPECT_EQ(Path::normalize("a/b/" + evil), std::string("twb_escape.txt"));
+    EXPECT_FALSE(Path::isPathTraversalSafe(evil));             /* N1 修复：拒绝 */
 
     WbSandbox sb("bs");
     std::vector<Part> parts;
@@ -377,26 +376,25 @@ TEST(WbRestoreGuard, backslashDotDotCurrentlyAllowedByPredicate) {
 
     CMyPack pack;
     UnpackOptions opt;
-    /* 目标设为 root/a/b：越出两层后落在 root/ 内，测试可控且必被自清 */
     const std::string deepDest = Path::join(sb.root, "a/b");
     Platform::makeDirTree(deepDest);
     ErrCode e = pack.unpack(sb.arc, deepDest, opt);
 
-    EXPECT_EQ(int(e), int(E_OK));                              /* 实现放行 */
-    EXPECT_EQ(int(Platform::exists(Path::join(sb.root, "twb_escape.txt"))), int(E_OK));
-    EXPECT_EQ(wbCountEntries(deepDest), 0);                    /* 未在目标内落地 */
+    EXPECT_EQ(int(e), int(E_INVALID_PARAMETER));                /* 落盘前拒绝 */
+    EXPECT_NE(int(Platform::exists(Path::join(sb.root, "twb_escape.txt"))), int(E_OK));
+    EXPECT_EQ(wbCountEntries(deepDest), 0);                     /* 未在目标内落地 */
 }
 
-/* B1-16 判定覆盖条件组合表（PathUtil.cpp:176-186，实测值，逐格钉住现状）：
- *   "a/../\evil"  -> 拒：按 '/' 切段得 a / ".." / "\evil"，中间那段**正好等于** ".."
- *   "a/..\evil"   -> 允：切段得 a / "..\evil"，该段 != ".."（反斜杠盲区）
+/* B1-16 判定覆盖条件组合表（N1 修复后语义，逐格钉住）：
+ *   "a/../\evil"  -> 拒：'\' 归一成 '/' 后切段得 a / ".." / "\evil"，中间段等于 ".."
+ *   "a/..\evil"   -> 拒：归一后即 "a/../evil"，中间段是 ".."（旧版反斜杠盲区已封）
  *   "a/../../evil"-> 拒：两个独立 ".." 段
- *   "a//b"        -> 允：空段被 continue 跳过（PathUtil.cpp:181）
+ *   "a//b"        -> 允：空段被 continue 跳过
  *   "./a"         -> 允："." 段不等于 ".."
- * normalize 会把两种写法都折叠，说明"允许"那格是真实的判定缺口。 */
+ * normalize 会把前两种写法都折叠到 "evil"——谓词与折叠层语义现已一致。 */
 TEST(WbRestoreGuard, traversalPredicateDecisionTable) {
     EXPECT_FALSE(Path::isPathTraversalSafe("a/../\\evil"));
-    EXPECT_TRUE (Path::isPathTraversalSafe("a/..\\evil"));
+    EXPECT_FALSE(Path::isPathTraversalSafe("a/..\\evil"));
     EXPECT_FALSE(Path::isPathTraversalSafe("a/../../evil"));
     EXPECT_TRUE (Path::isPathTraversalSafe("a//b"));
     EXPECT_TRUE (Path::isPathTraversalSafe("./a"));

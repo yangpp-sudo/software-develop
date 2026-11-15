@@ -136,6 +136,11 @@ ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr, const uint
     hdr.compAlg       = in512[8];
     hdr.cryptoAlg     = in512[9];
     hdr.checksum      = in512[10];
+    /* N10 加固：未知 checksum 枚举值以前被静默当成 CRC64 处理。校验算法
+       是用户以为买到的安全属性，收到未定义值就该拒绝，而不是猜。 */
+    if (hdr.checksum != CHK_NONE && hdr.checksum != CHK_CRC64 &&
+        hdr.checksum != CHK_SHA256)
+        return E_INVALID_HEADER_RECORD;
     hdr.flags         = in512[11];
     hdr.payloadCrc    = readLE64(in512 + 12);
     hdr.payloadOffset = readLE64(in512 + 20);
@@ -146,6 +151,11 @@ ErrCode decodeArchiveHeader(const uint8_t* in512, ArchiveHeader& hdr, const uint
     hdr.createTime    = readLE64(in512 + 60);
     for (int i = 0; i < 16; ++i) hdr.salt[i] = in512[68 + i];
     hdr.kdfRounds     = readLE16(in512 + 84);
+    /* B5：kdfRounds 是头部可篡改字段，且还原时会用它跑 PBKDF2。改成 65535
+       会把一次密钥派生从 ~28ms 放大到 ~550ms（checkHeaderHmac 与 makeCrypto
+       各一次，再加 verify 一遍 → 秒级无权限 DoS）。打包端固定写 4096，这里
+       给一个明确的合法值域：0(回退默认) 或 1..16384，超出即拒绝伪造头。 */
+    if (hdr.kdfRounds > 16384) return E_INVALID_HEADER_RECORD;
     uint16_t srcLen   = readLE16(in512 + 86);
     uint16_t comLen   = readLE16(in512 + 88);
     if (srcLen > 256 || comLen > 166) return E_INVALID_HEADER_RECORD;
@@ -292,6 +302,11 @@ ErrCode CRecordReader::pushBlock(const uint8_t* block512) {
     rec.minorNum   = readLE32(block512 + RO_MINOR);
     rec.size       = int64_t(readLE64(block512 + RO_SIZE));
     rec.storedSize = int64_t(readLE64(block512 + RO_STORED));
+    /* N7 加固：size/storedSize 是攻击者可控的 64 位字段。负值在语义上不可能
+       （文件大小非负），历史上却能骗过 "storedSize > 0" 的读取条件，静默产出
+       0 字节文件；超大正值则会在 readDataBlocks 触发按声称值预分配的内存炸弹。
+       在解析层直接拒绝，让两种攻击都变成确定性的"档案损坏"。 */
+    if (rec.size < 0 || rec.storedSize < 0) return E_INVALID_HEADER_RECORD;
     rec.crc        = readLE64(block512 + RO_CRC);
     rec.compAlg    = block512[RO_COMP];
     rec.cryptoAlg  = block512[RO_CRYPTO];

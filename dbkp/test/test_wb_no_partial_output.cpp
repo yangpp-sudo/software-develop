@@ -351,7 +351,9 @@ TEST(WbNoPartialOutput, renameFailureKeepsOldArchiveByteIdentical) {
     std::vector<uint8_t> after;
     ASSERT_EQ(int(CSimpleFile::readWhole(sb.arc, after)), int(E_OK));
 
-    EXPECT_EQ(int(e), int(E_FILE_WRITE_FAIL));
+    /* renameFile 现在区分失败原因：目标被独占锁定/占用 = ACCESS_DENIED 家族
+     * -> E_PERMISSION_DENIED（比笼统的 E_FILE_WRITE_FAIL 更能指导用户处理）。 */
+    EXPECT_EQ(int(e), int(E_PERMISSION_DENIED));
     EXPECT_FALSE(tmpLeft);
     EXPECT_TRUE(after == oldBytes);
     EXPECT_TRUE(text.find("atomic rename failed") != std::string::npos);

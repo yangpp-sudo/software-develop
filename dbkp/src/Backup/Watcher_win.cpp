@@ -26,7 +26,7 @@ struct CDirWatcher::Impl {
     HANDLE           dirHandle   = INVALID_HANDLE_VALUE;
     HANDLE           ovEvent     = nullptr;
     /* ReadDirectoryChangesW 推荐 >= 4096 字节缓冲 */
-    uint8_t          buffer[8192];
+    uint8_t          buffer[8192] = {};
 };
 
 /* 后台线程主循环：阻塞在 ReadDirectoryChangesW，有变化就置脏 */

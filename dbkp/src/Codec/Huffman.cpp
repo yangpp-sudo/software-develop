@@ -126,6 +126,20 @@ ErrCode CHuffman::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& o
                            ver, flags, rawLen, start)) return E_COMPRESS_FAIL;
     if (ver != 1) return E_COMPRESS_FAIL;
     if (in.size() < start + 256) return E_TRUNCATED_ARCHIVE;
+    /* N4 解压炸弹防御（格式精确上界版）：完备前缀码中每个符号至少占
+       1 bit，故 rawLen 不得超过位流字节数的 8 倍。超过即为伪造头。
+       （此前这里对 rawLen 完全没有上限，assign(rawLen, 0) 可被 3 字节
+       恶意载荷直接打爆内存。） */
+    /* 上界：完备前缀码每个符号至少占 1 bit，故 rawLen <= 位流字节数 × 8。
+       +256 是给"最后一个字节的填充位 + 256B 码长表"留的宽容余量，不影响
+       拦截炸弹（伪造头通常大出几个数量级）。乘法前先限乘数防回绕。
+       （此前这里对 rawLen 完全没有上限，assign(rawLen, 0) 可被 3 字节
+       恶意载荷直接打爆内存。） */
+    {
+        const uint64_t bits = static_cast<uint64_t>(in.size() - start - 256);
+        if (bits > (~static_cast<uint64_t>(0) - 256ull) / 8ull) return E_COMPRESS_FAIL;
+        if (rawLen > bits * 8ull + 256ull) return E_COMPRESS_FAIL;
+    }
     if (rawLen == 0) { out.clear(); return E_OK; }
 
     const uint8_t* len = in.data() + start;

@@ -43,7 +43,18 @@ static void fileTimeToUnix(const FILETIME& ft, int64_t& sec, int64_t& nsec) {
 }
 
 static FILETIME unixToFileTime(int64_t sec, int64_t nsec) {
+    /* C11：归档里的 mtime/atime 是 64 位攻击者可控字段。INT64_MAX 会让
+       sec*10000000ll 有符号溢出（UB），再被当成合法的 FILETIME 写进文件系统。
+       FILETIME 有效范围是 1601-01-01 起的无符号 100ns 计数，对应 Unix 秒
+       约 [-11644473600, 253402300799]。超出这个区间一律钳到边界值，且由
+       调用方（applyMetadata）负责给出可见警告，不能静默假装成功。 */
+    const int64_t kMinUnixSec = -11644473600ll;
+    const int64_t kMaxUnixSec = 253402300799ll;
+    if (sec < kMinUnixSec) { sec = kMinUnixSec; nsec = 0; }
+    else if (sec > kMaxUnixSec) { sec = kMaxUnixSec; nsec = 0; }
+    if (nsec < 0 || nsec > 999999999ll) nsec = 0;
     int64_t t100 = sec * 10000000ll + nsec / 100ll + kEpochDiff100ns;
+    if (t100 < 0) t100 = 0;   /* FILETIME 不能为负 */
     ULARGE_INTEGER u; u.QuadPart = uint64_t(t100);
     FILETIME ft; ft.dwLowDateTime = u.LowPart; ft.dwHighDateTime = u.HighPart;
     return ft;
@@ -243,7 +254,10 @@ ErrCode removeFile(const std::string& path) {
 ErrCode renameFile(const std::string& from, const std::string& to) {
     std::wstring wf = Path::apiWide(from);
     std::wstring wt = Path::apiWide(to);
-    return MoveFileExW(wf.c_str(), wt.c_str(), MOVEFILE_REPLACE_EXISTING) ? E_OK : E_FILE_WRITE_FAIL;
+    if (MoveFileExW(wf.c_str(), wt.c_str(), MOVEFILE_REPLACE_EXISTING)) return E_OK;
+    /* 区分失败原因：落点被目录占用 / 权限不足 都是 ACCESS_DENIED 家族，
+       上报 E_PERMISSION_DENIED 而不是笼统的写失败，前端提示才准确。 */
+    return GetLastError() == ERROR_ACCESS_DENIED ? E_PERMISSION_DENIED : E_FILE_WRITE_FAIL;
 }
 
 ErrCode exists(const std::string& path) {

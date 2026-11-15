@@ -1,0 +1,21 @@
+=== 1. 创建 junction: data/evil -> outside ===
+CreateJunction OK
+=== 2. 确认它确实是 reparse point ===
+GetFileAttributesW= 0x410  REPARSE_POINT= True
+经链接能读到围栏外文件: SECRET-OUTSIDE-9999
+=== 3. 启动 bkd（data-root = _jct/data） ===
+  /api/info ready=200 (ready_flag=1)
+  login http=200
+  token_len=75
+=== 4. /api/browse（关键：evil 必须 403） ===
+  path=. -> http=200  body={"code":0,"msg":"ok","data":{"path":"C:/Users/user/Desktop/develop/software-develop/dbkp/_jct/data","parent":"
+  path=ok.txt -> http=400  body={"code":1,"msg":"不是目录：C:/Users/user/Desktop/develop/software-develop/dbkp/_jct/data/ok.txt"}
+  path=evil -> http=403  body={"code":403,"msg":"该路径不在允许浏览的范围内：C:/Users/user/Desktop/develop/software-develop/db
+  path=evil/secret.txt -> http=403  body={"code":403,"msg":"该路径不在允许浏览的范围内：C:/Users/user/Desktop/develop/software-develop/db
+  path=../outside -> http=403  body={"code":403,"msg":"该路径不在允许浏览的范围内：C:/Users/user/Desktop/develop/software-develop/db
+=== 5. POST /api/jobs（source 经 junction 越界，必须 4xx） ===
+  source=evil -> http=400  body={"code":1,"msg":"source 超出允许访问的根目录：C:/Users/user/Desktop/develop/software-develop/dbkp/_jct/data/evil（不在 C:/Users/user/Desktop/devel
+=== 6. 关闭服务并清理（先摘 junction 再删树） ===
+junction removed
+  围栏外文件仍在: SECRET-OUTSIDE-9999
+VERIFY_DONE

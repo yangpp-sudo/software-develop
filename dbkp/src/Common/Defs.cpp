@@ -63,12 +63,14 @@ const char* algorithmName(AlgorithmId id) {
     }
 }
 
-AlgorithmId algorithmFromName(const std::string& name) {
+AlgorithmId algorithmFromName(const std::string& name, bool* okOut) {
+    if (okOut) *okOut = true;
     if (name == "huffman" || name == "huff") return ALG_HUFFMAN;
     if (name == "lz77"     || name == "lz")   return ALG_LZ77;
     if (name == "lzhuff"   || name == "lz+huffman") return ALG_LZHUFF;
     if (name == "rle")     return ALG_RLE;
     if (name == "none"     || name.empty())   return ALG_NONE;
+    if (okOut) *okOut = false;                /* 未知：不再静默当 NONE */
     return ALG_NONE;
 }
 
@@ -83,13 +85,15 @@ const char* cryptoName(CryptoId id) {
     }
 }
 
-CryptoId cryptoFromName(const std::string& name) {
+CryptoId cryptoFromName(const std::string& name, bool* okOut) {
+    if (okOut) *okOut = true;
     if (name == "aes" || name == "aes256" || name == "aes256-cbc") return CRY_AES256_CBC;
     if (name == "chacha" || name == "chacha20")                    return CRY_CHACHA20;
     if (name == "xor")                                             return CRY_XOR_TEST;
     if (name == "des" || name == "3des" || name == "des3" ||
         name == "des-ede" || name == "des-ede-cbc" || name == "3des-cbc") return CRY_DESEDE_CBC;
     if (name == "none" || name.empty())                            return CRY_NONE;
+    if (okOut) *okOut = false;                /* 未知：不再静默当 NONE */
     return CRY_NONE;
 }
 

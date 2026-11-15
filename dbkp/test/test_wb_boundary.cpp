@@ -570,14 +570,15 @@ TEST(WbBoundary, parseSizeZeroIsSuccess) {
     EXPECT_TRUE(ok);
 }
 
-/* B4-32 溢出："99999999999999999999" 超过 int64 -> 回绕为 LLONG_MIN 且实现仍报 ok=1
- * 诚实说明：这是实现的既定行为（无溢出检测），如实记录，不假装拒绝
- * 实测：_probe/ph.cpp size '99999999999999999999' -> -9223372036854775808 ok=1 */
-TEST(WbBoundary, parseSizeOverflowWrapsHonestly) {
-    bool ok = false;
+/* B4-32 溢出："99999999999999999999" 超过 int64 -> 整体拒绝（ok=false, -1）
+ * parseSize 已重写为纯 uint64 定点解析：整数累加带溢出预检，超界一律
+ * 失败返回，不再有旧版 double 实现的静默回绕（旧缺口已记入 doc/05 并封堵）。
+ * 实测：size '99999999999999999999' -> -1 ok=0 */
+TEST(WbBoundary, parseSizeOverflowRejectedHonestly) {
+    bool ok = true;
     const int64_t v = FilterOptions::parseSize("99999999999999999999", &ok);
-    EXPECT_EQ(int64_t(v), int64_t((-9223372036854775807LL - 1)));
-    EXPECT_TRUE(ok);   /* 实测 ok=1：实现未做溢出校验，作为已知缺口记入 doc/05 */
+    EXPECT_EQ(int64_t(v), int64_t(-1));
+    EXPECT_FALSE(ok);   /* 溢出被显式拒绝，不再假装成功 */
 }
 
 /* ==========================================================================

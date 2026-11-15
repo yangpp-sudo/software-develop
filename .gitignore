@@ -30,3 +30,47 @@ dbkp/_webtest_demo/
 # GoogleTest 全量链接产物约 104 MB，超过 GitHub 单文件上限，需要时
 # mingw32-make test-gtest 重建，不入库
 dbkp/bin/bk_gtest.exe
+
+# ---- 2026-11-15 加固轮：攻击/回归临时产物，绝不入库 ----
+# _attack2/ 单目录约 391 MB（3000 个测试文件 + 3 个 64MB 归档）
+dbkp/_attack/
+dbkp/_attack2/
+dbkp/_attack5/
+dbkp/_attack2_result.txt
+dbkp/_attack5_result.txt
+dbkp/_attack_web_result.txt
+dbkp/_attack_cli_result.txt
+dbkp/_b6_tamper/
+dbkp/_globtest/
+dbkp/_vssample/
+dbkp/_jct/
+dbkp/_ut_*.log
+dbkp/_stab_rerun_view.txt
+dbkp/tchk_*.txt
+# 编译中间产物（注意：obj*/ 下已有历史跟踪的 .o，本规则只挡新增）
+dbkp/objg/
+dbkp/objut/
+dbkp/objcov/
+dbkp/obj/
+# 本机 IDE 与临时构建的二进制（正式交付的 bk/bkd/bk_test.exe 仍需提交）
+dbkp/.vs/
+dbkp/bin/bk_new.exe
+dbkp/bin/bk_test_current.exe
+dbkp/bin/bk_test_after_maxdepth.exe
+
+# 攻击诱饵、探针输出、冒烟临时文本（过程留证，不入库）
+.vs/
+/_*.txt
+/_b*.ps1
+/_txt/
+dbkp/BAIT*.txt
+dbkp/p?_*.txt
+dbkp/smoke*.txt
+dbkp/runwin.c
+dbkp/runwin.exe
+dbkp/_m6_tamper/
+dbkp/_b*_instruction.md
+dbkp/dbkp_web_test_tutorial.ps1
+
+# 注意：dbkp/doc/ 与 dbkp/script/ 下的正式证据与复现脚本**不忽略**，
+# 它们是 doc/03、doc/05 与独立测试报告引用的依据，必须随源码一起提交。

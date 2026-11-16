@@ -276,6 +276,28 @@ bool isPathTraversalSafe(const std::string& archivePath) {
     return true;
 }
 
+/* F22：Windows 保留设备名。restore 走 \\?\ 前缀直写时，Win32 会跳过保留名
+   解析，CON/COM1 等会被真实落盘且资源管理器无法常规删除。取最后一个
+   分隔符之后的文件名、第一个 '.' 之前的主名比较（CON.txt 同样命中），
+   主名不区分大小写。 */
+bool isReservedDeviceName(const std::string& name) {
+    std::string base = name;
+    const size_t slash = base.find_last_of("/\\");
+    if (slash != std::string::npos) base = base.substr(slash + 1);
+    const size_t dot = base.find('.');
+    if (dot != std::string::npos) base = base.substr(0, dot);
+    for (size_t i = 0; i < base.size(); ++i)
+        base[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(base[i])));
+    static const char* const kDev[] = {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+    for (size_t i = 0; i < sizeof(kDev) / sizeof(kDev[0]); ++i)
+        if (base == kDev[i]) return true;
+    return false;
+}
+
 bool iequals(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); ++i) {

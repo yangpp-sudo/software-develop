@@ -580,6 +580,14 @@ ErrCode CMyPack::restoreEntry(const std::string& targetDir, const FileRecord& re
         LOG_ERR("unsafe path in archive (refused): " + rec.path);
         return E_INVALID_PARAMETER;
     }
+    /* F22：Windows 保留设备名（CON/COM1/LPT1 等）。\\?\ 直写会绕过 Win32
+       的保留名检查，落盘后用户在资源管理器里删不掉。命中即跳过本条并
+       计入 warnings，其余条目照常还原；verify 与 restore 走同一道关。 */
+    if (Path::isReservedDeviceName(rec.path)) {
+        LOG_WARN("reserved device name in archive (skipped): " + rec.path);
+        ++opt.warnings;
+        return E_OK;
+    }
     /* N9：未知记录类型以前会掉进函数末尾的"特殊文件"兜底分支——什么都不做
        却返回 E_OK，外层还把 entries++，结果就是 "success / warnings=0" 的
        凭空幽灵条目。任何不认识的 type 都是损坏/伪造档案，必须明确拒绝。 */

@@ -39,6 +39,10 @@ std::string relative(const std::string& parent, const std::string& child);
     任何一侧无法规范化时按词法绝对化处理，宁可放行也不误杀。 */
 bool   isSubPath(const std::string& parent, const std::string& child);
 bool   isPathTraversalSafe(const std::string& archivePath);
+/** F22：Windows 保留设备名。restore 走 \\?\ 前缀直写时，Win32 会跳过保留名
+    解析，CON/COM1 等会被真实落盘且资源管理器无法常规删除。带扩展名也算
+    （CON.txt 在 Win32 层同样命中设备名），主名不区分大小写。 */
+bool   isReservedDeviceName(const std::string& name);
 /** A1：归档名前缀/文件名组分校验。拒绝路径分隔符、盘符、":"、".."、
     控制字符、Unicode 双向覆盖/零宽字符、绝对形态。
     schedule/watch/Web 的 --prefix 必须先过这里，防止把备份箱写到目标目录外。 */

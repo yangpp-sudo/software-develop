@@ -670,9 +670,10 @@ TEST(WbCoverageGap, compareWithMissingArchiveReturnsSourceNotFound) {
     EXPECT_EQ(diff, 0);
 }
 
-/* t-cmp-14 payloadOffset 越界 -> 读块失败走 break，函数仍返回 E_OK diff=0。
- * 诚实记录：这条路径下 compare 静默"通过"，属于实现现状。 */
-TEST(WbCoverageGap, compareWithBogusPayloadOffsetSilentlyPasses) {
+/* t-cmp-14 payloadOffset 越界 -> readHeaderAt 物理对账拒绝（旧版静默放行已封堵）。
+ * 头部声明的载荷起点必须等于实际头部长度、载荷长度必须等于文件剩余字节数，
+ * 篡改 payloadOffset 无法再骗过 compare。 */
+TEST(WbCoverageGap, compareWithBogusPayloadOffsetRejected) {
     CgCmpCase c("cmpoob");
     std::vector<Part> ps; ps.push_back(cgRegular("a.txt", kBody));
     std::vector<uint8_t> bytes = cgBuildArchive(ps);
@@ -688,7 +689,7 @@ TEST(WbCoverageGap, compareWithBogusPayloadOffsetSilentlyPasses) {
     cgWriteArchive(Path::join(c.sb.root, "oob.dbkp"), moved);
 
     CMyPack mp; int diff = -1;
-    EXPECT_EQ(int(mp.compareWithSource(Path::join(c.sb.root, "oob.dbkp"), c.src, "", diff)), int(E_OK));
+    EXPECT_NE(int(mp.compareWithSource(Path::join(c.sb.root, "oob.dbkp"), c.src, "", diff)), int(E_OK));
     EXPECT_EQ(diff, 0);
 }
 
@@ -739,7 +740,10 @@ TEST(WbCoverageGap, unpackUnsupportedTypesWarnsAndDegrades) {
     CMyPack mp;
     UnpackOptions uo;
     ASSERT_EQ(int(mp.unpack(sb.arc, sb.dest, uo)), int(E_OK));
-    EXPECT_EQ(uo.warnings, 1);   /* 非特权进程建不出符号链接，计入警告 */
+    /* N3 复核修正：每一条无法如实还原的特殊条目都必须计入 warnings
+     * （sock 占位 1 + FIFO/块/字符设备各 1 = 4；sym.txt 是否建出取决于
+     * 进程是否持有 SeCreateSymbolicLinkPrivilege/开发者模式，故 4 或 5）。 */
+    EXPECT_TRUE(uo.warnings >= 4 && uo.warnings <= 5);
     EXPECT_STREQ(cgRead(Path::join(sb.dest, "f.txt")).c_str(), "HELLO");
     EXPECT_STREQ(cgRead(Path::join(sb.dest, "hl.txt")).c_str(), "HELLO");
     EXPECT_TRUE(cgHasEntry(sb.dest, "sock"));
@@ -867,7 +871,16 @@ TEST(WbCoverageGap, packCancelLeavesNoArchiveAndNoTempFile) {
  * 八、checkHeaderHmac 篡改路径 + 旧格式兼容（MyPack.cpp:768-830）
  * ======================================================================== */
 
-/* t-hmac-01 四种破坏头部的方式，错误码各不相同，逐个固化 */
+/* t-hmac-01 四种破坏头部的方式，逐个固化为当前（加固后）的实测值：
+ *   0) HMAC 块填充区被改写      -> E_HEADER_TAMPERED, bad=1（checkHeaderHmac 抓到）
+ *   1) HMAC 块幻数字段被改      -> E_INVALID_HEADER_RECORD, bad=0（decode 阶段的
+ *      幻数回显校验先拒绝，未进入 HMAC 计数）
+ *   2) 主头 createTime 被改     -> E_HEADER_TAMPERED, bad=1（主头无 CRC，
+ *      载荷校验通过后由 HMAC 覆盖范围抓到 —— 这正是 F10 的意义）
+ *   3) 文件被截断               -> E_INVALID_HEADER_RECORD, bad=0（readHeaderAt
+ *      物理长度对账拒绝；截断伪造在逐条比对之前就被抓住。旧期望
+ *      E_TRUNCATED_ARCHIVE 不再成立：对账判据比"读到 EOF"更早更准）
+ * 四种都是非零错误码 + restore 同样拒绝。 */
 TEST(WbCoverageGap, headerHmacTamperingHasDistinctErrorCodes) {
     CgSandbox sb("hmac");
     std::string src = Path::join(sb.root, "src");
@@ -893,7 +906,7 @@ TEST(WbCoverageGap, headerHmacTamperingHasDistinctErrorCodes) {
         { hmacOff + 4 + ARCHIVE_HEADER_HMAC_SIZE + 10, 0xAB, false, E_HEADER_TAMPERED, 1 },
         { hmacOff,                                      0xFF, false, E_INVALID_HEADER_RECORD, 0 },
         { 60,                                           0xFF, false, E_HEADER_TAMPERED, 1 },
-        { 0,                                            0,    true,  E_TRUNCATED_ARCHIVE, 1 }
+        { 0,                                            0,    true,  E_INVALID_HEADER_RECORD, 0 }
     };
     for (int i = 0; i < 4; ++i) {
         std::vector<uint8_t> bytes = orig;

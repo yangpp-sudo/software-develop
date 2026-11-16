@@ -8,7 +8,7 @@
 ```bash
 # Linux / macOS（自动选 src/Platform/FS_posix.cpp）
 make -j4            # 产出 bin/bk 与 bin/bkd
-make test           # 102 项单元测试
+make test           # 361 项单元测试
 
 # Windows（MinGW-w64 g++ 8.1，自动选 FS_win.cpp）
 mingw32-make -j4 all bin/bk_test.exe
@@ -52,7 +52,7 @@ bin\bkd.exe --port 8080 --web web --data-root D:\sandbox --password 'S3cret!'
 ## 4. 测试与测量
 | 目的 | 命令 | 当天实测 |
 |---|---|---|
-| 单元测试 | `powershell -File script/_verify.ps1 [-filter Meta]` | 102/102 通过 |
+| 单元测试 | `powershell -File script/_verify.ps1 [-filter Meta]` | 361/361 通过 |
 | 命令行端到端 | `powershell -File script/e2e.ps1` | 19/19 通过（在临时沙箱内跑，自动清理） |
 | Web 端到端 | `powershell -File script/smoke_web.ps1` | 48/48 通过（自起自停 `bkd`，退出码 0 即全绿） |
 | 前端静态自检 | `node script/check_webui.js` | 44/44 通过（DOM 桩跑 `index.html` 的脚本：路径 helper 边界 + 页面 id 对账 + 与 `Api.cpp` 的 browse 字段名对账 + `.hide` 是否被 `.mask{display:flex}` 的声明顺序打败，不需要浏览器和服务） |

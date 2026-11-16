@@ -944,17 +944,17 @@
           <div class="fsub">排除目录 / 路径 excludePaths（匹配相对路径的 glob）</div>
           <div class="chips" id="excludePathList"></div>
           <div class="addrow">
-            <input id="excludePathInput" placeholder="如 build/* 或 docs/old/*">
+            <input id="excludePathInput" placeholder="如 build/*、docs/old/* 或 **/node_modules/**">
             <button type="button" class="ghost" id="btnAddExcludePath">添加</button>
             <button type="button" class="ghost" id="btnAddExcludeDir">添加目录…</button>
           </div>
-          <div class="fsub">包含路径 includePaths（只备份匹配的路径，父目录自动放行）</div>
+          <div class="fsub">包含路径 includePaths（只备份匹配的路径，父目录自动放行；** 可递归多层）</div>
           <div class="chips" id="includePathList"></div>
           <div class="addrow">
-            <input id="includePathInput" placeholder="如 docs/* 或 src/*.cpp">
+            <input id="includePathInput" placeholder="如 docs/*、src/*.cpp 或 **/*.h（递归全部层级）">
             <button type="button" class="ghost" id="btnAddIncludePath">添加</button>
           </div>
-          <div class="fhint">路径相对“数据路径”（/ 分隔）；用“添加目录…”选择时会自动换算成相对路径。</div>
+          <div class="fhint">路径相对“数据路径”（/ 分隔）；** 递归匹配任意层（**/*.h = 所有子目录的头文件）；用“添加目录…”选择时会自动换算成相对路径。</div>
         </div>
         <!-- 遍历选项：保留原来的高级开关，不再单独占一块界面 -->
         <details class="fopts">

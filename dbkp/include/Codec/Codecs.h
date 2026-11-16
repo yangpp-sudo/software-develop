@@ -63,6 +63,9 @@ class CComboCodec : public IDataCodec {
 public:
     CComboCodec() : m_inner(new CLZ77), m_outer(new CHuffman) {}
     ~CComboCodec() override { delete m_inner; delete m_outer; }
+    /* 持有裸指针所有权：禁止拷贝/赋值，避免二次释放（Cppcheck noCopyConstructor） */
+    CComboCodec(const CComboCodec&) = delete;
+    CComboCodec& operator=(const CComboCodec&) = delete;
     std::string name() const override { return "lzhuff"; }
     ErrCode encode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override;
     ErrCode decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) override;

@@ -89,7 +89,18 @@ ErrCode CLZ77::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out)
     if (!Codec::readHeader(in, static_cast<uint16_t>(CODEC_MAGIC_LZ & 0xFFFFu),
                            ver, flags, rawLen, start)) return E_COMPRESS_FAIL;
     if (ver != 1) return E_COMPRESS_FAIL;
-    if (rawLen > (1ull << 40)) return E_COMPRESS_FAIL;         /* 防御异常头 */
+    /* N4 防解压炸弹（格式精确上界版）：rawLen 是攻击者可控字段，不能按
+       声称值 reserve 内存。本格式理论上界：1 控制字节 + 8 个匹配项
+       （每项 2B、最多产出 18B）=> 每 17B 输入最多产出 144B，约 8.5 倍。
+       超过 9 倍 + 余量的 rawLen 必为伪造头；合法流无论多大都恰好满足
+       该上界，不会误伤任何正常文件。 */
+    {
+        const uint64_t payload = static_cast<uint64_t>(in.size() - start);
+        /* 上界改用"先限乘数再乘"：payload 大到足以让 payload*9 回绕时直接拒，
+           杜绝乘法溢出把一个天文数字的 rawLen 判成合法。 */
+        if (payload > (~static_cast<uint64_t>(0) - 256ull) / 9ull) return E_COMPRESS_FAIL;
+        if (rawLen > payload * 9ull + 256ull) return E_COMPRESS_FAIL;
+    }
 
     if (flags & 1) {                                           /* 存储模式 */
         if (in.size() - start < rawLen) return E_TRUNCATED_ARCHIVE;
@@ -170,7 +181,14 @@ ErrCode CRle::decode(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) 
     if (!Codec::readHeader(in, static_cast<uint16_t>(CODEC_MAGIC_RLE & 0xFFFFu),
                            ver, flags, rawLen, start)) return E_COMPRESS_FAIL;
     if ((ver != 1 && ver != 2) || flags != 0) return E_COMPRESS_FAIL;
-    if (rawLen > (1ull << 40)) return E_COMPRESS_FAIL;
+    /* N4 解压炸弹防御（格式精确上界版）：v2 令牌最坏 2B 输入产出 255B
+       （tag 0x00：2 字节头 + 255 个字面量），即约 128 倍。超过 128 倍 +
+       余量的 rawLen 必为伪造头；合法流无论多大都恰好满足该上界。 */
+    {
+        const uint64_t payload = static_cast<uint64_t>(in.size() - start);
+        if (payload > (~static_cast<uint64_t>(0) - 256ull) / 128ull) return E_COMPRESS_FAIL;
+        if (rawLen > payload * 128ull + 256ull) return E_COMPRESS_FAIL;
+    }
     out.clear();
     out.reserve(static_cast<size_t>(rawLen));
     size_t p = start;

@@ -133,6 +133,11 @@ long long CJobManager::submit(const std::string& type, const std::string& label,
 
     std::lock_guard<std::mutex> lk(m_mtx);
     if (!m_accepting) return -1;
+    /* C15：排队队列必须有硬上限。m_history 的 keepHistory 裁剪只删"已结束"
+       的条目，对 QUEUED 无效；若无条件收下，客户端可无限 POST /api/jobs
+       让 m_pending 单调增长直到内存耗尽，且每个 201 都谎称"已受理"。
+       超限返回 -2（与 -1=服务停止 区分），HTTP 层据此回 429 显式背压。 */
+    if (m_pending.size() >= m_maxPending.load()) return -2;
     job->m_id = m_nextId++;
     m_pending.push_back(job);
     m_history.push_back(job);
@@ -282,6 +287,11 @@ void CJobManager::list(std::vector<Info>& out, std::size_t limit) const {
 std::size_t CJobManager::count() const {
     std::lock_guard<std::mutex> lk(m_mtx);
     return m_history.size();
+}
+
+std::size_t CJobManager::pendingCount() const {
+    std::lock_guard<std::mutex> lk(m_mtx);
+    return m_pending.size();
 }
 
 const char* CJobManager::stateName(State s) {

@@ -19,6 +19,7 @@
 #include "Web/Router.h"
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -71,13 +72,14 @@ void printUsage() {
         "usage: bkd [options]\n"
         "  --config FILE        JSON 配置文件（命令行参数优先级更高）\n"
         "  --host ADDR          监听地址，默认 127.0.0.1（0.0.0.0 = 允许局域网访问）\n"
-        "  --port N             端口，默认 8080；0 表示让系统随机分配\n"
+        "  --port N             端口，默认 8080；0 表示让系统随机分配（范围 0..65535）\n"
         "  --web DIR            静态页面目录，默认 ./web\n"
         "  --data-root DIR      允许备份/还原的根目录，默认不限制\n"
         "  --password PASS      登录口令；--password-sha256 HEX 只存摘要更安全\n"
-        "  --token-ttl HOURS    令牌有效期，默认 12 小时\n"
-        "  --max-body MB        请求体上限（MB），默认 64\n"
-        "  --workers N          并发任务数，默认 2（限制 1~8）\n"
+        "  --token-ttl HOURS    令牌有效期，默认 12 小时（范围 0..8760，0=默认）\n"
+        "  --max-body MB        请求体上限（MB），默认 64（范围 1..1024）\n"
+        "  --workers N          并发任务数，默认 2（范围 1..8）\n"
+        "  --max-pending N      待处理队列上限，默认 64（范围 1..4096；越界一律启动失败）\n"
         "  --secret STR         令牌签名密钥，默认每次启动随机\n"
         "  --cors-origin VAL    CORS 放行来源，默认按请求 Origin 自动判定\n"
         "                       （仅 null / http://localhost:N / http://127.0.0.1:N）；\n"
@@ -90,6 +92,39 @@ void printUsage() {
 bool nextValue(int argc, char** argv, int& i, std::string& out) {
     if (i + 1 >= argc) { LOG_ERR("missing value for " + std::string(argv[i])); return false; }
     out = argv[++i];
+    return true;
+}
+
+/** 范围校验：越界一律报错，绝不静默钳制。
+ *  旧写法是 atoi + static_cast<size_t> 再 "if (<1) =1; if (>4096) =4096"：
+ *  -5 会变成 18446744073709551611，再被上限钳成 4096（≈无限制），
+ *  0 被钳成 1（服务能起但几乎提交不了任务）。配置写错一位，保护要么
+ *  消失要么行为不明，且全程无提示 —— 这正是"只校验 happy path"的通病。 */
+bool inRange(long long v, const char* name, long long lo, long long hi) {
+    if (v < lo || v > hi) {
+        LOG_ERR(std::string("invalid ") + name + ": " + std::to_string(v) +
+                " (expected " + std::to_string(lo) + ".." + std::to_string(hi) + ")");
+        return false;
+    }
+    return true;
+}
+
+/** 严格解析有界十进制整数：拒绝空串、前导符号以外的垃圾、溢出、越界。 */
+bool parseBounded(const std::string& text, const char* name,
+                  long long lo, long long hi, long long& out) {
+    if (text.empty()) { LOG_ERR(std::string("missing value for ") + name); return false; }
+    errno = 0;
+    char* end = nullptr;
+    const long long v = std::strtoll(text.c_str(), &end, 10);
+    if (errno == ERANGE || end == text.c_str() || (end && *end != '\0') ||
+        !inRange(v, name, lo, hi)) {
+        if (errno == ERANGE || end == text.c_str() || (end && *end != '\0'))
+            LOG_ERR(std::string("invalid ") + name + ": '" + text +
+                    "' (not a decimal integer in " + std::to_string(lo) +
+                    ".." + std::to_string(hi) + ")");
+        return false;
+    }
+    out = v;
     return true;
 }
 
@@ -142,6 +177,7 @@ int main(int argc, char** argv) {
     ctx.tokenTtlHours = 12;
     ctx.defaultAlgorithm = "huffman";
     size_t workers = 2;
+    size_t maxPending = 64;
     int maxBodyMb = 64;
     std::string configFile, password, passwordSha;
 
@@ -163,7 +199,11 @@ int main(int argc, char** argv) {
             return 2;
         }
         opt.bindAddress = cfgStr(conf, "host", opt.bindAddress);
-        opt.port = static_cast<int>(cfgInt(conf, "port", opt.port));
+        /* 配置文件里的数值同样走范围校验：JSON 里写 -5 / 0 / 99999 不能
+           靠"钳一下"蒙混过关，必须在启动阶段就报错退出。 */
+        long long n = cfgInt(conf, "port", opt.port);
+        if (!inRange(n, "config port", 0, 65535)) return 2;
+        opt.port = static_cast<int>(n);
         opt.webRoot = cfgStr(conf, "web", opt.webRoot);
         ctx.dataRoot = cfgStr(conf, "dataRoot", "");
         ctx.defaultSource = cfgStr(conf, "defaultSource", "");
@@ -172,9 +212,18 @@ int main(int argc, char** argv) {
         password = cfgStr(conf, "password", "");
         passwordSha = cfgStr(conf, "passwordSha256", "");
         ctx.secret = cfgStr(conf, "secret", "");
-        ctx.tokenTtlHours = static_cast<int>(cfgInt(conf, "tokenTtlHours", 12));
-        workers = static_cast<size_t>(cfgInt(conf, "workers", 2));
-        maxBodyMb = static_cast<int>(cfgInt(conf, "maxBodyMb", 64));
+        n = cfgInt(conf, "tokenTtlHours", 12);
+        if (!inRange(n, "config tokenTtlHours", 0, 8760)) return 2;
+        ctx.tokenTtlHours = static_cast<int>(n);
+        n = cfgInt(conf, "workers", 2);
+        if (!inRange(n, "config workers", 1, 8)) return 2;
+        workers = static_cast<size_t>(n);
+        n = cfgInt(conf, "maxPending", 64);
+        if (!inRange(n, "config maxPending", 1, 4096)) return 2;
+        maxPending = static_cast<size_t>(n);
+        n = cfgInt(conf, "maxBodyMb", 64);
+        if (!inRange(n, "config maxBodyMb", 1, 1024)) return 2;
+        maxBodyMb = static_cast<int>(n);
         opt.serveStatic = cfgInt(conf, "serveStatic", 1) != 0;
         opt.corsOrigin = cfgStr(conf, "corsOrigin", opt.corsOrigin);
         Logger::instance().setLevelFromText(cfgStr(conf, "logLevel", "info"));
@@ -186,14 +235,15 @@ int main(int argc, char** argv) {
         if (a == "-h" || a == "--help") { printUsage(); return 0; }
         else if (a == "--config") { ++i; }              /* 上面处理过了 */
         else if (a == "--host") { if (!nextValue(argc, argv, i, v)) return 2; opt.bindAddress = v; }
-        else if (a == "--port") { if (!nextValue(argc, argv, i, v)) return 2; opt.port = std::atoi(v.c_str()); }
+        else if (a == "--port") { if (!nextValue(argc, argv, i, v)) return 2; long long n; if (!parseBounded(v, "--port", 0, 65535, n)) return 2; opt.port = static_cast<int>(n); }
         else if (a == "--web") { if (!nextValue(argc, argv, i, v)) return 2; opt.webRoot = v; }
         else if (a == "--data-root") { if (!nextValue(argc, argv, i, v)) return 2; ctx.dataRoot = v; }
         else if (a == "--password") { if (!nextValue(argc, argv, i, v)) return 2; password = v; passwordSha.clear(); }
         else if (a == "--password-sha256") { if (!nextValue(argc, argv, i, v)) return 2; passwordSha = v; password.clear(); }
-        else if (a == "--token-ttl") { if (!nextValue(argc, argv, i, v)) return 2; ctx.tokenTtlHours = std::atoi(v.c_str()); }
-        else if (a == "--max-body") { if (!nextValue(argc, argv, i, v)) return 2; maxBodyMb = std::atoi(v.c_str()); }
-        else if (a == "--workers") { if (!nextValue(argc, argv, i, v)) return 2; workers = static_cast<size_t>(std::atoi(v.c_str())); }
+        else if (a == "--token-ttl") { if (!nextValue(argc, argv, i, v)) return 2; long long n; if (!parseBounded(v, "--token-ttl", 0, 8760, n)) return 2; ctx.tokenTtlHours = static_cast<int>(n); }
+        else if (a == "--max-body") { if (!nextValue(argc, argv, i, v)) return 2; long long n; if (!parseBounded(v, "--max-body", 1, 1024, n)) return 2; maxBodyMb = static_cast<int>(n); }
+        else if (a == "--workers") { if (!nextValue(argc, argv, i, v)) return 2; long long n; if (!parseBounded(v, "--workers", 1, 8, n)) return 2; workers = static_cast<size_t>(n); }
+        else if (a == "--max-pending") { if (!nextValue(argc, argv, i, v)) return 2; long long n; if (!parseBounded(v, "--max-pending", 1, 4096, n)) return 2; maxPending = static_cast<size_t>(n); }
         else if (a == "--secret") { if (!nextValue(argc, argv, i, v)) return 2; ctx.secret = v; }
         else if (a == "--cors-origin") { if (!nextValue(argc, argv, i, v)) return 2; opt.corsOrigin = v; }
         else if (a == "--default-source") { if (!nextValue(argc, argv, i, v)) return 2; ctx.defaultSource = v; }
@@ -208,12 +258,13 @@ int main(int argc, char** argv) {
     /* 口令优先取摘要：配了 passwordSha256 就不该再留明文 */
     ctx.password = !passwordSha.empty() ? passwordSha : password;
     if (ctx.secret.empty()) ctx.secret = randomSecret();
-    if (maxBodyMb < 1) maxBodyMb = 1;
+    /* 所有数值都已在解析/配置读取处做过范围校验，这里只做单位换算，
+       不再有任何"静默钳制"——写错参数在启动阶段就报错退出。 */
     opt.maxBodyBytes = static_cast<std::size_t>(maxBodyMb) * 1024u * 1024u;
-    if (workers < 1) workers = 1;
     ctx.dataRoot = absolutizeDataRoot(ctx.dataRoot);   /* 边界=基准，必须是绝对路径 */
 
     CJobManager jobs(workers);
+    jobs.setMaxPending(maxPending);             /* C15：启动期设定，submit 前生效 */
     CRouter router;
     registerApiRoutes(router, ctx);
 
@@ -235,7 +286,8 @@ int main(int argc, char** argv) {
     std::printf("  静态目录 : %s\n", opt.serveStatic ? opt.webRoot.c_str() : "(已关闭)");
     std::printf("  数据根   : %s\n", ctx.dataRoot.empty() ? "(未限制，任意路径)" : ctx.dataRoot.c_str());
     std::printf("  登录鉴权 : %s\n", ctx.password.empty() ? "关闭（仅建议本机调试）" : "开启");
-    std::printf("  并发任务 : %zu    请求体上限 : %dMB\n", workers, maxBodyMb);
+    std::printf("  并发任务 : %zu    队列上限 : %zu    请求体上限 : %dMB\n",
+                workers, maxPending, maxBodyMb);
     std::printf("  CORS 放行: %s\n", opt.corsOrigin.empty()
                 ? "自动（null / localhost / 127.0.0.1）" : opt.corsOrigin.c_str());
     std::fflush(stdout);

@@ -39,6 +39,10 @@ std::string relative(const std::string& parent, const std::string& child);
     任何一侧无法规范化时按词法绝对化处理，宁可放行也不误杀。 */
 bool   isSubPath(const std::string& parent, const std::string& child);
 bool   isPathTraversalSafe(const std::string& archivePath);
+/** A1：归档名前缀/文件名组分校验。拒绝路径分隔符、盘符、":"、".."、
+    控制字符、Unicode 双向覆盖/零宽字符、绝对形态。
+    schedule/watch/Web 的 --prefix 必须先过这里，防止把备份箱写到目标目录外。 */
+bool   isSafeNameComponent(const std::string& name);
 /** 简易 glob：支持 * ? []，用于 -name 过滤 */
 bool   matchGlob(const std::string& pattern, const std::string& text);
 /** F8：预校验 glob 语法（与 matchGlob 的方言一致：* ? [类]，类支持 !/^ 取反、

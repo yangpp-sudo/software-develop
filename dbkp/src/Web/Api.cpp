@@ -884,6 +884,17 @@ CHttpResponse hCreateJob(ApiContext& ctx, const CHttpRequest& req) {
         return CHttpResponse::jsonError(E_INTERNAL, "任务管理器未就绪", 500);
 
     const long long id = ctx.jobs->submit(sp.type, sp.label, sp.source, sp.destination, makeTask(sp));
+    if (id == -2) {
+        /* C15：队列已满必须显式回 429，不能假装受理（否则前端会一直轮询
+           一个永远排不到的任务，服务端内存还被无限增长的 m_pending 吃掉）。 */
+        LOG_WARN("建任务被拒：待处理队列已满（上限 " +
+                 std::to_string(ctx.jobs->maxPending()) + "）");
+        CHttpResponse r = CHttpResponse::jsonError(E_BUSY,
+            "待处理任务队列已满（最多 " + std::to_string(ctx.jobs->maxPending()) +
+            " 个），请稍后重试", 429);
+        r.setHeader("Retry-After", "5");
+        return r;
+    }
     if (id < 0)
         return CHttpResponse::jsonError(E_INTERNAL, "服务正在停止，任务未受理", 503);
 
@@ -1115,13 +1126,25 @@ CHttpResponse hScheduleStart(ApiContext& ctx, const CHttpRequest& req) {
                                         "times 需要 >= 1 的整数（常驻请用 /api/watch）", 400);
     so.keep = static_cast<int>(jsonInt(body, "keep", 0));
     so.prefix = jsonStr(body, "prefix", "");
+    /* A1：与 CLI 同口径——prefix 会拼进归档路径并参与 retention 删除，
+       含 .. / 路径分隔符 / 绝对形态时必须当场拒绝，不能靠底层静默降级。 */
+    if (!so.prefix.empty() && !Path::isSafeNameComponent(so.prefix))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+            "prefix 不合法：只能是单个文件名组分，不能含路径分隔符或 '..'", 400);
     so.archiveDir = dst;
     so.backup.source = src;
     so.backup.destination = dst;          /* times=1 时文件名兜底用；调度内部会用 makeArchiveName */
     so.backup.mode = MODE_ARCHIVE;
     so.backup.verifyAfter = jsonBool(body, "verifyAfter", true);
-    so.backup.pack.comp = algorithmFromName(jsonStr(body, "algorithm", ctx.defaultAlgorithm));
-    so.backup.pack.crypto = cryptoFromName(jsonStr(body, "crypto", "none"));
+    bool algOk = false, cryOk = false;
+    const std::string schAlg = jsonStr(body, "algorithm", ctx.defaultAlgorithm);
+    const std::string schCry = jsonStr(body, "crypto", "none");
+    so.backup.pack.comp = algorithmFromName(schAlg, &algOk);
+    so.backup.pack.crypto = cryptoFromName(schCry, &cryOk);
+    if (!algOk) return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+        "未知压缩算法：" + schAlg + "（可选 none/huffman/lz77/lzhuff/rle）", 400);
+    if (!cryOk) return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+        "未知加密算法：" + schCry + "（可选 none/aes256/des-ede/chacha20/xor）", 400);
     so.backup.pack.password = jsonStr(body, "password", "");
     std::string whyFilter;
     if (!applyFilterJson(body.at("filter"), so.backup.pack.filter, whyFilter))
@@ -1303,8 +1326,15 @@ CHttpResponse hWatchStart(ApiContext& ctx, const CHttpRequest& req) {
     base.destination = dst;
     base.mode = MODE_ARCHIVE;
     base.verifyAfter = jsonBool(body, "verifyAfter", true);
-    base.pack.comp = algorithmFromName(jsonStr(body, "algorithm", ctx.defaultAlgorithm));
-    base.pack.crypto = cryptoFromName(jsonStr(body, "crypto", "none"));
+    bool algOk = false, cryOk = false;
+    const std::string watchAlg = jsonStr(body, "algorithm", ctx.defaultAlgorithm);
+    const std::string watchCry = jsonStr(body, "crypto", "none");
+    base.pack.comp = algorithmFromName(watchAlg, &algOk);
+    base.pack.crypto = cryptoFromName(watchCry, &cryOk);
+    if (!algOk) return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+        "未知压缩算法：" + watchAlg + "（可选 none/huffman/lz77/lzhuff/rle）", 400);
+    if (!cryOk) return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+        "未知加密算法：" + watchCry + "（可选 none/aes256/des-ede/chacha20/xor）", 400);
     base.pack.password = jsonStr(body, "password", "");
     base.password = base.pack.password;
     std::string whyFilter;
@@ -1325,6 +1355,10 @@ CHttpResponse hWatchStart(ApiContext& ctx, const CHttpRequest& req) {
     std::string prefix = jsonStr(body, "prefix", "");
     if (prefix.empty()) prefix = Path::fileName(Path::normalize(src));
     if (prefix.empty() || prefix == ".") prefix = "backup";
+    /* A1：与 CLI 同口径，watch 的 prefix 同样拼进归档路径并参与 retention 删除。 */
+    if (!Path::isSafeNameComponent(prefix))
+        return CHttpResponse::jsonError(E_INVALID_PARAMETER,
+            "prefix 不合法：只能是单个文件名组分，不能含路径分隔符或 '..'", 400);
     if (DBKP_IS_ERR(Platform::exists(dst))) Platform::makeDirTree(dst);
 
     /* 同步启动 watcher：目录不合法立即报错返回，不放进线程 */

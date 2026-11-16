@@ -158,9 +158,13 @@ enum ErrCode : int {
 const char* errCodeToString(ErrCode code);
 const char* fileTypeToDesc(char type);
 const char* algorithmName(AlgorithmId id);
-AlgorithmId algorithmFromName(const std::string& name);
+/** 名称 -> 枚举。okOut 非空时：命中已知名字置 true，未知名字置 false。
+ *  旧实现把未知名字静默退化成 NONE：拼错 "aes2566" 会生成明文归档、
+ *  拼错 "huffmanX" 会不压缩，且报错会把锅甩给 -p。调用方必须检查
+ *  okOut 并直说 unknown，不能把"猜不出来"当成"用户选了 none"。 */
+AlgorithmId algorithmFromName(const std::string& name, bool* okOut = nullptr);
 const char* cryptoName(CryptoId id);
-CryptoId    cryptoFromName(const std::string& name);
+CryptoId    cryptoFromName(const std::string& name, bool* okOut = nullptr);
 
 /* ------------------------------------------------------------ 内存态记录 */
 /**

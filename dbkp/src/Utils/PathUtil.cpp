@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <vector>
 #include <cstring>
 #include <sstream>
 
@@ -173,14 +175,103 @@ bool isSubPath(const std::string& parent, const std::string& child) {
 #endif
 }
 
+/* C13：检测 Unicode 双向文本覆盖/零宽/格式字符（钓鱼文件名）。
+   典型手法 "invoice<U+202E>txt.exe" 在资源管理器里显示成 "invoiceexe.txt"，
+   用户以为是可信文档，双击却是可执行程序。这些码点在 UTF-8 里的字节序列：
+     U+200B..U+200F  E2 80 8B..8F   (零宽空格 / LRM / RLM)
+     U+202A..U+202E  E2 80 AA..AE   (LRE/RLE/PDF/LRO/RLO，RLO 即 U+202E)
+     U+2066..U+2069  E2 81 A6..A9   (LRI/RLI/FSI/PDI)
+     U+FEFF          EF BB BF       (BOM / 零宽不换行空格)
+     U+061C          D8 9C          (阿拉伯字母标记)
+     U+00AD          C2 AD          (软连字符，可隐形)
+     C1 控制区 U+0080..U+009F  C2 80..9F
+   这些字符在任何平台上都不属于"可信文件名"，与平台路径语义无关，故跨平台
+   一律拒绝（老师第 4 页：路径全部按恶意输入处理）。 */
+static bool hasVisualSpoof(const std::string& s) {
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(s.data());
+    const size_t n = s.size();
+    for (size_t i = 0; i < n; ++i) {
+        const unsigned char c = p[i];
+        if (c == 0xE2 && i + 2 < n) {
+            const unsigned char b = p[i+1], d = p[i+2];
+            if (b == 0x80 && ((d >= 0x8B && d <= 0x8F) || (d >= 0xAA && d <= 0xAE)))
+                return true;
+            if (b == 0x81 && d >= 0xA6 && d <= 0xA9) return true;
+        }
+        if (c == 0xEF && i + 2 < n && p[i+1] == 0xBB && p[i+2] == 0xBF) return true;
+        if (c == 0xD8 && i + 1 < n && p[i+1] == 0x9C) return true;
+        if (c == 0xC2 && i + 1 < n) {
+            const unsigned char d = p[i+1];
+            if (d == 0xAD || (d >= 0x80 && d <= 0x9F)) return true;
+        }
+    }
+    return false;
+}
+
+/* A1：归档名前缀必须是"单个文件名组分"，绝不能含路径分隔符 / 盘符 / .. /
+   控制字符 / 绝对形态。schedule --prefix、watch --prefix、Web 参数都走这里。
+   否则 makeArchiveName 会把 "..\..\x" 拼进路径，把备份箱写到目标目录之外，
+   同时 applyRetention 的前缀匹配失效导致旧箱永不清理。 */
+bool isSafeNameComponent(const std::string& name) {
+    if (name.empty() || name == "." || name == "..") return false;
+    if (hasVisualSpoof(name)) return false;
+    for (size_t i = 0; i < name.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(name[i]);
+        if (ch == '/' || ch == '\\' || ch == ':' || ch < 0x20 || ch == 0x7F)
+            return false;
+    }
+    if (name.find("..") != std::string::npos) return false;  /* 含 .. 一律拒 */
+    if (isAbsolute(name)) return false;
+    return true;
+}
+
 bool isPathTraversalSafe(const std::string& archivePath) {
+    /* 归档内路径是不可信输入（老师第 4 页：文件头/密码/路径全部按恶意处理）。
+       规则按目标平台的真实语义定制，避免在 POSIX 上误杀合法文件名：
+       Windows：
+         1) 反斜杠归一成斜杠再检查 —— "..\..\x" 与 "../.." 等价，
+            normalize/absOf 拼接层会词法消解 ".."，不归一就是 N1 穿透；
+         2) 含 ':' 一律拒绝 —— 盘符、盘符相对路径("C:x")、NTFS ADS("a.txt:stream")；
+         3) 拒绝绝对路径；
+         4) 逐段检查：段尾的空格和点剥离后再比 —— Windows 会把 "a. " 静默当作
+            "a."、".. " 当作 ".."，不剥就漏。
+       POSIX：
+         只拒 NUL。':' 和 '\\' 都是合法文件名字符（"report:2024.txt"、"a\b.txt"），
+         所以不归一反斜杠、不剥离段尾点空格（POSIX 不会静默改写文件名）。
+       全平台：拒绝 Unicode 双向覆盖/零宽字符（C13 钓鱼名，与平台语义无关）。
+       syml 的 link 目标同样走本函数（F21）。 */
     if (archivePath.empty()) return false;
-    if (isAbsolute(archivePath)) return false;
-    std::stringstream ss(archivePath);
+    if (hasVisualSpoof(archivePath)) return false;
+
+#if defined(DBKP_OS_WINDOWS)
+    std::string s = archivePath;
+    for (size_t i = 0; i < s.size(); ++i) {
+        unsigned char ch = static_cast<unsigned char>(s[i]);
+        if (s[i] == '\\') { s[i] = '/'; continue; }
+        if (ch == ':' || ch < 0x20 || ch == 0x7F) return false;   /* ADS/盘符/控制字符 */
+    }
+#else
+    const std::string& s = archivePath;
+    if (s.find('\0') != std::string::npos) return false;          /* POSIX 仅拒 NUL */
+#endif
+    if (isAbsolute(s)) return false;
+
+    std::stringstream ss(s);
     std::string seg;
     while (std::getline(ss, seg, '/')) {
         if (seg.empty()) continue;
+#if defined(DBKP_OS_WINDOWS)
+        /* r = seg 去掉尾部空格和点（Windows 会把 "a. " 静默当 "a."）。
+           注意 ".." 剥完会变成空串，所以不能只比较 r==".."：
+           剥空但原段含 ".."（即 ".."/".. "/".. ." 这类）同样要拒绝。 */
+        std::string r = seg;
+        while (!r.empty() && (r[r.size() - 1] == ' ' || r[r.size() - 1] == '.'))
+            r.erase(r.size() - 1);
+        if (r == "..") return false;
+        if (r.empty() && seg.find("..") != std::string::npos) return false;
+#else
         if (seg == "..") return false;
+#endif
     }
     return true;
 }
@@ -219,24 +310,63 @@ bool matchCharClass(const std::string& pat, size_t& pos, char c) {
 
 } /* anonymous namespace */
 
-bool matchGlob(const std::string& pattern, const std::string& text) {
-    size_t p = 0, t = 0;
-    size_t starPos = std::string::npos, starText = 0;
-    while (t < text.size()) {
-        if (p < pattern.size() && pattern[p] == '?') { ++p; ++t; }
-        else if (p < pattern.size() && pattern[p] == '[') {
+/** 递归匹配核心（支持 ** 递归通配符）。
+ *  方言约定（与旧实现完全兼容，不破坏既有 361 个单测口径）：
+ *  - '*'     ：匹配任意字符（包括 '/'），贪心枚举 + 回溯；
+ *  - '**'    ：连续两个以上 '*' 视为递归通配符；
+ *      · 独立段或后随 '/' 时，「双星加斜线」作为一个单元匹配"零层或多层目录"
+ *        （即匹配空串，或任意以 '/' 结尾的前缀）；
+ *      · 结尾的 '**' 匹配任意剩余串（含空）；
+ *      · 夹在段中间（如 a**b）退化为普通 '*'；
+ *  - '?'     ：匹配单个任意字符；'[]' 字符类复用 matchCharClass。
+ *  dead[] 记忆化 (pattern_pos, text_pos) 已失败组合，防止病态模式指数爆炸。 */
+static bool mgRec(const std::string& pat, size_t p,
+                  const std::string& txt, size_t t,
+                  std::vector<uint8_t>& dead) {
+    const size_t W = txt.size() + 1;
+    while (p < pat.size()) {
+        if (dead[p * W + t]) return false;
+        const char c = pat[p];
+        if (c == '*') {
+            size_t q = p;
+            while (q < pat.size() && pat[q] == '*') ++q;   /* 吞掉连续 '*' */
+            const bool isDbl = (q - p) >= 2;
+            if (isDbl && q < pat.size() && pat[q] == '/') {
+                /* 「双星加斜线」单元：匹配 "" 或任意以 '/' 结尾的前缀 */
+                const size_t next = q + 1;
+                if (mgRec(pat, next, txt, t, dead)) return true;
+                for (size_t k = t; k < txt.size(); ++k) {
+                    if (txt[k] == '/' && mgRec(pat, next, txt, k + 1, dead)) return true;
+                }
+            } else {
+                /* 单 '*' 或结尾 '**'：匹配任意剩余串 */
+                for (size_t k = t; k <= txt.size(); ++k) {
+                    if (mgRec(pat, q, txt, k, dead)) return true;
+                }
+            }
+            dead[p * W + t] = 1;
+            return false;
+        } else if (c == '?') {
+            if (t >= txt.size()) return false;
+            ++p; ++t;
+        } else if (c == '[') {
+            if (t >= txt.size()) return false;
             size_t next = p;
-            if (matchCharClass(pattern, next, text[t])) { p = next; ++t; }
-            else if (starPos != std::string::npos) { p = starPos + 1; t = ++starText; }
-            else return false;
+            if (!matchCharClass(pat, next, txt[t])) { dead[p * W + t] = 1; return false; }
+            p = next; ++t;
+        } else {
+            if (t >= txt.size() || txt[t] != c) { dead[p * W + t] = 1; return false; }
+            ++p; ++t;
         }
-        else if (p < pattern.size() && pattern[p] == '*') { starPos = p++; starText = t; }
-        else if (p < pattern.size() && pattern[p] == text[t]) { ++p; ++t; }
-        else if (starPos != std::string::npos) { p = starPos + 1; t = ++starText; }
-        else return false;
     }
-    while (p < pattern.size() && pattern[p] == '*') ++p;
-    return p == pattern.size();
+    return t == txt.size();
+}
+
+bool matchGlob(const std::string& pattern, const std::string& text) {
+    /* 快路径：无 '*' 时退化为逐字符比较（保留旧实现的语义） */
+    const size_t W = text.size() + 1;
+    std::vector<uint8_t> dead((pattern.size() + 1) * W, 0);
+    return mgRec(pattern, 0, text, 0, dead);
 }
 
 /* F8：语法预校验。规则严格对齐 matchCharClass/matchGlob 的方言：

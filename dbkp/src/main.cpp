@@ -99,6 +99,26 @@ const char* checksumName(uint8_t id) {
     }
 }
 
+/** 未知算法名必须直说，不能静默退化成 NONE。
+ *  旧行为：'-c aes999' -> cryptoFromName 返回 CRY_NONE，随后 F5 的
+ *  "-p 需要配合 -c" 先触发，用户去补 -p 补到天荒地老也没用；更糟的是
+ *  没给 -p 时会直接生成一个"以为加密其实明文"的归档。 */
+bool algoArg(const std::string& text, AlgorithmId& out) {
+    bool ok = false;
+    out = algorithmFromName(text, &ok);
+    if (!ok) LOG_ERR("unknown algorithm: " + text +
+                     " (use none|huffman|lz77|lzhuff|rle)");
+    return ok;
+}
+
+bool cryptoArg(const std::string& text, CryptoId& out) {
+    bool ok = false;
+    out = cryptoFromName(text, &ok);
+    if (!ok) LOG_ERR("unknown crypto algorithm: " + text +
+                     " (use none|aes256|des-ede|chacha20|xor)");
+    return ok;
+}
+
 bool sizeArg(const std::string& text, int64_t& out) {
     bool ok = false;
     out = FilterOptions::parseSize(text, &ok);
@@ -126,8 +146,8 @@ int cmdBackup(int argc, char** argv) {
     bool forceCopy = false, forceArchive = false, noVerify = false;
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i], v;
-        if (a == "-a" || a == "--algo") { if (!nextValue(argc, argv, i, v)) return 2; opt.comp = algorithmFromName(v); }
-        else if (a == "-c" || a == "--crypto") { if (!nextValue(argc, argv, i, v)) return 2; opt.crypto = cryptoFromName(v); }
+        if (a == "-a" || a == "--algo") { if (!nextValue(argc, argv, i, v) || !algoArg(v, opt.comp)) return 2; }
+        else if (a == "-c" || a == "--crypto") { if (!nextValue(argc, argv, i, v) || !cryptoArg(v, opt.crypto)) return 2; }
         else if (a == "--checksum") {
             if (!nextValue(argc, argv, i, v) || !checksumFromName(v, opt.checksum)) {
                 LOG_ERR("bad --checksum value: " + v + " (none|crc64|sha256)"); return 2;
@@ -149,7 +169,19 @@ int cmdBackup(int argc, char** argv) {
         else if (a == "--follow-symlink")  opt.filter.followSymlinks = true;
         else if (a == "--no-cross-device") opt.filter.noCrossDevice = true;
         else if (a == "--skip-special")    opt.filter.skipSpecials = true;
-        else if (a == "--max-depth") { if (!nextValue(argc, argv, i, v)) return 2; opt.filter.maxDepth = std::atoi(v.c_str()); }
+        else if (a == "--max-depth") {
+            if (!nextValue(argc, argv, i, v)) return 2;
+            /* F13：必须是 0..1024 的整数。旧实现用 atoi，负数/超大数/非数字
+               会被静默归一成 -1（不限）或 0（只备份根目录），用户无从察觉。
+               现在一律明确报错，与 --times / --every 的校验口径一致。 */
+            char* end = nullptr;
+            long n = std::strtol(v.c_str(), &end, 10);
+            if (!end || *end != '\0' || n < 0 || n > 1024) {
+                LOG_ERR("bad --max-depth value: " + v + " (需要 0..1024 的整数)");
+                return 2;
+            }
+            opt.filter.maxDepth = static_cast<int>(n);
+        }
         else if (a == "--no-hardlink") opt.hardlinkDedupe = false;
         else if (a == "--no-meta")     opt.preserveMeta = false;
         else if (a == "--force")       opt.force = true;   /* F4：覆盖已存在目标/清残骸 */
@@ -286,8 +318,8 @@ int cmdSchedule(int argc, char** argv) {
         }
         else if (a == "--keep")  { if (!nextValue(argc, argv, i, v)) return 2; so.keep = std::atoi(v.c_str()); }
         else if (a == "--prefix") { if (!nextValue(argc, argv, i, so.prefix)) return 2; }
-        else if (a == "-a" || a == "--algo") { if (!nextValue(argc, argv, i, v)) return 2; opt.comp = algorithmFromName(v); }
-        else if (a == "-c" || a == "--crypto") { if (!nextValue(argc, argv, i, v)) return 2; opt.crypto = cryptoFromName(v); }
+        else if (a == "-a" || a == "--algo") { if (!nextValue(argc, argv, i, v) || !algoArg(v, opt.comp)) return 2; }
+        else if (a == "-c" || a == "--crypto") { if (!nextValue(argc, argv, i, v) || !cryptoArg(v, opt.crypto)) return 2; }
         else if (a == "--checksum") {
             if (!nextValue(argc, argv, i, v) || !checksumFromName(v, opt.checksum)) {
                 LOG_ERR("bad --checksum value: " + v + " (none|crc64|sha256)"); return 2;
@@ -344,8 +376,8 @@ int cmdWatch(int argc, char** argv) {
         }
         else if (a == "--keep")    { if (!nextValue(argc, argv, i, v)) return 2; keep = std::atoi(v.c_str()); }
         else if (a == "--prefix")  { if (!nextValue(argc, argv, i, prefix)) return 2; }
-        else if (a == "-a" || a == "--algo")   { if (!nextValue(argc, argv, i, v)) return 2; bopt.pack.comp = algorithmFromName(v); }
-        else if (a == "-c" || a == "--crypto") { if (!nextValue(argc, argv, i, v)) return 2; bopt.pack.crypto = cryptoFromName(v); }
+        else if (a == "-a" || a == "--algo")   { if (!nextValue(argc, argv, i, v) || !algoArg(v, bopt.pack.comp)) return 2; }
+        else if (a == "-c" || a == "--crypto") { if (!nextValue(argc, argv, i, v) || !cryptoArg(v, bopt.pack.crypto)) return 2; }
         else if (a == "--checksum") {
             if (!nextValue(argc, argv, i, v) || !checksumFromName(v, bopt.pack.checksum)) {
                 LOG_ERR("bad --checksum value"); return 2;
@@ -386,6 +418,13 @@ int cmdWatch(int argc, char** argv) {
     std::string archiveDir = pos[1];
     if (prefix.empty()) prefix = Path::fileName(Path::normalize(pos[0]));
     if (prefix.empty() || prefix == ".") prefix = "backup";
+    /* A1：watch 的 --prefix 同样会拼进归档路径并参与 retention 删除，必须
+       明确拒绝含 .. / 路径分隔符 / 绝对形态的值，不能只靠 makeArchiveName 降级。 */
+    if (!Path::isSafeNameComponent(prefix)) {
+        LOG_ERR("unsafe --prefix (refused): " + prefix +
+                " — must be a single filename component without path separators or '..'");
+        return 2;
+    }
     if (DBKP_IS_ERR(Platform::exists(archiveDir))) Platform::makeDirTree(archiveDir);
 
     /* 启动 watcher */
@@ -619,6 +658,8 @@ int cmdSelftest() {
 
 } /* anonymous namespace */
 
+namespace { int dispatch(int argc, char** argv); }   /* N4 兜底 try/catch 用，实现见文件尾 */
+
 int main(int argc, char** argv) {
     /* argv 是 ANSI 码页字节 + 控制台默认 GBK：统一换成 UTF-8 参数与输出码页
        （实现见 Platform/Args.h，bkd 用的是同一份，避免两处各写一遍） */
@@ -641,6 +682,22 @@ int main(int argc, char** argv) {
     CRC64::initTable();
     CAes256::initTables();
     if (argc < 2) { printUsage(); return 2; }
+    /* N4 兜底：恶意/损坏箱可能在深层抛出 std::bad_alloc 等异常。
+       CLI 全程裸奔的话一个损坏文件就 abort(exit 3)——备份工具必须
+       优雅报错退出，绝不崩溃。 */
+    try {
+        return dispatch(argc, argv);
+    } catch (const std::exception& ex) {
+        LOG_ERR(std::string("internal error (bad input?): ") + ex.what());
+        return 1;
+    } catch (...) {
+        LOG_ERR("internal error (unknown exception)");
+        return 1;
+    }
+}
+
+namespace {
+int dispatch(int argc, char** argv) {
     const std::string cmd = argv[1];
     if (cmd == "backup")   return cmdBackup(argc, argv);
     if (cmd == "pack")     return cmdBackup(argc, argv);
@@ -658,6 +715,7 @@ int main(int argc, char** argv) {
     printUsage();
     return 2;
 }
+} /* anonymous namespace（N4 兜底 dispatch） */
 
 
 

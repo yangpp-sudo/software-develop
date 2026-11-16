@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <cstring>
 #include <ctime>
+#include <map>
 #include <memory>
+#include <set>
 
 #include "Common/Serialize.h"
 #include "Crypto/Algorithms.h"    /* F3：fillSalt 改走 fillRandom（系统 CSPRNG） */
@@ -147,8 +149,17 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
        说明源目录本身是空的（或全被过滤规则挡掉了），别把它当成正常备份。 */
     if (entries.empty() && opt.filter.excludePaths.empty() &&
         opt.filter.nameRejects.empty()) {
+        std::string hint;
+        if (!opt.filter.includePaths.empty()) {
+            /* 用户给了 include 却一条没中：最常见原因是把"源目录名"写进了
+               模式（如源目录选了 src 还写 src 前缀）。include 模式是相对
+               源目录的路径，不需要重复源目录名。 */
+            hint = " check: include patterns are relative to the source dir"
+                   " (e.g. use **/*.h rather than repeating the source folder"
+                   " name as a prefix)";
+        }
         LOG_WARN("no entries matched under source dir: " + sourceDir +
-                 " (source is empty or every entry was filtered out)");
+                 " (source is empty or every entry was filtered out)" + hint);
     }
 
     /* 进度上报：枚举完成后就能算出总字节，前端立刻得到可信的百分比 */
@@ -199,6 +210,7 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
        Windows 上删除仍被句柄打开的文件会失败，所以先显式 close（幂等），
        锁也随句柄关闭自动释放。 */
     struct TmpGuard {
+        TmpGuard(const std::string& t, CSimpleFile* o) : m_tmp(t), m_out(o) {}
         const std::string& m_tmp;
         CSimpleFile* m_out;
         bool m_committed = false;
@@ -208,7 +220,7 @@ ErrCode CMyPack::pack(const std::string& sourceDir, const std::string& archivePa
             if (Platform::exists(m_tmp) == E_OK) Platform::removeFile(m_tmp);
         }
     };
-    TmpGuard tmpGuard = { tmpPath, &out };
+    TmpGuard tmpGuard(tmpPath, &out);
 
     ArchiveHeader hdr;
     hdr.compAlg   = static_cast<uint8_t>(comp ? opt.comp : ALG_NONE);
@@ -489,6 +501,22 @@ ErrCode CMyPack::readDataBlocks(CSimpleFile& in, const FileRecord& rec,
     const uint64_t blocks = blocksFor(rec.storedSize);
     std::vector<uint8_t> enc;
     if (blocks) {
+        /* N7 内存炸弹防御：enc 以前按头部声称的 storedSize 一次性预分配
+           （32GB 谎报 = 32GB 无条件分配，bad_alloc/资源耗尽）。分配前先拿
+           真实文件大小对账：数据块声称的总量超出文件剩余字节数，必然是
+           截断/伪造档案，直接报错，一个字节都不预分配。 */
+        int64_t fsz = 0;
+        if (!DBKP_IS_ERR(in.size(fsz))) {
+            int64_t remain = fsz - in.tell();
+            if (remain < 0) remain = 0;
+            const int64_t want = static_cast<int64_t>(blocks) * BLOCK_SIZE;
+            if (want > remain) {
+                LOG_ERR("record data overruns archive end: " + rec.path +
+                        " (claims " + std::to_string(want) + " bytes, file has " +
+                        std::to_string(remain) + ")");
+                return E_TRUNCATED_ARCHIVE;
+            }
+        }
         enc.resize(static_cast<size_t>(blocks * BLOCK_SIZE));
         ErrCode e = in.readN(enc.data(), static_cast<int64_t>(enc.size()));
         if (DBKP_IS_ERR(e)) { LOG_ERR("archive truncated at: " + rec.path); return E_TRUNCATED_ARCHIVE; }
@@ -552,6 +580,33 @@ ErrCode CMyPack::restoreEntry(const std::string& targetDir, const FileRecord& re
         LOG_ERR("unsafe path in archive (refused): " + rec.path);
         return E_INVALID_PARAMETER;
     }
+    /* N9：未知记录类型以前会掉进函数末尾的"特殊文件"兜底分支——什么都不做
+       却返回 E_OK，外层还把 entries++，结果就是 "success / warnings=0" 的
+       凭空幽灵条目。任何不认识的 type 都是损坏/伪造档案，必须明确拒绝。 */
+    switch (rec.type) {
+        case FT_DIR: case FT_REGULAR: case FT_SYMLINK: case FT_HARDLINK:
+        case FT_FIFO: case FT_BLOCK: case FT_CHAR: case FT_SOCKET:
+            break;
+        default:
+            LOG_ERR("unknown record type in archive (refused): " + rec.path);
+            return E_INVALID_HEADER_RECORD;
+    }
+    /* N8 复核修正：所有"纯校验"必须在任何 verifyOnly 早退之前完成。
+       上一版把 link 检查放在 symlink/hardlink 分支的早退之后，导致
+       bk verify 永远看不到 link 字段——恶意硬链接箱 verify 仍报"自洽"。
+       统一提到这里，verify 与 restore 共享同一套不可信输入校验。
+       顺带约束 "."：合法归档里 "." 只可能是根目录记录，冒充文件即拒。 */
+    if (rec.path == "." && rec.type != FT_DIR) {
+        LOG_ERR("root entry \".\" has non-directory type (refused)");
+        return E_INVALID_DATA_RECORD;
+    }
+    if ((rec.type == FT_SYMLINK || rec.type == FT_HARDLINK) &&
+        !Path::isPathTraversalSafe(rec.link)) {
+        LOG_ERR("unsafe link target in archive (refused): " + rec.path +
+                " -> " + rec.link);
+        ++opt.warnings;   /* 拒绝也要计数：与"每条丢失/拒绝都进 warnings"口径一致 */
+        return E_INVALID_PARAMETER;
+    }
     const std::string absPath = absOf(targetDir, rec.path);
     const std::string parent  = Path::parentDir(absPath);
 
@@ -570,36 +625,49 @@ ErrCode CMyPack::restoreEntry(const std::string& targetDir, const FileRecord& re
     if (rec.type == FT_REGULAR) {
         if (opt.verifyOnly) return E_OK;
         if (!parent.empty()) Platform::makeDirTree(parent);
+        /* N6 复核修正：以前直接 open(absPath, MODE_WRITE_NEW)，而该模式带
+           O_TRUNC —— --force 覆盖已有文件时，旧文件在 open 的瞬间就被截成
+           0 字节；随后写失败又 removeFile(absPath)，把用户原文件彻底删掉。
+           改为与备份侧 F4 同款原子写：先写同目录临时文件，成功后再 rename
+           覆盖。任何失败只删临时文件，目标文件从头到尾原封不动。 */
+        const std::string tmpPath = absPath + ".dbkp-restore.tmp";
         CSimpleFile f;
-        ErrCode e = f.open(absPath, CSimpleFile::MODE_WRITE_NEW);
+        ErrCode e = f.open(tmpPath, CSimpleFile::MODE_WRITE_NEW);
         if (DBKP_IS_ERR(e)) {
-            LOG_WARN("cannot create file: " + absPath + " (" + errCodeToString(e) + ")");
+            LOG_WARN("cannot create temp file: " + tmpPath + " (" + errCodeToString(e) + ")");
             ++opt.warnings;
             return e;
         }
         if (data && !data->empty()) {
             e = f.writeN(data->data(), static_cast<int64_t>(data->size()));
-            if (DBKP_IS_ERR(e)) { LOG_ERR("write failed: " + absPath); return e; }
+            if (DBKP_IS_ERR(e)) {
+                LOG_ERR("write failed: " + absPath);
+                f.close();
+                Platform::removeFile(tmpPath);   /* 只删临时文件，不动用户原文件 */
+                return e;
+            }
         }
         ErrCode fe = f.flush();
         ErrCode ce = f.close();
-        if (DBKP_IS_ERR(fe) || DBKP_IS_ERR(ce)) return E_FILE_WRITE_FAIL;
-        applyMetadata(absPath, rec, opt, true);
+        if (DBKP_IS_ERR(fe) || DBKP_IS_ERR(ce)) {
+            Platform::removeFile(tmpPath);
+            return E_FILE_WRITE_FAIL;
+        }
+        applyMetadata(tmpPath, rec, opt, true);   /* 元数据随文件一起 rename */
+        ErrCode re = Platform::renameFile(tmpPath, absPath);
+        if (DBKP_IS_ERR(re)) {
+            LOG_WARN("cannot replace target file: " + absPath + " (" + errCodeToString(re) + ")");
+            Platform::removeFile(tmpPath);
+            ++opt.warnings;
+            return re;
+        }
         return E_OK;
     }
 
     if (rec.type == FT_SYMLINK) {
         if (opt.verifyOnly) return E_OK;
-        /* F1 修法第 4 点（F21）：归档里的 link 目标同样是不可信输入。
-           绝对路径（"C:/x"、"/x"、"\\server\x"）或含 ".." 的相对值一旦照建，
-           还原出的链接就能把后续读写引到目标目录之外。path 字段早就有
-           isPathTraversalSafe 把关，link 字段以前是"任意值照建"。 */
-        if (!Path::isPathTraversalSafe(rec.link)) {
-            LOG_ERR("unsafe link target in archive (refused): " + rec.path +
-                    " -> " + rec.link);
-            ++opt.warnings;
-            return E_INVALID_PARAMETER;
-        }
+        /* F21：link 目标的 isPathTraversalSafe 检查已提到函数开头（早于本早退），
+           这样 verify 模式同样会拒绝恶意 link，不会出现"verify 自洽但还原穿透"。 */
         if (!parent.empty()) Platform::makeDirTree(parent);
         if (!Platform::supportsSymlink()) {
             LOG_WARN("symbolic links unsupported here, skip: " + rec.path);
@@ -620,6 +688,7 @@ ErrCode CMyPack::restoreEntry(const std::string& targetDir, const FileRecord& re
 
     if (rec.type == FT_HARDLINK) {
         if (opt.verifyOnly) return E_OK;
+        /* N8：link 检查已前置到函数开头（见上方说明），此处只负责落盘。 */
         if (!parent.empty()) Platform::makeDirTree(parent);
         ErrCode e = Platform::makeHardLink(absOf(targetDir, rec.link), absPath);
         if (DBKP_IS_ERR(e)) {
@@ -630,23 +699,28 @@ ErrCode CMyPack::restoreEntry(const std::string& targetDir, const FileRecord& re
         return E_OK;
     }
 
-    /* 特殊文件：FIFO / 块设备 / 字符设备 / 套接字 */
+    /* 特殊文件：FIFO / 块设备 / 字符设备 / 套接字
+       N3：这些类型在 Windows 上无法如实还原。只 LOG_WARN 不计数的话，
+       结果就是 "exit=0 / warnings: 0" 但档案里有条目悄悄消失——对备份
+       工具而言"静默少文件"比明确失败更恶劣，所以每条丢失都必须计入
+       warnings（与上方 symlink 分支保持一致）。 */
     if (opt.verifyOnly) return E_OK;
     if (!parent.empty()) Platform::makeDirTree(parent);
     if (rec.type == FT_FIFO) {
         ErrCode e = Platform::makeFifo(absPath, rec.mode);
-        if (e == E_UNSUPPORTED_FEATURE) LOG_WARN("FIFO unsupported, skip: " + rec.path);
-        else if (DBKP_IS_ERR(e)) LOG_WARN("cannot create FIFO: " + rec.path);
+        if (e == E_UNSUPPORTED_FEATURE) { LOG_WARN("FIFO unsupported, skip: " + rec.path); ++opt.warnings; }
+        else if (DBKP_IS_ERR(e)) { LOG_WARN("cannot create FIFO: " + rec.path); ++opt.warnings; }
         else applyMetadata(absPath, rec, opt, true);
     } else if (rec.type == FT_BLOCK || rec.type == FT_CHAR) {
         ErrCode e = Platform::makeDeviceNode(absPath, rec.type, rec.majorNum, rec.minorNum, rec.mode);
-        if (e == E_PERMISSION_DENIED) LOG_WARN("need root for device node: " + rec.path);
-        else if (e == E_UNSUPPORTED_FEATURE) LOG_WARN("device node unsupported: " + rec.path);
-        else if (DBKP_IS_ERR(e)) LOG_WARN("cannot create device node: " + rec.path);
+        if (e == E_PERMISSION_DENIED) { LOG_WARN("need root for device node: " + rec.path); ++opt.warnings; }
+        else if (e == E_UNSUPPORTED_FEATURE) { LOG_WARN("device node unsupported: " + rec.path); ++opt.warnings; }
+        else if (DBKP_IS_ERR(e)) { LOG_WARN("cannot create device node: " + rec.path); ++opt.warnings; }
         else applyMetadata(absPath, rec, opt, true);
     } else if (rec.type == FT_SOCKET) {
         LOG_WARN("unix socket cannot be restored faithfully: " + rec.path);
         Platform::makeSocketPlaceholder(absPath);
+        ++opt.warnings;
     }
     return E_OK;
 }
@@ -656,13 +730,36 @@ ErrCode CMyPack::applyMetadata(const std::string& absPath, const FileRecord& rec
                                UnpackOptions& opt, bool followSymlink) {
     if (!opt.restoreMeta) return E_OK;
     if (rec.flags & RF_META_TIME) {
+        /* C11：mtime/atime 极值（INT64_MAX/MIN）不是"正常时间"，不能静默钳制后
+           假装还原成功。先判越界，给出可见警告，再交给底层安全钳制。 */
+        const int64_t kMaxUnixSec = 253402300799ll;
+        const int64_t kMinUnixSec = -11644473600ll;
+        const bool badTime =
+            rec.mtimeSec > kMaxUnixSec || rec.mtimeSec < kMinUnixSec ||
+            rec.atimeSec > kMaxUnixSec || rec.atimeSec < kMinUnixSec;
+        if (badTime) {
+            LOG_WARN("invalid timestamp in archive (clamped): " + rec.path);
+            ++opt.warnings;
+        }
         ErrCode e = Platform::setTimes(absPath, rec.mtimeSec, rec.mtimeNSec,
                                        rec.atimeSec, rec.atimeNSec, followSymlink);
-        if (DBKP_IS_ERR(e)) LOG_DEBUG("restore times failed: " + absPath);
+        if (DBKP_IS_ERR(e)) {
+            LOG_WARN("restore times failed: " + absPath + " (" + errCodeToString(e) + ")");
+            ++opt.warnings;
+        }
     }
     if (rec.flags & RF_META_MODE) {
-        ErrCode e = Platform::setMode(absPath, rec.mode);
-        if (DBKP_IS_ERR(e)) LOG_DEBUG("restore mode failed: " + absPath);
+        /* C12：mode 是 32 位可篡改字段，越界位（setuid/sticky 之外的高位）在
+           chmod 前先掩码到 07777；含越界位说明记录被改过，给出可见警告。 */
+        if (rec.mode & ~07777u) {
+            LOG_WARN("invalid mode bits in archive (masked): " + rec.path);
+            ++opt.warnings;
+        }
+        ErrCode e = Platform::setMode(absPath, rec.mode & 07777u);
+        if (DBKP_IS_ERR(e)) {
+            LOG_WARN("restore mode failed: " + absPath + " (" + errCodeToString(e) + ")");
+            ++opt.warnings;
+        }
     }
     if (rec.flags & RF_META_UID) {
         ErrCode e = Platform::setOwner(absPath, rec.uid, rec.gid);
@@ -686,14 +783,40 @@ ErrCode CMyPack::readHeaderAt(CSimpleFile& in, ArchiveHeader& hdr) {
        去读第二块并在 EOF 处失败，把“这不是归档”误报成 E_TRUNCATED_ARCHIVE。 */
     std::vector<uint8_t> ext;
     if (readLE32(block.data()) == ARCHIVE_MAGIC) {
-        const uint16_t hs = readLE16(block.data() + 6);
+        /* BUG-WB-12 修复：hs 提升为 uint32_t 再比较，"≤64KB"上界才真正生效；
+           uint16_t 与 65536 比较恒真，属于死代码（Cppcheck compareValueOutOfTypeRange）。
+           现语义：headerSize 超 64KB 或非 512 倍数时不读扩展块（仍由物理对账兜底）。 */
+        const uint32_t hs = readLE16(block.data() + 6);
         if (hs > BLOCK_SIZE && (hs % BLOCK_SIZE) == 0 && hs <= 64 * 1024) {
             ext.resize(static_cast<size_t>(hs) - BLOCK_SIZE);
             if (DBKP_IS_ERR(in.readN(ext.data(), static_cast<int64_t>(ext.size()))))
                 return E_TRUNCATED_ARCHIVE;
         }
     }
-    return decodeArchiveHeader(block.data(), hdr, ext.empty() ? nullptr : ext.data());
+    ErrCode de = decodeArchiveHeader(block.data(), hdr, ext.empty() ? nullptr : ext.data());
+    if (DBKP_IS_ERR(de)) return de;
+
+    /* F6b 复核修正：空壳检测以前只看 payloadSize==0 && recordCount/fileCount!=0，
+       而 recordCount/fileCount 都是无 CRC/HMAC 保护的头部字段，改成 0 就绕过。
+       这里改用"物理事实"对账：载荷起点必须正好是实际读到的头部末尾，
+       载荷长度必须正好等于文件剩余字节数。头部字段再怎么改也无法伪造
+       文件本身的长度，于是空壳、截断、尾部夹带都在这里一次性拒绝。 */
+    int64_t fsz = 0;
+    if (!DBKP_IS_ERR(in.size(fsz))) {
+        const uint64_t fileSize = static_cast<uint64_t>(fsz);
+        const uint64_t headEnd = static_cast<uint64_t>(in.tell());
+        if (hdr.payloadOffset != headEnd ||
+            hdr.payloadOffset > fileSize ||
+            hdr.payloadSize != fileSize - hdr.payloadOffset) {
+            LOG_ERR("archive header length mismatch: header ends at " +
+                    std::to_string(headEnd) + ", declares payload offset " +
+                    std::to_string(hdr.payloadOffset) + " size " +
+                    std::to_string(hdr.payloadSize) + ", file has " +
+                    std::to_string(fileSize) + " bytes");
+            return E_INVALID_HEADER_RECORD;
+        }
+    }
+    return E_OK;
 }
 
 ErrCode CMyPack::readHeader(const std::string& archivePath, ArchiveHeader& hdr) {
@@ -705,16 +828,19 @@ ErrCode CMyPack::readHeader(const std::string& archivePath, ArchiveHeader& hdr) 
 
 /* -------------------------------------------------------- 整卷校验辅助 */
 ErrCode CMyPack::checkWholePayload(const std::string& archivePath, const ArchiveHeader& hdr) {
-    /* F6b：payloadSize==0 但记录区声称有条目——这是"空壳箱"（半成品/人造残骸），
-       以前直接返回 E_OK 让 verify 绿灯通过，现在必须拒绝。
-       判据取 recordCount 与 fileCount 任一非零：正常备份哪怕源目录为空，
-       也至少有根目录 "." 一条记录，两者同时为 0 的箱只可能是空卷标。 */
-    if (hdr.payloadSize == 0 && (hdr.recordCount != 0 || hdr.fileCount != 0)) {
-        LOG_ERR("archive declares " + std::to_string(hdr.recordCount) +
-                " record(s) but carries an empty payload (incomplete archive)");
+    /* F6b（复核修正）：空壳箱 = 卷标声称有记录、载荷却是空的半成品/人造残骸。
+       旧判据 `payloadSize==0 && (recordCount!=0 || fileCount!=0)` 依赖
+       recordCount/fileCount，而这两个字段在未加密箱头部**无 CRC/HMAC 保护**，
+       把它们一起改成 0 就绕过，verify 照样绿灯。
+       改用不可伪造的物理事实：任何合法备份都至少含根目录 "." 一条记录，
+       故 payloadSize 恒 > 0（>= 512B）。载荷为空一律拒绝，不再看计数字段。
+       配合 readHeaderAt 里"头部长度与文件实际长度对账"，篡改任一字段都无效。 */
+    if (hdr.payloadSize == 0) {
+        LOG_ERR("archive carries an empty payload (incomplete/forged archive); "
+                "a valid archive always has at least the root \".\" record");
         return E_TRUNCATED_ARCHIVE;
     }
-    if (hdr.checksum == CHK_NONE || hdr.payloadSize == 0) return E_OK;
+    if (hdr.checksum == CHK_NONE) return E_OK;
     CSimpleFile in;
     ErrCode e = in.open(archivePath, CSimpleFile::MODE_READ);
     if (DBKP_IS_ERR(e)) return e;
@@ -888,9 +1014,17 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
         } else if (!opt.overwrite) {
             ErrCode emptyErr = Platform::assertDirEmpty(targetDir);
             if (DBKP_IS_ERR(emptyErr)) {
-                m_errorText = "target directory is not empty: " + targetDir;
-                LOG_ERR(m_errorText + " (use --force to overwrite)");
-                return E_DESTINATION_NOT_EMPTY;
+                /* N2：只有真的列出了内容才是"非空"；无权限/其他 IO 失败时
+                   如实报告原因，不能撒谎说"目录非空"误导用户去删文件。 */
+                if (emptyErr == E_DESTINATION_NOT_EMPTY) {
+                    m_errorText = "target directory is not empty: " + targetDir;
+                    LOG_ERR(m_errorText + " (use --force to overwrite)");
+                    return E_DESTINATION_NOT_EMPTY;
+                }
+                m_errorText = "cannot inspect target directory: " + targetDir +
+                              " (" + errCodeToString(emptyErr) + ")";
+                LOG_ERR(m_errorText);
+                return emptyErr;
             }
         }
     }
@@ -912,11 +1046,27 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
     int64_t  entries = 0;
     uint64_t rdone   = 0;
     bool       rcancel = false;
+    /* 重复条目检测：合法备份在同一归档里不可能出现两次完全相同的相对路径，
+       出现即档案损坏/伪造，精确重复一律整箱拒绝（E_INVALID_DATA_RECORD）。
+       大小写碰撞（Case.txt / case.txt）在 Windows 上物理上只能存一个，还原
+       必然丢数据：restore 时同样整箱拒绝并点名冲突文件；verify 不落盘，仅警告，
+       避免让 Linux 合法箱在 Windows 上连完整性都校验不了。 */
+    std::set<std::string> seenPaths;
+    std::map<std::string, std::string> seenFolded;   /* 小写键 -> 原始路径 */
     if (opt.progress)
         opt.progress->onStart(static_cast<int64_t>(hdr.fileCount),
                               static_cast<uint64_t>(hdr.rawSize > 0 ? hdr.rawSize : 0));
     for (;;) {
         if (payloadEnd >= 0 && cur >= payloadEnd) break;
+        /* C14：每条记录至少占一个 512B 块，所以合法条目数天然 <= payloadSize/512。
+           加一道显式上限防止伪造头/畸形流诱导 seenPaths 等结构无限增长，
+           也避免"声明 300 万条"这类头部字段把进度与内存一起放大。 */
+        const int64_t maxRecords = static_cast<int64_t>(hdr.payloadSize / BLOCK_SIZE) + 1;
+        if (entries > maxRecords) {
+            m_errorText = "too many records for payload size (corrupt or forged archive)";
+            LOG_ERR(m_errorText);
+            return E_INVALID_DATA_RECORD;
+        }
         e = in.readN(block.data(), BLOCK_SIZE);
         if (DBKP_IS_ERR(e)) break;                    /* 正常到达文件尾 */
         cur += BLOCK_SIZE;
@@ -938,8 +1088,38 @@ ErrCode CMyPack::unpack(const std::string& archivePath, const std::string& targe
                 return e;
             }
         }
-        ErrCode re = restoreEntry(targetDir, rec,
-                                  rec.type == FT_REGULAR ? &data : nullptr, opt, pendingDirs);
+        ErrCode re = [&]() -> ErrCode {
+            std::string dupKey = Path::normalize(rec.path);
+            if (!seenPaths.insert(dupKey).second) {
+                m_errorText = "archive contains duplicate record for " + rec.path;
+                LOG_ERR(m_errorText + " (corrupt or forged archive, restore aborted)");
+                return E_INVALID_DATA_RECORD;   /* 整箱拒绝，不给 exit=0 的假成功 */
+            }
+#if defined(DBKP_OS_WINDOWS)
+            std::string folded = dupKey;
+            for (size_t k = 0; k < folded.size(); ++k)
+                folded[k] = static_cast<char>(std::tolower(static_cast<unsigned char>(folded[k])));
+            std::map<std::string, std::string>::const_iterator it = seenFolded.find(folded);
+            if (it != seenFolded.end() && it->second != dupKey) {
+                /* A2：明确点名两个冲突文件，绝不静默丢一个。 */
+                if (opt.verifyOnly) {
+                    LOG_WARN("case-collision (verify only): '" + it->second +
+                             "' and '" + dupKey +
+                             "' would merge on Windows; archive may be valid on POSIX");
+                    ++opt.warnings;
+                    return E_OK;
+                }
+                m_errorText = "case-collision would silently lose a file: '" + it->second +
+                              "' vs '" + dupKey + "'";
+                LOG_ERR(m_errorText +
+                        " (Windows cannot hold both; restore aborted, use a case-sensitive FS)");
+                return E_INVALID_DATA_RECORD;
+            }
+            seenFolded[folded] = dupKey;
+#endif
+            return restoreEntry(targetDir, rec,
+                                rec.type == FT_REGULAR ? &data : nullptr, opt, pendingDirs);
+        }();
         if (DBKP_IS_ERR(re)) { m_errorText = "restore failed: " + rec.path; return re; }
         ++entries;
         if (opt.progress) {

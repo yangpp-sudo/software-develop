@@ -41,7 +41,7 @@ private:
 
     uint32_t m_state[8];
     uint64_t m_bitLen;
-    uint8_t  m_buf[64];
+    uint8_t  m_buf[64] = {}; /* 类内零初始化：构造即确定，reset() 会重写（Cppcheck uninitMemberVar） */
     std::size_t m_bufLen;
 };
 
